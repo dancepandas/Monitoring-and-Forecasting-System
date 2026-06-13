@@ -1,0 +1,1949 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>流量监测预报智能指挥舱</title>
+  <style>
+    :root {
+      --bg: #031025;
+      --bg-2: #061a3d;
+      --panel: rgba(7, 28, 66, 0.72);
+      --panel-strong: rgba(8, 42, 92, 0.86);
+      --line: rgba(56, 206, 255, 0.58);
+      --line-soft: rgba(56, 206, 255, 0.18);
+      --cyan: #36e7ff;
+      --cyan-2: #00aaff;
+      --gold: #ffe65c;
+      --orange: #ff8f2a;
+      --red: #ff3b52;
+      --green: #44ffa8;
+      --violet: #8a7cff;
+      --text: #eaf8ff;
+      --muted: #8bb7d7;
+      --glass: rgba(7, 29, 68, .58);
+      --shadow: 0 0 28px rgba(41, 211, 255, 0.16), inset 0 0 34px rgba(30, 145, 255, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      overflow: hidden;
+      color: var(--text);
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      background:
+        radial-gradient(circle at 52% 42%, rgba(10, 87, 150, .42), transparent 34%),
+        radial-gradient(circle at 8% 12%, rgba(22, 106, 213, .38), transparent 25%),
+        linear-gradient(180deg, #061843 0%, #020814 100%);
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(rgba(45, 185, 255, .05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(45, 185, 255, .05) 1px, transparent 1px);
+      background-size: 72px 72px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,.9), transparent 86%);
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: -20%;
+      pointer-events: none;
+      opacity: .42;
+      background:
+        repeating-linear-gradient(110deg, transparent 0 78px, rgba(84, 204, 255, .08) 80px, transparent 82px),
+        radial-gradient(circle, rgba(255,255,255,.9) 0 1px, transparent 2px);
+      background-size: auto, 210px 170px;
+      animation: drift 26s linear infinite;
+    }
+
+    @keyframes drift { to { transform: translate3d(-90px, 40px, 0); } }
+
+    .shell {
+      position: relative;
+      z-index: 1;
+      width: 100vw;
+      height: 100vh;
+      padding: 12px 18px 14px;
+      display: grid;
+      grid-template-rows: 68px 1fr 190px;
+      gap: 12px;
+    }
+
+    .topbar {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      padding: 0 22px;
+      background: linear-gradient(90deg, transparent, rgba(12, 58, 126, .52), transparent);
+    }
+
+    .topbar::before,
+    .topbar::after {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      width: 40%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+      filter: drop-shadow(0 0 7px var(--cyan));
+    }
+
+    .topbar::before { left: 0; }
+    .topbar::after { right: 0; }
+
+    .title {
+      letter-spacing: 7px;
+      font-size: clamp(26px, 2.45vw, 42px);
+      font-weight: 900;
+      text-shadow: 0 0 16px rgba(83, 225, 255, .64);
+      white-space: nowrap;
+    }
+
+    .top-meta {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .top-meta.right { justify-content: flex-end; }
+
+    .pill {
+      border: 1px solid var(--line-soft);
+      padding: 7px 11px;
+      background: rgba(3, 20, 54, .62);
+      clip-path: polygon(9px 0, 100% 0, calc(100% - 9px) 100%, 0 100%);
+      box-shadow: inset 0 0 18px rgba(67, 202, 255, .06);
+    }
+
+    .top-action {
+      color: var(--cyan);
+      cursor: pointer;
+      transition: color .18s ease, background .18s ease, transform .18s ease;
+    }
+
+    .top-action:hover {
+      color: #001526;
+      background: linear-gradient(135deg, var(--green), var(--cyan));
+      transform: translateY(-1px);
+    }
+
+    .kbd {
+      margin-left: 8px;
+      padding: 1px 5px;
+      border: 1px solid rgba(54, 231, 255, .26);
+      color: #dffcff;
+      font-size: 11px;
+      background: rgba(2, 13, 32, .48);
+    }
+
+    .live-dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      margin-right: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 10px var(--green);
+      animation: pulse 1.6s infinite;
+    }
+
+    @keyframes pulse { 50% { opacity: .35; transform: scale(.72); } }
+
+    .main {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 27% 1fr 27%;
+      gap: 12px;
+    }
+
+    .column, .center {
+      min-height: 0;
+      display: grid;
+      gap: 12px;
+    }
+
+    .column { grid-template-rows: 1fr 1fr; }
+    .right-column { grid-template-rows: .9fr .85fr 1fr; }
+
+    .panel {
+      position: relative;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(9, 38, 86, .78), rgba(3, 16, 39, .58)),
+        radial-gradient(circle at 12% 0, rgba(54, 231, 255, .08), transparent 34%);
+      border: 1px solid var(--line-soft);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+      transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+    }
+
+    .panel:hover {
+      border-color: rgba(54, 231, 255, .28);
+      box-shadow: 0 0 34px rgba(41, 211, 255, 0.2), inset 0 0 38px rgba(30, 145, 255, 0.1);
+    }
+
+    .panel::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border: 1px solid rgba(71, 218, 255, .12);
+      background: linear-gradient(135deg, rgba(45, 211, 255, .12), transparent 16%, transparent 84%, rgba(45, 211, 255, .12));
+    }
+
+    .corner {
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border-color: var(--cyan);
+      opacity: .86;
+      z-index: 2;
+    }
+    .c1 { left: -1px; top: -1px; border-left: 2px solid; border-top: 2px solid; }
+    .c2 { right: -1px; top: -1px; border-right: 2px solid; border-top: 2px solid; }
+    .c3 { left: -1px; bottom: -1px; border-left: 2px solid; border-bottom: 2px solid; }
+    .c4 { right: -1px; bottom: -1px; border-right: 2px solid; border-bottom: 2px solid; }
+
+    .panel-title {
+      position: relative;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      letter-spacing: 1px;
+      background: linear-gradient(90deg, transparent, rgba(20, 105, 207, .58), transparent);
+      text-shadow: 0 0 10px rgba(80, 218, 255, .58);
+      z-index: 1;
+    }
+
+    .panel-title::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      width: 82px;
+      height: 2px;
+      transform: translateX(-50%);
+      background: linear-gradient(90deg, transparent, var(--green), var(--cyan), transparent);
+      box-shadow: 0 0 12px rgba(54, 231, 255, .72);
+    }
+
+    .task-add-btn {
+      position: absolute;
+      right: 10px;
+      top: 6px;
+      height: 26px;
+      border: 1px solid rgba(54, 231, 255, .42);
+      color: var(--cyan);
+      font-size: 12px;
+      font-weight: 800;
+      background: rgba(3, 18, 41, .72);
+      box-shadow: 0 0 14px rgba(54, 231, 255, .18), inset 0 0 14px rgba(54, 231, 255, .08);
+      cursor: pointer;
+    }
+
+    .task-add-btn:hover {
+      color: #001526;
+      background: linear-gradient(135deg, var(--green), var(--cyan));
+    }
+
+    .panel-body { position: relative; z-index: 1; height: calc(100% - 38px); padding: 12px; }
+
+    .video-card {
+      height: 100%;
+      border: 1px solid rgba(72, 201, 255, .16);
+      background:
+        linear-gradient(135deg, rgba(6, 22, 48, .4), rgba(9, 51, 95, .34)),
+        radial-gradient(circle at 50% 42%, rgba(50, 221, 255, .18), transparent 28%);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .video-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(0deg, transparent 0 6px, rgba(102, 220, 255, .04) 7px 8px);
+      animation: scan 4s linear infinite;
+    }
+
+    @keyframes scan { to { transform: translateY(18px); } }
+
+    .camera-feed {
+      position: absolute;
+      inset: 18px;
+      border-radius: 6px;
+      background:
+        linear-gradient(160deg, transparent 58%, rgba(18, 197, 255, .15) 59%, transparent 61%),
+        linear-gradient(20deg, rgba(73, 158, 255, .1), transparent 55%),
+        #061733;
+    }
+
+    .river {
+      position: absolute;
+      left: -8%;
+      top: 48%;
+      width: 116%;
+      height: 24%;
+      border-radius: 50%;
+      background: linear-gradient(90deg, transparent, rgba(67, 218, 255, .45), rgba(33, 108, 255, .26), transparent);
+      filter: blur(1px);
+      transform: rotate(-8deg);
+    }
+
+    .camera-label {
+      position: absolute;
+      left: 18px;
+      bottom: 14px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .status-badge {
+      position: absolute;
+      right: 14px;
+      top: 12px;
+      color: var(--green);
+      font-size: 12px;
+      border: 1px solid rgba(68, 255, 168, .34);
+      padding: 3px 8px;
+      background: rgba(3, 33, 28, .5);
+    }
+
+    .video-ai-chip {
+      position: absolute;
+      left: 16px;
+      top: 14px;
+      padding: 4px 8px;
+      color: #dffcff;
+      font-size: 11px;
+      border: 1px solid rgba(54, 231, 255, .22);
+      background: rgba(2, 13, 32, .58);
+      backdrop-filter: blur(8px);
+    }
+
+    .video-metric-strip {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: 34px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    .video-metric-strip span {
+      padding: 5px 7px;
+      color: var(--muted);
+      font-size: 11px;
+      border: 1px solid rgba(54, 231, 255, .13);
+      background: rgba(2, 13, 32, .45);
+    }
+
+    .video-metric-strip b { color: #fff; font-weight: 800; }
+
+    .video-card {
+      cursor: pointer;
+      transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+    }
+
+    .video-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(54, 231, 255, .46);
+      box-shadow: 0 0 22px rgba(54, 231, 255, .18), inset 0 0 28px rgba(54, 231, 255, .08);
+    }
+
+    .video-card::after {
+      content: "点击放大";
+      position: absolute;
+      right: 14px;
+      bottom: 13px;
+      color: var(--cyan);
+      font-size: 12px;
+      opacity: 0;
+      padding: 3px 8px;
+      border: 1px solid rgba(54, 231, 255, .26);
+      background: rgba(3, 18, 41, .66);
+      transition: opacity .18s ease;
+    }
+
+    .video-card:hover::after { opacity: 1; }
+
+    .video-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      display: none;
+      place-items: center;
+      background: rgba(1, 8, 20, .78);
+      backdrop-filter: blur(8px);
+    }
+
+    .video-modal.show { display: grid; }
+
+    .video-stage {
+      position: relative;
+      width: min(1120px, calc(100vw - 70px));
+      height: min(680px, calc(100vh - 90px));
+      border: 1px solid rgba(54, 231, 255, .38);
+      background: linear-gradient(180deg, rgba(7, 32, 76, .96), rgba(2, 11, 28, .96));
+      box-shadow: 0 0 58px rgba(54, 231, 255, .24), inset 0 0 42px rgba(54, 231, 255, .07);
+      overflow: hidden;
+    }
+
+    .video-stage-head {
+      height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      border-bottom: 1px solid rgba(54, 231, 255, .16);
+      background: linear-gradient(90deg, rgba(20, 105, 207, .48), transparent);
+    }
+
+    .video-stage-title b { display: block; letter-spacing: 1px; }
+    .video-stage-title span { color: var(--muted); font-size: 12px; }
+
+    .video-stage-actions { display: flex; gap: 8px; }
+
+    .video-stage-actions button {
+      height: 30px;
+      border: 1px solid rgba(54, 231, 255, .34);
+      color: var(--cyan);
+      background: rgba(3, 18, 41, .7);
+      cursor: pointer;
+    }
+
+    .video-stage-actions button:hover {
+      color: #001526;
+      background: linear-gradient(135deg, var(--green), var(--cyan));
+    }
+
+    .video-stage-screen {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      top: 68px;
+      bottom: 18px;
+      border: 1px solid rgba(72, 201, 255, .18);
+      background:
+        linear-gradient(135deg, rgba(6, 22, 48, .4), rgba(9, 51, 95, .34)),
+        radial-gradient(circle at 50% 42%, rgba(50, 221, 255, .18), transparent 28%),
+        #061733;
+      overflow: hidden;
+    }
+
+    .video-stage-screen::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(0deg, transparent 0 8px, rgba(102, 220, 255, .04) 9px 10px);
+      animation: scan 4s linear infinite;
+    }
+
+    .video-stage-river {
+      position: absolute;
+      left: -8%;
+      top: 50%;
+      width: 116%;
+      height: 24%;
+      border-radius: 50%;
+      background: linear-gradient(90deg, transparent, rgba(67, 218, 255, .54), rgba(33, 108, 255, .32), transparent);
+      filter: blur(1px);
+      transform: rotate(-8deg);
+    }
+
+    .video-stage-osd {
+      position: absolute;
+      left: 18px;
+      bottom: 16px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .video-stage-live {
+      position: absolute;
+      right: 18px;
+      top: 16px;
+      color: var(--green);
+      font-size: 12px;
+      border: 1px solid rgba(68, 255, 168, .34);
+      padding: 4px 10px;
+      background: rgba(3, 33, 28, .55);
+    }
+
+    .video-stage-panel {
+      position: absolute;
+      left: 18px;
+      top: 16px;
+      width: 260px;
+      padding: 12px;
+      border: 1px solid rgba(54, 231, 255, .18);
+      background: rgba(2, 13, 32, .56);
+      backdrop-filter: blur(10px);
+    }
+
+    .video-stage-panel b { display: block; margin-bottom: 8px; letter-spacing: 1px; }
+    .video-stage-panel p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
+
+    .video-counter {
+      min-width: 42px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      color: var(--green);
+      font-size: 12px;
+      border: 1px solid rgba(68, 255, 168, .28);
+      background: rgba(3, 33, 28, .42);
+    }
+
+    .map-panel .panel-body { padding: 0; }
+
+    .map-wrap {
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(13, 71, 127, .52), transparent 43%),
+        linear-gradient(180deg, rgba(0, 26, 64, .28), rgba(0, 4, 18, .7));
+    }
+
+    .map-wrap::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 760px;
+      height: 460px;
+      transform: translate(-50%, -44%) rotateX(64deg) rotateZ(-5deg);
+      background:
+        linear-gradient(rgba(34, 222, 255, .14) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(34, 222, 255, .14) 1px, transparent 1px);
+      background-size: 42px 42px;
+      box-shadow: 0 0 70px rgba(20, 177, 255, .12);
+    }
+
+    .map-svg {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: min(78%, 760px);
+      transform: translate(-50%, -47%);
+      filter: drop-shadow(0 0 12px rgba(47, 226, 255, .45));
+    }
+
+    .map-svg path {
+      fill: rgba(5, 34, 70, .5);
+      stroke: var(--cyan);
+      stroke-width: 1.6;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .map-svg .river-line {
+      fill: none;
+      stroke: rgba(83, 229, 255, .82);
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-dasharray: 8 12;
+      animation: dash 2.4s linear infinite;
+    }
+
+    @keyframes dash { to { stroke-dashoffset: -40; } }
+
+    .station {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      margin: -6px 0 0 -6px;
+      border-radius: 50%;
+      background: var(--orange);
+      border: 2px solid #ffd3a1;
+      box-shadow: 0 0 0 6px rgba(255, 143, 42, .13), 0 0 18px rgba(255, 143, 42, .8);
+      cursor: pointer;
+      transition: transform .18s ease, filter .18s ease;
+    }
+
+    .station:hover {
+      transform: scale(1.32);
+      filter: brightness(1.22);
+    }
+
+    .station.warn {
+      background: var(--red);
+      border-color: #ffd4db;
+      box-shadow: 0 0 0 7px rgba(255, 59, 82, .16), 0 0 22px rgba(255, 59, 82, .9);
+      animation: warn 1.2s infinite alternate;
+    }
+
+    @keyframes warn { to { transform: scale(1.22); } }
+
+    .station small {
+      position: absolute;
+      left: 14px;
+      top: -8px;
+      white-space: nowrap;
+      color: #ffcf8c;
+      font-size: 11px;
+      text-shadow: 0 0 6px #000;
+    }
+
+    .map-ribbon {
+      position: absolute;
+      left: 18px;
+      top: 16px;
+      padding: 7px 13px;
+      font-weight: 700;
+      color: #d9fbff;
+      background: rgba(4, 20, 45, .7);
+      border-left: 3px solid var(--cyan);
+    }
+
+    .map-toolbar {
+      position: absolute;
+      right: 18px;
+      top: 14px;
+      display: flex;
+      gap: 8px;
+      padding: 5px;
+      border: 1px solid rgba(54, 231, 255, .18);
+      background: rgba(2, 13, 32, .54);
+      backdrop-filter: blur(10px);
+    }
+
+    .map-mode {
+      height: 26px;
+      padding: 0 10px;
+      border: 1px solid transparent;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .map-mode.active,
+    .map-mode:hover {
+      color: #001526;
+      border-color: rgba(54, 231, 255, .38);
+      background: linear-gradient(135deg, var(--green), var(--cyan));
+      box-shadow: 0 0 16px rgba(54, 231, 255, .22);
+    }
+
+    .map-insight {
+      position: absolute;
+      left: 18px;
+      bottom: 16px;
+      width: min(360px, calc(100% - 36px));
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .insight-card {
+      padding: 9px 10px;
+      border: 1px solid rgba(54, 231, 255, .16);
+      background: rgba(2, 13, 32, .58);
+      backdrop-filter: blur(10px);
+    }
+
+    .insight-card span { display: block; color: var(--muted); font-size: 11px; }
+    .insight-card b { display: block; margin-top: 4px; font-size: 18px; color: #fff; }
+    .insight-card em { color: var(--green); font-size: 11px; font-style: normal; }
+
+    .kpi-grid {
+      height: 100%;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .realtime-grid {
+      grid-template-columns: 1fr;
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .kpi {
+      position: relative;
+      padding: 12px;
+      background:
+        linear-gradient(180deg, rgba(8, 42, 92, .72), rgba(3, 18, 41, .66)),
+        radial-gradient(circle at 85% 18%, rgba(54, 231, 255, .16), transparent 36%);
+      border: 1px solid rgba(72, 201, 255, .24);
+      overflow: hidden;
+    }
+
+    .kpi::after {
+      content: "";
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 9px;
+      height: 3px;
+      background: linear-gradient(90deg, var(--cyan), var(--green), transparent);
+      opacity: .42;
+    }
+
+    .kpi span { color: #bdefff; font-size: 13px; font-weight: 700; letter-spacing: 1px; }
+    .kpi strong {
+      display: block;
+      margin-top: 8px;
+      font-size: clamp(24px, 1.7vw, 34px);
+      line-height: 1;
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+      text-shadow: 0 0 16px rgba(54, 231, 255, .58);
+      animation: numberGlow 2.8s ease-in-out infinite;
+    }
+    .kpi em { display: block; margin-top: 6px; color: var(--green); font-style: normal; font-size: 12px; }
+
+    .kpi-unit {
+      margin-left: 5px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .realtime-kpi {
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 14px;
+    }
+
+    .realtime-kpi strong {
+      margin-top: 0;
+      flex: 0 0 auto;
+      font-size: clamp(30px, 2.4vw, 44px);
+      white-space: nowrap;
+    }
+
+    .flow-kpi { border-left: 4px solid var(--cyan); }
+    .level-kpi { border-left: 4px solid var(--gold); }
+
+    @keyframes numberGlow {
+      50% { text-shadow: 0 0 14px rgba(54, 231, 255, .52); }
+    }
+
+    .warning-list, .report-list {
+      height: 100%;
+      overflow-y: auto;
+      padding-right: 34px;
+      display: grid;
+      align-content: start;
+      gap: 10px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(54, 231, 255, .45) rgba(3, 18, 41, .35);
+    }
+
+    .warning-list::-webkit-scrollbar, .report-list::-webkit-scrollbar { width: 6px; }
+    .warning-list::-webkit-scrollbar-track, .report-list::-webkit-scrollbar-track { background: rgba(3, 18, 41, .35); }
+    .warning-list::-webkit-scrollbar-thumb, .report-list::-webkit-scrollbar-thumb { background: rgba(54, 231, 255, .45); border-radius: 999px; }
+
+    .warning-item, .report-item {
+      padding: 10px 11px;
+      background: rgba(5, 24, 55, .56);
+      border: 1px solid rgba(80, 209, 255, .13);
+      border-left: 3px solid var(--cyan);
+      cursor: pointer;
+      transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+    }
+
+    .warning-item:hover, .report-item:hover, .msg[data-detail]:hover {
+      transform: translateX(3px);
+      border-color: rgba(54, 231, 255, .45);
+      background: rgba(8, 42, 92, .64);
+      box-shadow: 0 0 16px rgba(54, 231, 255, .12);
+    }
+
+    .warning-item.hot { border-left-color: var(--red); background: linear-gradient(90deg, rgba(119, 13, 30, .38), rgba(5, 24, 55, .5)); }
+    .warning-item .row, .report-item .row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+    .warning-item p, .report-item p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+    .mini-progress {
+      display: block;
+      height: 3px;
+      margin-top: 8px;
+      background: rgba(54, 231, 255, .10);
+      overflow: hidden;
+    }
+
+    .mini-progress i {
+      display: block;
+      height: 100%;
+      width: var(--p, 62%);
+      background: linear-gradient(90deg, var(--green), var(--cyan));
+      box-shadow: 0 0 10px rgba(54, 231, 255, .46);
+    }
+
+    .warning-item.hot .mini-progress i { background: linear-gradient(90deg, var(--red), var(--orange)); }
+
+    .tag-red { color: var(--red); }
+    .tag-gold { color: var(--gold); }
+    .tag-green { color: var(--green); }
+
+    .bottom {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1.5fr .9fr;
+      gap: 12px;
+    }
+
+    .chart-area {
+      height: 100%;
+      padding: 10px 14px 6px;
+    }
+
+    .chart-svg { width: 100%; height: 100%; overflow: visible; }
+    .axis { stroke: rgba(150, 211, 255, .2); stroke-width: 1; }
+    .chart-grid { stroke: rgba(89, 198, 255, .13); stroke-width: 1; stroke-dasharray: 4 8; }
+    .history-zone { fill: rgba(54, 231, 255, .035); }
+    .forecast-zone { fill: url(#forecastZoneGradient); stroke: rgba(68, 255, 168, .26); stroke-width: 1; }
+    .forecast-divider { stroke: rgba(68, 255, 168, .72); stroke-width: 2; stroke-dasharray: 7 7; filter: drop-shadow(0 0 8px rgba(68,255,168,.55)); }
+    .flow-area { fill: url(#flowAreaGradient); opacity: .58; }
+    .level-area { fill: url(#levelAreaGradient); opacity: .36; }
+    .flow-line { fill: none; stroke: var(--cyan); stroke-width: 3; filter: drop-shadow(0 0 8px rgba(54,231,255,.7)); }
+    .level-line { fill: none; stroke: var(--gold); stroke-width: 3; filter: drop-shadow(0 0 8px rgba(255,230,92,.6)); }
+    .forecast-line { stroke-dasharray: 9 7; }
+    .chart-point { fill: #031025; stroke-width: 2; }
+    .flow-point { stroke: var(--cyan); filter: drop-shadow(0 0 5px rgba(54,231,255,.8)); }
+    .level-point { stroke: var(--gold); filter: drop-shadow(0 0 5px rgba(255,230,92,.75)); }
+    .chart-hover-point {
+      fill: rgba(3, 16, 37, .86);
+      stroke: rgba(234, 248, 255, .72);
+      stroke-width: 2;
+      cursor: pointer;
+      filter: drop-shadow(0 0 7px rgba(54,231,255,.65));
+    }
+    .chart-hover-point.forecast { stroke-dasharray: 3 3; filter: drop-shadow(0 0 7px rgba(68,255,168,.65)); }
+    .chart-hover-point:hover { fill: var(--green); stroke: #fff; }
+    .chart-tooltip {
+      position: fixed;
+      z-index: 40;
+      display: none;
+      max-width: 260px;
+      padding: 9px 11px;
+      color: #eaf8ff;
+      font-size: 12px;
+      line-height: 1.65;
+      border: 1px solid rgba(54, 231, 255, .38);
+      background: rgba(2, 13, 32, .92);
+      box-shadow: 0 0 20px rgba(54, 231, 255, .24), inset 0 0 18px rgba(54, 231, 255, .06);
+      pointer-events: none;
+      white-space: pre-line;
+    }
+    .chart-label { fill: #9ac6df; font-size: 11px; }
+    .zone-label { fill: rgba(224, 250, 255, .72); font-size: 12px; font-weight: 700; letter-spacing: 2px; }
+    .legend { display: flex; gap: 18px; position: absolute; right: 22px; top: 50px; font-size: 12px; color: var(--muted); }
+    .legend i { display: inline-block; width: 18px; height: 3px; margin-right: 6px; vertical-align: middle; }
+
+    .command {
+      position: relative;
+      height: 100%;
+      display: grid;
+      grid-template-rows: 1fr 42px;
+      gap: 9px;
+    }
+
+    .dialogue {
+      overflow-y: auto;
+      padding-right: 34px;
+      display: grid;
+      align-content: start;
+      gap: 8px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(54, 231, 255, .45) rgba(3, 18, 41, .35);
+    }
+
+    .dialogue::-webkit-scrollbar { width: 6px; }
+    .dialogue::-webkit-scrollbar-track { background: rgba(3, 18, 41, .35); }
+    .dialogue::-webkit-scrollbar-thumb { background: rgba(54, 231, 255, .45); border-radius: 999px; }
+
+    .msg {
+      padding: 9px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(72, 201, 255, .14);
+      background: rgba(3, 18, 41, .5);
+      font-size: 12px;
+      line-height: 1.55;
+      color: #cdeeff;
+    }
+
+    .msg[data-detail] {
+      cursor: pointer;
+      transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+    }
+
+    .msg.ai { border-color: rgba(68, 255, 168, .18); background: rgba(3, 34, 34, .45); }
+
+    .command-palette,
+    .config-drawer {
+      position: fixed;
+      inset: 0;
+      z-index: 36;
+      display: none;
+      background: rgba(1, 8, 20, .58);
+      backdrop-filter: blur(8px);
+    }
+
+    .command-palette.show,
+    .config-drawer.show { display: block; }
+
+    .command-box {
+      position: absolute;
+      left: 50%;
+      top: 11vh;
+      width: min(720px, calc(100vw - 36px));
+      transform: translateX(-50%);
+      border: 1px solid rgba(54, 231, 255, .36);
+      background: linear-gradient(180deg, rgba(7, 32, 76, .98), rgba(2, 11, 28, .98));
+      box-shadow: 0 0 56px rgba(54, 231, 255, .24), inset 0 0 34px rgba(54, 231, 255, .07);
+    }
+
+    .command-search {
+      height: 58px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      padding: 10px;
+      border-bottom: 1px solid rgba(54, 231, 255, .16);
+    }
+
+    .command-search input {
+      min-width: 0;
+      border: 1px solid rgba(72, 201, 255, .22);
+      color: #fff;
+      background: rgba(3, 13, 31, .72);
+      outline: none;
+      padding: 0 13px;
+    }
+
+    .command-search button,
+    .drawer-close {
+      border: 1px solid rgba(54, 231, 255, .34);
+      color: var(--cyan);
+      background: rgba(3, 18, 41, .7);
+      cursor: pointer;
+    }
+
+    .command-list {
+      max-height: min(520px, 62vh);
+      overflow-y: auto;
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .command-item {
+      padding: 12px 13px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid rgba(72, 201, 255, .14);
+      background: rgba(3, 18, 41, .48);
+      cursor: pointer;
+      transition: transform .18s ease, border-color .18s ease, background .18s ease;
+    }
+
+    .command-item:hover {
+      transform: translateX(4px);
+      border-color: rgba(54, 231, 255, .42);
+      background: rgba(8, 42, 92, .62);
+    }
+
+    .command-item b { display: block; font-size: 14px; }
+    .command-item span { color: var(--muted); font-size: 12px; }
+    .command-item em { color: var(--green); font-style: normal; font-size: 12px; }
+
+    .drawer-panel {
+      position: absolute;
+      right: 0;
+      top: 0;
+      width: min(420px, calc(100vw - 28px));
+      height: 100%;
+      padding: 18px;
+      border-left: 1px solid rgba(54, 231, 255, .32);
+      background: linear-gradient(180deg, rgba(7, 32, 76, .98), rgba(2, 11, 28, .98));
+      box-shadow: -24px 0 52px rgba(0, 0, 0, .32), inset 0 0 34px rgba(54, 231, 255, .07);
+    }
+
+    .drawer-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .drawer-head h2 { margin: 0; font-size: 20px; letter-spacing: 2px; }
+    .drawer-close { width: 30px; height: 30px; }
+
+    .setting-group {
+      margin-top: 14px;
+      padding: 13px;
+      border: 1px solid rgba(54, 231, 255, .14);
+      background: rgba(3, 18, 41, .44);
+    }
+
+    .setting-group b { display: block; margin-bottom: 9px; }
+    .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 13px; line-height: 2.1; }
+
+    .switch {
+      width: 42px;
+      height: 22px;
+      border: 1px solid rgba(54, 231, 255, .28);
+      border-radius: 999px;
+      background: rgba(3, 18, 41, .72);
+      position: relative;
+    }
+
+    .switch::after {
+      content: "";
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      left: 3px;
+      top: 2px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: transform .18s ease, background .18s ease;
+    }
+
+    .switch.on::after { transform: translateX(19px); background: var(--green); box-shadow: 0 0 12px var(--green); }
+
+    .detail-view {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: none;
+      place-items: center;
+      background: rgba(1, 8, 20, .74);
+      backdrop-filter: blur(8px);
+    }
+
+    .detail-view.show { display: grid; }
+
+    .detail-card {
+      position: relative;
+      width: min(820px, calc(100vw - 44px));
+      min-height: 360px;
+      padding: 22px 24px 20px;
+      border: 1px solid rgba(54, 231, 255, .34);
+      background: linear-gradient(180deg, rgba(7, 32, 76, .96), rgba(2, 11, 28, .96));
+      box-shadow: 0 0 50px rgba(54, 231, 255, .24), inset 0 0 40px rgba(54, 231, 255, .07);
+    }
+
+    .detail-card h2 {
+      margin: 0 0 10px;
+      font-size: 24px;
+      letter-spacing: 2px;
+      text-shadow: 0 0 12px rgba(54, 231, 255, .52);
+    }
+
+    .detail-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .detail-meta span {
+      padding: 5px 9px;
+      color: var(--muted);
+      font-size: 12px;
+      border: 1px solid rgba(54, 231, 255, .18);
+      background: rgba(3, 18, 41, .56);
+    }
+
+    .detail-content {
+      color: #cdeeff;
+      line-height: 1.8;
+      font-size: 14px;
+    }
+
+    .detail-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .detail-actions button, .detail-close {
+      border: 1px solid rgba(54, 231, 255, .36);
+      color: var(--cyan);
+      background: rgba(3, 18, 41, .68);
+      cursor: pointer;
+    }
+
+    .detail-actions button { padding: 8px 13px; }
+
+    .detail-close {
+      position: absolute;
+      right: 14px;
+      top: 12px;
+      width: 30px;
+      height: 30px;
+      font-size: 18px;
+    }
+
+    .input-line {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    .input-line input {
+      min-width: 0;
+      border: 1px solid rgba(72, 201, 255, .22);
+      background: rgba(3, 13, 31, .66);
+      color: white;
+      outline: none;
+      padding: 0 12px;
+    }
+
+    .input-line button {
+      border: 0;
+      color: #001526;
+      font-weight: 900;
+      padding: 0 16px;
+      background: linear-gradient(135deg, var(--green), var(--cyan));
+      cursor: pointer;
+      box-shadow: 0 0 16px rgba(54, 231, 255, .35);
+    }
+
+    .agent-robot {
+      position: fixed;
+      right: 28px;
+      bottom: 26px;
+      z-index: 12;
+      width: 92px;
+      height: 118px;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+      perspective: 520px;
+      filter: drop-shadow(0 18px 24px rgba(0, 0, 0, .34));
+    }
+
+    .robot-body {
+      position: absolute;
+      left: 21px;
+      bottom: 12px;
+      width: 50px;
+      height: 55px;
+      border: 1px solid rgba(54, 231, 255, .58);
+      border-radius: 18px 18px 16px 16px;
+      background: linear-gradient(145deg, rgba(25, 232, 255, .88), rgba(7, 67, 143, .92) 48%, rgba(1, 16, 41, .94));
+      box-shadow: inset -10px -12px 18px rgba(0, 0, 0, .28), inset 8px 8px 18px rgba(255, 255, 255, .18), 0 0 26px rgba(54, 231, 255, .38);
+      transform: rotateX(8deg) rotateY(-14deg);
+    }
+
+    .robot-head {
+      position: absolute;
+      left: 13px;
+      top: 15px;
+      width: 66px;
+      height: 48px;
+      border: 1px solid rgba(54, 231, 255, .72);
+      border-radius: 24px 24px 18px 18px;
+      background: linear-gradient(145deg, #d9fbff 0%, #42eaff 28%, #084b96 70%, #031229 100%);
+      box-shadow: inset -12px -11px 16px rgba(0, 0, 0, .28), inset 8px 8px 14px rgba(255, 255, 255, .45), 0 0 28px rgba(54, 231, 255, .5);
+      transform: rotateX(10deg) rotateY(-16deg);
+      animation: robotFloat 2.8s ease-in-out infinite;
+    }
+
+    .robot-head::before,
+    .robot-head::after {
+      content: "";
+      position: absolute;
+      top: 22px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #021328;
+      box-shadow: 0 0 10px var(--green);
+    }
+
+    .robot-head::before { left: 18px; }
+    .robot-head::after { right: 18px; }
+
+    .robot-antenna {
+      position: absolute;
+      left: 45px;
+      top: 2px;
+      width: 2px;
+      height: 18px;
+      background: var(--cyan);
+      box-shadow: 0 0 10px var(--cyan);
+    }
+
+    .robot-antenna::after {
+      content: "";
+      position: absolute;
+      left: -4px;
+      top: -7px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 16px var(--green);
+    }
+
+    .robot-ring {
+      position: absolute;
+      left: 8px;
+      bottom: 0;
+      width: 76px;
+      height: 18px;
+      border: 1px solid rgba(54, 231, 255, .36);
+      border-radius: 50%;
+      background: radial-gradient(ellipse, rgba(54,231,255,.25), transparent 68%);
+      animation: ringPulse 2.8s ease-in-out infinite;
+    }
+
+    .robot-tip {
+      position: absolute;
+      right: 88px;
+      bottom: 42px;
+      width: 118px;
+      padding: 7px 9px;
+      color: var(--cyan);
+      font-size: 12px;
+      border: 1px solid rgba(54, 231, 255, .28);
+      background: rgba(3, 18, 41, .78);
+      white-space: nowrap;
+    }
+
+    @keyframes robotFloat { 50% { transform: translateY(-7px) rotateX(10deg) rotateY(-16deg); } }
+    @keyframes ringPulse { 50% { transform: scale(1.12); opacity: .58; } }
+
+    .agent-chat {
+      position: fixed;
+      right: 132px;
+      bottom: 30px;
+      z-index: 18;
+      width: min(680px, calc(100vw - 170px));
+      height: min(720px, calc(100vh - 70px));
+      display: none;
+      grid-template-rows: 64px 1fr 56px;
+      border: 1px solid rgba(54, 231, 255, .36);
+      background: linear-gradient(180deg, rgba(7, 32, 76, .96), rgba(2, 11, 28, .96));
+      box-shadow: 0 0 44px rgba(54, 231, 255, .22), inset 0 0 34px rgba(54, 231, 255, .07);
+    }
+
+    .agent-chat.show { display: grid; }
+
+    .agent-chat-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      background: linear-gradient(90deg, rgba(20, 105, 207, .44), transparent);
+      border-bottom: 1px solid rgba(54, 231, 255, .16);
+    }
+
+    .agent-chat-title b { display: block; letter-spacing: 1px; }
+    .agent-chat-title span { color: var(--muted); font-size: 12px; }
+
+    .agent-chat-close {
+      width: 28px;
+      height: 28px;
+      border: 1px solid rgba(54, 231, 255, .34);
+      color: var(--cyan);
+      background: rgba(3, 18, 41, .7);
+      cursor: pointer;
+    }
+
+    .agent-chat-log {
+      overflow-y: auto;
+      padding: 14px;
+      display: grid;
+      align-content: start;
+      gap: 10px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(54, 231, 255, .45) rgba(3, 18, 41, .35);
+    }
+
+    .agent-bubble {
+      max-width: 86%;
+      padding: 10px 12px;
+      border: 1px solid rgba(72, 201, 255, .16);
+      border-radius: 13px;
+      background: rgba(3, 18, 41, .58);
+      color: #d8f5ff;
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .agent-bubble.ai { border-color: rgba(68, 255, 168, .2); background: rgba(3, 34, 34, .48); }
+    .agent-bubble.user { justify-self: end; border-color: rgba(54, 231, 255, .24); background: rgba(8, 42, 92, .64); }
+
+    .agent-chat-input {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      padding: 0 12px 12px;
+    }
+
+    .agent-chat-input input {
+      min-width: 0;
+      border: 1px solid rgba(72, 201, 255, .22);
+      background: rgba(3, 13, 31, .74);
+      color: white;
+      outline: none;
+      padding: 0 12px;
+    }
+
+    .agent-chat-input button {
+      border: 0;
+      color: #001526;
+      font-weight: 900;
+      padding: 0 15px;
+      background: linear-gradient(135deg, var(--green), var(--cyan));
+      cursor: pointer;
+      box-shadow: 0 0 16px rgba(54, 231, 255, .35);
+    }
+
+    .float-menu {
+      position: fixed;
+      right: 22px;
+      bottom: 215px;
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .float-menu button {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      border: 1px solid rgba(54,231,255,.34);
+      color: var(--cyan);
+      background: rgba(2, 16, 39, .78);
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      transition: transform .18s ease, background .18s ease, color .18s ease;
+    }
+
+    .float-menu button:hover {
+      transform: translateX(-4px) scale(1.06);
+      color: #001526;
+      background: linear-gradient(135deg, var(--green), var(--cyan));
+    }
+
+    .focus-flash {
+      animation: focusFlash 1.1s ease;
+    }
+
+    @keyframes focusFlash {
+      0%, 100% { outline: 0 solid rgba(68, 255, 168, 0); }
+      20% { outline: 2px solid rgba(68, 255, 168, .78); box-shadow: 0 0 38px rgba(68, 255, 168, .28), var(--shadow); }
+    }
+
+    @media (max-width: 1180px) {
+      body { overflow: auto; }
+      .shell { min-height: 1200px; height: auto; grid-template-rows: 64px 780px 230px; }
+      .main { grid-template-columns: 1fr; grid-template-rows: 360px 520px 420px; }
+      .column, .right-column { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
+      .right-column { grid-template-columns: repeat(3, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="top-meta">
+        <div class="pill"><span class="live-dot"></span>实时接入 42 路监测</div>
+        <div class="pill top-action" id="openCommand">全局指挥<span class="kbd">Ctrl K</span></div>
+      </div>
+      <div class="title">流量监测预报智能指挥舱</div>
+      <div class="top-meta right">
+        <div class="pill" id="clock">2026-06-13 23:28:44</div>
+        <div class="pill top-action" id="openConfig">系统配置</div>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="column">
+        <article class="panel">
+          <span class="corner c1"></span><span class="corner c2"></span><span class="corner c3"></span><span class="corner c4"></span>
+          <div class="panel-title">设备监测画面 · 上游闸口</div>
+          <div class="panel-body">
+            <div class="video-card" data-video-index="0" data-video-title="设备监测画面 · 上游闸口" data-video-label="CAM-07｜水面漂浮物识别｜延迟 126ms" data-video-status="LIVE 1080P" data-video-theme="blue">
+              <div class="camera-feed"><div class="river"></div></div>
+              <div class="video-ai-chip">AI 识别：漂浮物 2 处</div>
+              <div class="status-badge">LIVE 1080P</div>
+              <div class="video-metric-strip"><span>流速 <b>1.8m/s</b></span><span>清晰度 <b>98%</b></span><span>风险 <b>低</b></span></div>
+              <div class="camera-label">CAM-07｜水面漂浮物识别｜延迟 126ms</div>
+            </div>
+          </div>
+        </article>
+        <article class="panel">
+          <span class="corner c1"></span><span class="corner c2"></span><span class="corner c3"></span><span class="corner c4"></span>
+          <div class="panel-title">设备监测画面 · 桥涵断面</div>
+          <div class="panel-body">
+            <div class="video-card" data-video-index="1" data-video-title="设备监测画面 · 桥涵断面" data-video-label="CAM-12｜断面流速估计｜雨量联动" data-video-status="AI 巡检中" data-video-theme="orange">
+              <div class="camera-feed" style="background:linear-gradient(25deg, rgba(255,143,42,.13), transparent 55%), #061733;"><div class="river" style="top:58%; transform:rotate(4deg);"></div></div>
+              <div class="video-ai-chip">AI 巡检：桥涵断面正常</div>
+              <div class="status-badge">AI 巡检中</div>
+              <div class="video-metric-strip"><span>流速 <b>2.4m/s</b></span><span>雨量 <b>18mm</b></span><span>风险 <b>中</b></span></div>
+              <div class="camera-label">CAM-12｜断面流速估计｜雨量联动</div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="center">
+        <article class="panel map-panel">
+          <span class="corner c1"></span><span class="corner c2"></span><span class="corner c3"></span><span class="corner c4"></span>
+          <div class="panel-title">监测设备分布 / 三维数字孪生态势</div>
+          <div class="panel-body">
+            <div class="map-wrap">
+              <div class="map-ribbon">示范区域：流域-城区-站点三级联动</div>
+              <div class="map-toolbar" aria-label="地图模式切换">
+                <button class="map-mode active">数字孪生</button>
+                <button class="map-mode">风险热力</button>
+                <button class="map-mode">设备链路</button>
+              </div>
+              <svg class="map-svg" viewBox="0 0 760 520" aria-label="流域地图示意">
+                <path d="M204 66 L319 34 L438 75 L563 104 L642 176 L602 298 L646 404 L536 476 L392 446 L266 481 L134 405 L102 290 L142 174 Z" />
+                <path d="M219 144 L308 116 L402 138 L470 192 L564 210 L532 285 L576 361 L482 405 L376 384 L292 424 L194 372 L174 274 Z" />
+                <path d="M332 46 C330 92 356 122 392 151 C438 187 439 233 404 270 C368 309 367 348 418 384 C455 411 461 443 439 479" class="river-line" />
+                <path d="M151 298 C220 286 286 299 330 338 C365 369 407 370 464 342 C506 321 548 316 612 332" class="river-line" style="stroke-width:3;opacity:.62" />
+              </svg>
+              <div class="station" style="left:48%;top:28%" data-detail="station" data-title="龙门站 201" data-level="正常" data-time="实时" data-content="龙门站 201：水位 6.28m，流量 1,860m³/s，视频链路正常，设备在线。"><small>龙门站 201</small></div>
+              <div class="station warn" style="left:56%;top:42%" data-detail="station" data-title="城西站 92" data-level="橙色预警" data-time="实时" data-content="城西站 92：水位 7.84m，接近 7.9m 警戒线；未来 45 分钟存在超警风险，建议联动闸门调度。"><small>城西站 92</small></div>
+              <div class="station" style="left:44%;top:48%" data-detail="station" data-title="南桥站 67" data-level="正常" data-time="实时" data-content="南桥站 67：水位连续回落，短时风险解除，建议保持 15 分钟巡检。"><small>南桥站 67</small></div>
+              <div class="station" style="left:51%;top:61%" data-detail="station" data-title="中心站 105" data-level="正常" data-time="实时" data-content="中心站 105：水位 6.76m，流量 2,118m³/s，模型预报稳定。"><small>中心站 105</small></div>
+              <div class="station warn" style="left:40%;top:64%" data-detail="station" data-title="泵闸站 142" data-level="黄色预警" data-time="实时" data-content="泵闸站 142：10 分钟流量环比增加 18%，已触发复核与视频巡检。"><small>泵闸站 142</small></div>
+              <div class="station" style="left:57%;top:72%" data-detail="station" data-title="东湾站 80" data-level="正常" data-time="实时" data-content="东湾站 80：设备在线，通信链路稳定，流速处于正常波动区间。"><small>东湾站 80</small></div>
+              <div class="station" style="left:39%;top:78%" data-detail="station" data-title="下游站 205" data-level="通信关注" data-time="实时" data-content="下游站 205：曾出现 90 秒上报延迟，当前已切换备用链路。"><small>下游站 205</small></div>
+              <div class="map-insight">
+                <div class="insight-card"><span>风险站点</span><b>2</b><em>需复核</em></div>
+                <div class="insight-card"><span>视频链路</span><b>39</b><em>/42 在线</em></div>
+                <div class="insight-card"><span>预报可信度</span><b>0.82</b><em>融合模型</em></div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="column right-column">
+        <article class="panel">
+          <span class="corner c1"></span><span class="corner c2"></span><span class="corner c3"></span><span class="corner c4"></span>
+          <div class="panel-title">实时指标</div>
+          <div class="panel-body">
+            <div class="kpi-grid realtime-grid">
+              <div class="kpi realtime-kpi flow-kpi">
+                <div>
+                  <span>实时监测流量</span>
+                  <em>较 10 分钟前 ↑ 3.2%</em>
+                </div>
+                <strong>2,118<span class="kpi-unit">m³/s</span></strong>
+              </div>
+              <div class="kpi realtime-kpi level-kpi">
+                <div>
+                  <span>实时监测水位</span>
+                  <em class="tag-gold">距警戒水位 0.06m</em>
+                </div>
+                <strong>7.84<span class="kpi-unit">m</span></strong>
+              </div>
+            </div>
+          </div>
+        </article>
+        <article class="panel">
+          <span class="corner c1"></span><span class="corner c2"></span><span class="corner c3"></span><span class="corner c4"></span>
+          <div class="panel-title">预警信息</div>
+          <div class="panel-body">
+            <div class="warning-list" id="warningList">
+              <div class="warning-item hot" data-detail="warning" data-title="城西站水位超警戒" data-level="橙色预警" data-time="23:18" data-content="城西站当前水位接近 7.9m 警戒线，模型预计 45 分钟后超过阈值。建议立即联动闸门调度，通知值班人员复核现场视频，并持续跟踪未来 6 小时降雨预报。"><div class="row"><b>城西站水位超警戒</b><span class="tag-red">橙色</span></div><p>预计 45 分钟后超过 7.9m，建议联动闸门调度。</p><span class="mini-progress" style="--p:88%"><i></i></span></div>
+              <div class="warning-item" data-detail="warning" data-title="泵闸站流量突增" data-level="黄色预警" data-time="23:05" data-content="泵闸站 10 分钟流量环比增加 18%，变化速度超过关注阈值。建议复核上游来水、泵闸运行状态和视频画面，必要时启动人工确认。"><div class="row"><b>泵闸站流量突增</b><span class="tag-gold">黄色</span></div><p>10 分钟环比 +18%，触发复核与视频巡检。</p><span class="mini-progress" style="--p:66%"><i></i></span></div>
+              <div class="warning-item" data-detail="warning" data-title="下游站通信延迟" data-level="黄色预警" data-time="22:42" data-content="下游站数据上报延迟超过 90 秒，系统已自动切换备用链路。建议检查通信模块、供电状态和边缘网关缓存情况。"><div class="row"><b>下游站通信延迟</b><span class="tag-gold">黄色</span></div><p>数据上报延迟超过 90 秒，已切换备用链路。</p><span class="mini-progress" style="--p:42%"><i></i></span></div>
+              <div class="warning-item" data-detail="warning" data-title="南桥站水位回落" data-level="预警解除" data-time="22:10" data-content="南桥站水位连续 30 分钟低于关注阈值，短时风险已解除。建议保留常规监测频率，并在日报中记录处置闭环。"><div class="row"><b>南桥站水位回落</b><span class="tag-green">解除</span></div><p>连续 30 分钟低于关注阈值，可转为常规监测。</p><span class="mini-progress" style="--p:24%"><i></i></span></div>
+            </div>
+          </div>
+        </article>
+        <article class="panel">
+          <span class="corner c1"></span><span class="corner c2"></span><span class="corner c3"></span><span class="corner c4"></span>
+          <div class="panel-title">日报 / 智能分析</div>
+          <div class="panel-body">
+            <div class="report-list" id="reportList">
+              <div class="report-item" data-detail="report" data-title="今日流域运行简报" data-level="日报" data-time="08:30" data-content="今日降雨影响减弱，主河道水位整体回落，南桥站与城西站仍需关注。系统建议继续保持重点断面 15 分钟巡检频率，并在晚间调度会上复核预报峰值。"><div class="row"><b>今日流域运行简报</b><span>08:30</span></div><p>降雨影响减弱，主河道水位整体回落，2 个站点仍需关注。</p></div>
+              <div class="report-item" data-detail="report" data-title="模型预报一致性检查" data-level="模型评估" data-time="12:00" data-content="LSTM 与水动力模型对峰现时间预测偏差 18 分钟，峰值流量偏差 6.4%，综合可信度 0.82。建议采用融合结果作为未来 24 小时预警参考。"><div class="row"><b>模型预报一致性检查</b><span>12:00</span></div><p>LSTM 与水动力模型峰现时间偏差 18 分钟，可信度 0.82。</p></div>
+              <div class="report-item" data-detail="report" data-title="设备在线率日报" data-level="设备状态" data-time="14:20" data-content="42 台设备中 39 台在线，3 台计划维护，关键断面设备全部在线。建议对维护设备补充人工巡检记录，确保日报闭环。"><div class="row"><b>设备在线率日报</b><span>14:20</span></div><p>42 台设备中 39 台在线，3 台计划维护，未影响关键断面数据。</p></div>
+              <div class="report-item" data-detail="report" data-title="预警处置复盘" data-level="处置复盘" data-time="16:45" data-content="城西站橙色预警已推送值班人员，视频复核结果正常，闸门调度建议已生成。建议补充调度执行记录和人工确认签名。"><div class="row"><b>预警处置复盘</b><span>16:45</span></div><p>城西站橙色预警已推送值班人员，建议补充调度记录。</p></div>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <section class="bottom">
+      <article class="panel">
+        <span class="corner c1"></span><span class="corner c2"></span><span class="corner c3"></span><span class="corner c4"></span>
+        <div class="panel-title">历史数据与预报数据</div>
+        <div class="legend"><span><i style="background:var(--cyan)"></i>流量</span><span><i style="background:var(--gold)"></i>水位</span><span><i style="background:linear-gradient(90deg, rgba(54,231,255,.35), rgba(68,255,168,.35))"></i>历史/预报分区</span></div>
+        <div class="panel-body chart-area">
+          <svg class="chart-svg" viewBox="0 0 980 138" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="forecastZoneGradient" x1="0" x2="1" y1="0" y2="0">
+                <stop offset="0" stop-color="#44ffa8" stop-opacity=".10" />
+                <stop offset="1" stop-color="#36e7ff" stop-opacity=".18" />
+              </linearGradient>
+              <linearGradient id="flowAreaGradient" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0" stop-color="#36e7ff" stop-opacity=".34" />
+                <stop offset="1" stop-color="#36e7ff" stop-opacity="0" />
+              </linearGradient>
+              <linearGradient id="levelAreaGradient" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0" stop-color="#ffe65c" stop-opacity=".30" />
+                <stop offset="1" stop-color="#ffe65c" stop-opacity="0" />
+              </linearGradient>
+            </defs>
+            <rect class="history-zone" x="30" y="18" width="610" height="100" rx="4" />
+            <rect class="forecast-zone" x="640" y="18" width="320" height="100" rx="4" />
+            <line class="axis" x1="30" y1="118" x2="960" y2="118" />
+            <line class="axis" x1="30" y1="18" x2="30" y2="118" />
+            <g>
+              <line class="chart-grid" x1="30" y1="92" x2="960" y2="92" />
+              <line class="chart-grid" x1="30" y1="66" x2="960" y2="66" />
+              <line class="chart-grid" x1="30" y1="40" x2="960" y2="40" />
+            </g>
+            <line class="forecast-divider" x1="640" y1="18" x2="640" y2="118" />
+            <text class="zone-label" x="44" y="34">历史监测</text>
+            <text class="zone-label" x="658" y="34">模型预报</text>
+            <path class="flow-area" d="M30 76 C112 88 188 80 268 78 C350 76 405 86 470 78 C545 66 584 72 640 64 C714 48 790 28 870 32 C912 34 940 42 960 50 L960 118 L30 118 Z" />
+            <path class="level-area" d="M30 96 C112 58 188 56 260 64 C334 72 338 110 418 102 C494 90 542 48 608 72 C620 76 630 78 640 80 C706 108 725 92 800 72 C870 58 908 68 960 86 L960 118 L30 118 Z" />
+            <path class="flow-line" d="M30 76 C112 88 188 80 268 78 C350 76 405 86 470 78 C545 66 584 72 640 64" />
+            <path class="flow-line forecast-line" d="M640 64 C714 48 790 28 870 32 C912 34 940 42 960 50" />
+            <path class="level-line" d="M30 96 C112 58 188 56 260 64 C334 72 338 110 418 102 C494 90 542 48 608 72 C620 76 630 78 640 80" />
+            <path class="level-line forecast-line" d="M640 80 C706 108 725 92 800 72 C870 58 908 68 960 86" />
+            <circle class="chart-point flow-point" cx="640" cy="64" r="4" />
+            <circle class="chart-point level-point" cx="640" cy="80" r="4" />
+            <g class="chart-hover-points">
+              <circle class="chart-hover-point" cx="30" cy="76" r="5" data-chart="周一｜历史监测\n流量：2,320 m³/s\n水位：6.42 m" />
+              <circle class="chart-hover-point" cx="185" cy="80" r="5" data-chart="周二｜历史监测\n流量：2,080 m³/s\n水位：7.18 m" />
+              <circle class="chart-hover-point" cx="342" cy="86" r="5" data-chart="周三｜历史监测\n流量：1,960 m³/s\n水位：5.94 m" />
+              <circle class="chart-hover-point" cx="499" cy="76" r="5" data-chart="周四｜历史监测\n流量：2,118 m³/s\n水位：6.76 m" />
+              <circle class="chart-hover-point" cx="640" cy="64" r="5" data-chart="当前｜监测/预报起点\n流量：2,680 m³/s\n水位：7.32 m" />
+              <circle class="chart-hover-point forecast" cx="735" cy="48" r="5" data-chart="+24h｜模型预报\n流量：3,260 m³/s\n水位：6.88 m\n可信度：0.84" />
+              <circle class="chart-hover-point forecast" cx="850" cy="32" r="5" data-chart="+48h｜模型预报\n流量：4,120 m³/s\n水位：7.74 m\n可信度：0.79" />
+              <circle class="chart-hover-point forecast" cx="935" cy="42" r="5" data-chart="+72h｜模型预报\n流量：3,860 m³/s\n水位：7.21 m\n可信度：0.76" />
+            </g>
+            <text class="chart-label" x="28" y="132">周一</text><text class="chart-label" x="185" y="132">周二</text><text class="chart-label" x="342" y="132">周三</text><text class="chart-label" x="499" y="132">周四</text><text class="chart-label" x="628" y="132">当前</text><text class="chart-label" x="735" y="132">+24h</text><text class="chart-label" x="850" y="132">+48h</text><text class="chart-label" x="935" y="132">+72h</text>
+          </svg>
+        </div>
+      </article>
+
+      <article class="panel">
+        <span class="corner c1"></span><span class="corner c2"></span><span class="corner c3"></span><span class="corner c4"></span>
+        <div class="panel-title">智能体任务<button class="task-add-btn" id="addTaskBtn">+ 新增任务</button></div>
+        <div class="panel-body command">
+          <div class="dialogue" id="dialogue">
+            <div class="msg ai" data-detail="task" data-title="06:00 自动巡检" data-level="已完成" data-time="06:00" data-content="智能体已完成自动巡检：读取历史水位、实时流量、降雨预报和模型结果，发现城西站未来 4 小时存在超警风险，并生成预警草稿。">已完成 06:00 自动巡检：发现城西站未来 4 小时存在超警风险，已生成预警草稿。</div>
+            <div class="msg" data-detail="task" data-title="生成城西站对比报告" data-level="待执行" data-time="手动指令" data-content="任务目标：对比城西站近三天水位和预报峰值，输出一页报告。可调用历史数据库、预报模型、报告模板和站点视频摘要。">帮我对比城西站近三天水位和预报峰值，并生成一页报告。</div>
+            <div class="msg ai" data-detail="task" data-title="任务编排确认" data-level="已编排" data-time="刚刚" data-content="智能体已识别可调用能力：历史数据库、预报模型、报告模板、站点视频摘要。等待用户确认执行范围与报告格式。">收到。可调用：历史数据库、预报模型、报告模板、站点视频摘要。</div>
+          </div>
+          <div class="input-line">
+            <input id="agentInput" placeholder="输入指令：例如“调用预报模型，模拟上游降雨增加20%的影响”" />
+            <button id="sendBtn">下达</button>
+          </div>
+        </div>
+      </article>
+    </section>
+  </div>
+
+  <div class="video-modal" id="videoModal" aria-hidden="true">
+    <div class="video-stage">
+      <div class="video-stage-head">
+        <div class="video-stage-title">
+          <b id="videoModalTitle">设备监测画面</b>
+          <span id="videoModalLabel">CAM-07｜水面漂浮物识别｜延迟 126ms</span>
+        </div>
+        <div class="video-stage-actions">
+          <span class="video-counter" id="videoCounter">1 / 3</span>
+          <button id="videoPrevBtn">切换上一画面</button>
+          <button id="videoNextBtn">切换下一画面</button>
+          <button id="videoCloseBtn">关闭</button>
+        </div>
+      </div>
+      <div class="video-stage-screen" id="videoStageScreen">
+        <div class="video-stage-live" id="videoModalStatus">LIVE 1080P</div>
+        <div class="video-stage-panel">
+          <b id="videoInsightTitle">实时 AI 研判</b>
+          <p id="videoInsightText">水面漂浮物识别正常，画面稳定，延迟低于 150ms，可作为当前调度辅助画面。</p>
+        </div>
+        <div class="video-stage-river" id="videoStageRiver"></div>
+        <div class="video-stage-osd" id="videoModalOsd">CAM-07｜水面漂浮物识别｜延迟 126ms</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="float-menu" aria-label="快速操作">
+    <button title="切换3D" data-focus-target=".map-panel">3D</button>
+    <button title="预警" data-focus-target="#warningList">警</button>
+    <button title="报告" data-focus-target="#reportList">报</button>
+    <button title="指挥" id="openCommandFloat">令</button>
+  </div>
+
+  <button class="agent-robot" id="agentRobot" title="打开智能体对话">
+    <span class="robot-tip">点击唤醒智能体</span>
+    <span class="robot-ring"></span>
+    <span class="robot-antenna"></span>
+    <span class="robot-head"></span>
+    <span class="robot-body"></span>
+  </button>
+
+  <div class="agent-chat" id="agentChat" aria-hidden="true">
+    <div class="agent-chat-head">
+      <div class="agent-chat-title">
+        <b>FloodMind 智能体</b>
+        <span>数据分析 / 模型调用 / 报告生成</span>
+      </div>
+      <button class="agent-chat-close" id="agentChatClose" title="关闭">×</button>
+    </div>
+    <div class="agent-chat-log" id="agentChatLog">
+      <div class="agent-bubble ai">你好，我可以帮你分析历史水位、实时流量、预报结果，也可以创建定时任务和生成报告。</div>
+    </div>
+    <div class="agent-chat-input">
+      <input id="agentChatInput" placeholder="输入：帮我创建每天 8 点的流域日报任务" />
+      <button id="agentChatSend">发送</button>
+    </div>
+  </div>
+
+  <div class="chart-tooltip" id="chartTooltip"></div>
+
+  <div class="command-palette" id="commandPalette" aria-hidden="true">
+    <div class="command-box">
+      <div class="command-search">
+        <input id="commandInput" placeholder="搜索或输入指令：查看城西站、生成日报、调用预报模型..." />
+        <button id="commandClose">关闭</button>
+      </div>
+      <div class="command-list" id="commandList">
+        <div class="command-item" data-command="focus" data-target=".map-panel"><div><b>定位数字孪生地图</b><span>查看流域站点分布、风险热力与设备链路</span></div><em>视图</em></div>
+        <div class="command-item" data-command="focus" data-target="#warningList"><div><b>查看当前预警</b><span>打开橙色/黄色预警列表并高亮风险条目</span></div><em>预警</em></div>
+        <div class="command-item" data-command="agent" data-prefill="帮我生成今日流域运行日报，并列出需要人工复核的站点。"><div><b>生成今日运行日报</b><span>交给 FloodMind 汇总历史数据、预报结果和告警处置</span></div><em>智能体</em></div>
+        <div class="command-item" data-command="agent" data-prefill="调用预报模型，模拟上游降雨增加20%对未来72小时水位和流量的影响。"><div><b>调用预报模型模拟</b><span>自然语言触发模型调用和结果解释</span></div><em>模型</em></div>
+        <div class="command-item" data-command="video" data-index="0"><div><b>打开上游闸口视频</b><span>放大 CAM-07 实时监测画面</span></div><em>视频</em></div>
+        <div class="command-item" data-command="config"><div><b>打开系统配置</b><span>配置自动巡检、预警推送、模型融合和报告策略</span></div><em>设置</em></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="config-drawer" id="configDrawer" aria-hidden="true">
+    <div class="drawer-panel">
+      <div class="drawer-head">
+        <h2>系统配置</h2>
+        <button class="drawer-close" id="configClose">×</button>
+      </div>
+      <div class="setting-group">
+        <b>自动化任务</b>
+        <div class="setting-row"><span>06:00 自动巡检</span><i class="switch on"></i></div>
+        <div class="setting-row"><span>08:30 流域日报</span><i class="switch on"></i></div>
+        <div class="setting-row"><span>预警处置复盘</span><i class="switch"></i></div>
+      </div>
+      <div class="setting-group">
+        <b>模型与数据</b>
+        <div class="setting-row"><span>LSTM / 水动力融合</span><i class="switch on"></i></div>
+        <div class="setting-row"><span>视频 AI 摘要入库</span><i class="switch on"></i></div>
+        <div class="setting-row"><span>异常数据自动剔除</span><i class="switch on"></i></div>
+      </div>
+      <div class="setting-group">
+        <b>通知策略</b>
+        <div class="setting-row"><span>橙色预警短信</span><i class="switch on"></i></div>
+        <div class="setting-row"><span>值班群推送</span><i class="switch on"></i></div>
+        <div class="setting-row"><span>日报自动归档</span><i class="switch"></i></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="detail-view" id="detailView" aria-hidden="true">
+    <div class="detail-card">
+      <button class="detail-close" id="detailClose" title="关闭">×</button>
+      <h2 id="detailTitle">详情</h2>
+      <div class="detail-meta">
+        <span id="detailType">类型</span>
+        <span id="detailLevel">状态</span>
+        <span id="detailTime">时间</span>
+      </div>
+      <div class="detail-content" id="detailContent"></div>
+      <div class="detail-actions">
+        <button>查看关联站点</button>
+        <button>生成处置报告</button>
+        <button>交给智能体分析</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const clock = document.getElementById('clock');
+    function tick() {
+      const d = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      clock.textContent = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+    tick();
+    setInterval(tick, 1000);
+
+    const input = document.getElementById('agentInput');
+    const dialogue = document.getElementById('dialogue');
+    const warningList = document.getElementById('warningList');
+    const reportList = document.getElementById('reportList');
+    const detailView = document.getElementById('detailView');
+    const detailTitle = document.getElementById('detailTitle');
+    const detailType = document.getElementById('detailType');
+    const detailLevel = document.getElementById('detailLevel');
+    const detailTime = document.getElementById('detailTime');
+    const detailContent = document.getElementById('detailContent');
+    const videoModal = document.getElementById('videoModal');
+    const videoModalTitle = document.getElementById('videoModalTitle');
+    const videoModalLabel = document.getElementById('videoModalLabel');
+    const videoModalStatus = document.getElementById('videoModalStatus');
+    const videoModalOsd = document.getElementById('videoModalOsd');
+    const videoCounter = document.getElementById('videoCounter');
+    const videoInsightText = document.getElementById('videoInsightText');
+    const videoStageScreen = document.getElementById('videoStageScreen');
+    const videoStageRiver = document.getElementById('videoStageRiver');
+    const chartTooltip = document.getElementById('chartTooltip');
+    const commandPalette = document.getElementById('commandPalette');
+    const commandInput = document.getElementById('commandInput');
+    const commandList = document.getElementById('commandList');
+    const configDrawer = document.getElementById('configDrawer');
+    const agentChat = document.getElementById('agentChat');
+    const agentChatLog = document.getElementById('agentChatLog');
+    const agentChatInput = document.getElementById('agentChatInput');
+
+    const videoFeeds = [
+      {
+        title: '设备监测画面 · 上游闸口',
+        label: 'CAM-07｜水面漂浮物识别｜延迟 126ms',
+        status: 'LIVE 1080P',
+        background: 'linear-gradient(135deg, rgba(6, 22, 48, .4), rgba(9, 51, 95, .34)), radial-gradient(circle at 50% 42%, rgba(50, 221, 255, .18), transparent 28%), #061733',
+        riverTop: '50%',
+        riverRotate: '-8deg',
+        insight: '水面漂浮物识别正常，画面稳定，延迟低于 150ms，可作为当前调度辅助画面。'
+      },
+      {
+        title: '设备监测画面 · 桥涵断面',
+        label: 'CAM-12｜断面流速估计｜雨量联动',
+        status: 'AI 巡检中',
+        background: 'linear-gradient(25deg, rgba(255,143,42,.18), transparent 55%), radial-gradient(circle at 62% 44%, rgba(50, 221, 255, .14), transparent 28%), #061733',
+        riverTop: '58%',
+        riverRotate: '4deg',
+        insight: '桥涵断面流速偏高但结构识别正常，建议叠加雨量与上游来水趋势继续跟踪。'
+      },
+      {
+        title: '设备监测画面 · 下游水尺',
+        label: 'CAM-19｜水尺识别｜夜间增强',
+        status: 'LIVE 720P',
+        background: 'linear-gradient(140deg, rgba(68,255,168,.13), transparent 48%), radial-gradient(circle at 35% 50%, rgba(54,231,255,.18), transparent 30%), #061733',
+        riverTop: '45%',
+        riverRotate: '-2deg',
+        insight: '夜间增强已开启，水尺识别置信度 0.91；通信链路曾延迟，当前走备用链路。'
+      }
+    ];
+    let currentVideoIndex = 0;
+
+    function renderVideoModal(index) {
+      currentVideoIndex = (index + videoFeeds.length) % videoFeeds.length;
+      const feed = videoFeeds[currentVideoIndex];
+      videoModalTitle.textContent = feed.title;
+      videoModalLabel.textContent = feed.label;
+      videoModalStatus.textContent = feed.status;
+      videoModalOsd.textContent = feed.label;
+      videoCounter.textContent = `${currentVideoIndex + 1} / ${videoFeeds.length}`;
+      videoInsightText.textContent = feed.insight;
+      videoStageScreen.style.background = feed.background;
+      videoStageRiver.style.top = feed.riverTop;
+      videoStageRiver.style.transform = `rotate(${feed.riverRotate})`;
+    }
+
+    function openVideoModal(index) {
+      renderVideoModal(index);
+      videoModal.classList.add('show');
+      videoModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function openAgentChat(prefill = '') {
+      agentChat.classList.add('show');
+      agentChat.setAttribute('aria-hidden', 'false');
+      if (prefill) {
+        agentChatInput.value = prefill;
+        agentChatInput.focus();
+      }
+    }
+
+    function openCommandPalette() {
+      commandPalette.classList.add('show');
+      commandPalette.setAttribute('aria-hidden', 'false');
+      commandInput.value = '';
+      filterCommands('');
+      setTimeout(() => commandInput.focus(), 30);
+    }
+
+    function closeCommandPalette() {
+      commandPalette.classList.remove('show');
+      commandPalette.setAttribute('aria-hidden', 'true');
+    }
+
+    function openConfigDrawer() {
+      configDrawer.classList.add('show');
+      configDrawer.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeConfigDrawer() {
+      configDrawer.classList.remove('show');
+      configDrawer.setAttribute('aria-hidden', 'true');
+    }
+
+    function focusTarget(selector) {
+      const target = document.querySelector(selector);
+      if (!target) return;
+      target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      target.classList.remove('focus-flash');
+      void target.offsetWidth;
+      target.classList.add('focus-flash');
+    }
+
+    function filterCommands(keyword) {
+      const value = keyword.trim().toLowerCase();
+      commandList.querySelectorAll('.command-item').forEach(item => {
+        item.style.display = item.textContent.toLowerCase().includes(value) ? 'grid' : 'none';
+      });
+    }
+
+    function sendAgentChat() {
+      const text = agentChatInput.value.trim();
+      if (!text) return;
+      agentChatLog.insertAdjacentHTML('beforeend', `<div class="agent-bubble user">${text.replace(/</g, '&lt;')}</div>`);
+      agentChatLog.insertAdjacentHTML('beforeend', '<div class="agent-bubble ai">已收到。后续可接入 FloodMind 执行：意图识别 → 数据检索 → 模型/工具调用 → 结果解释 → 报告或任务保存。</div>');
+      agentChatInput.value = '';
+      agentChatLog.scrollTo({ top: agentChatLog.scrollHeight, behavior: 'smooth' });
+    }
+
+    function openDetail(target) {
+      detailTitle.textContent = target.dataset.title || '详情';
+      detailType.textContent = target.dataset.detail === 'warning' ? '预警信息' : target.dataset.detail === 'report' ? '日报信息' : target.dataset.detail === 'station' ? '监测站点' : '智能体任务';
+      detailLevel.textContent = target.dataset.level || '状态';
+      detailTime.textContent = target.dataset.time || '时间';
+      detailContent.textContent = target.dataset.content || target.textContent.trim();
+      detailView.classList.add('show');
+      detailView.setAttribute('aria-hidden', 'false');
+    }
+
+    document.querySelectorAll('[data-detail]').forEach(item => {
+      item.addEventListener('click', () => openDetail(item));
+    });
+
+    document.getElementById('detailClose').addEventListener('click', () => {
+      detailView.classList.remove('show');
+      detailView.setAttribute('aria-hidden', 'true');
+    });
+
+    detailView.addEventListener('click', event => {
+      if (event.target === detailView) document.getElementById('detailClose').click();
+    });
+    document.querySelectorAll('[data-video-index]').forEach(card => {
+      card.addEventListener('click', () => openVideoModal(Number(card.dataset.videoIndex)));
+    });
+    document.querySelectorAll('.map-mode').forEach(button => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('.map-mode').forEach(item => item.classList.remove('active'));
+        button.classList.add('active');
+      });
+    });
+    document.getElementById('videoPrevBtn').addEventListener('click', () => renderVideoModal(currentVideoIndex - 1));
+    document.getElementById('videoNextBtn').addEventListener('click', () => renderVideoModal(currentVideoIndex + 1));
+    document.getElementById('videoCloseBtn').addEventListener('click', () => {
+      videoModal.classList.remove('show');
+      videoModal.setAttribute('aria-hidden', 'true');
+    });
+    videoModal.addEventListener('click', event => {
+      if (event.target === videoModal) document.getElementById('videoCloseBtn').click();
+    });
+    document.querySelectorAll('[data-chart]').forEach(point => {
+      point.addEventListener('mouseenter', () => {
+        chartTooltip.textContent = point.dataset.chart;
+        chartTooltip.style.display = 'block';
+      });
+      point.addEventListener('mousemove', event => {
+        chartTooltip.style.left = `${event.clientX + 14}px`;
+        chartTooltip.style.top = `${event.clientY - 12}px`;
+      });
+      point.addEventListener('mouseleave', () => {
+        chartTooltip.style.display = 'none';
+      });
+    });
+    document.getElementById('agentRobot').addEventListener('click', () => openAgentChat());
+    document.getElementById('agentChatClose').addEventListener('click', () => {
+      agentChat.classList.remove('show');
+      agentChat.setAttribute('aria-hidden', 'true');
+    });
+    document.getElementById('agentChatSend').addEventListener('click', sendAgentChat);
+    agentChatInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendAgentChat(); });
+    document.querySelectorAll('[data-focus-target]').forEach(button => {
+      button.addEventListener('click', () => focusTarget(button.dataset.focusTarget));
+    });
+    document.getElementById('openCommand').addEventListener('click', openCommandPalette);
+    document.getElementById('openCommandFloat').addEventListener('click', openCommandPalette);
+    document.getElementById('commandClose').addEventListener('click', closeCommandPalette);
+    document.getElementById('openConfig').addEventListener('click', openConfigDrawer);
+    document.getElementById('configClose').addEventListener('click', closeConfigDrawer);
+    commandInput.addEventListener('input', () => filterCommands(commandInput.value));
+    commandPalette.addEventListener('click', event => {
+      if (event.target === commandPalette) closeCommandPalette();
+    });
+    configDrawer.addEventListener('click', event => {
+      if (event.target === configDrawer) closeConfigDrawer();
+    });
+    document.querySelectorAll('.switch').forEach(item => item.addEventListener('click', () => item.classList.toggle('on')));
+    document.querySelectorAll('.command-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const command = item.dataset.command;
+        closeCommandPalette();
+        if (command === 'focus') focusTarget(item.dataset.target);
+        if (command === 'agent') openAgentChat(item.dataset.prefill || '');
+        if (command === 'video') openVideoModal(Number(item.dataset.index || 0));
+        if (command === 'config') openConfigDrawer();
+      });
+    });
+    document.addEventListener('keydown', event => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        openCommandPalette();
+      }
+      if (event.key === 'Escape') {
+        closeCommandPalette();
+        closeConfigDrawer();
+        if (videoModal.classList.contains('show')) document.getElementById('videoCloseBtn').click();
+        if (detailView.classList.contains('show')) document.getElementById('detailClose').click();
+      }
+    });
+    document.getElementById('sendBtn').addEventListener('click', () => {
+      const text = input.value.trim();
+      if (!text) return;
+      dialogue.insertAdjacentHTML('beforeend', `<div class="msg">${text.replace(/</g, '&lt;')}</div>`);
+      dialogue.insertAdjacentHTML('beforeend', '<div class="msg ai">任务已编排：数据抽取 → 模型调用 → 风险解释 → 报告生成。此处后续接入 FloodMind 智能体执行。</div>');
+      input.value = '';
+    });
+    document.getElementById('addTaskBtn').addEventListener('click', () => {
+      dialogue.insertAdjacentHTML('beforeend', '<div class="msg ai">新任务已创建：请选择任务类型、执行周期和数据范围。</div>');
+      dialogue.scrollTo({ top: dialogue.scrollHeight, behavior: 'smooth' });
+      openAgentChat('我要新增一个智能体任务：');
+    });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('sendBtn').click(); });
+  </script>
+</body>
+</html>
