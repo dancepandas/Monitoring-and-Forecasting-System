@@ -132,7 +132,7 @@
       gap: 6px;
     }
 
-    .nav button {
+    .nav button, .nav a {
       width: 100%;
       border: 0;
       border-radius: 14px;
@@ -145,10 +145,11 @@
       cursor: pointer;
       transition: background .18s ease, color .18s ease, transform .18s ease;
       text-align: left;
+      text-decoration: none;
     }
 
-    .nav button:hover { background: rgba(37,33,28,.045); transform: translateX(2px); }
-    .nav button.active { color: var(--ink); background: rgba(200,111,76,.12); font-weight: 700; }
+    .nav button:hover, .nav a:hover { background: rgba(37,33,28,.045); transform: translateX(2px); }
+    .nav button.active, .nav a.active { color: var(--ink); background: rgba(200,111,76,.12); font-weight: 700; }
     .nav small { color: var(--muted); font-family: var(--mono); font-size: 11px; }
 
     .sidebar-foot {
@@ -1028,12 +1029,12 @@
         </div>
       </div>
       <nav class="nav" aria-label="主导航">
-        <button class="active"><span>流域总览</span><small>LIVE</small></button>
-        <button><span>监测站点</span><small>42</small></button>
-        <button><span>预警处置</span><small>02</small></button>
-        <button><span>模型预报</span><small>0.91</small></button>
-        <button><span>视频巡检</span><small>39</small></button>
-        <button><span>日报归档</span><small>08:30</small></button>
+        <a href="index.html" class="active"><span>流域总览</span><small>LIVE</small></a>
+        <a href="stations.html"><span>监测站点</span><small>42</small></a>
+        <a href="warnings.html"><span>预警处置</span><small>02</small></a>
+        <a href="forecast.html"><span>模型预报</span><small>0.91</small></a>
+        <a href="devices.html"><span>视频巡检</span><small>39</small></a>
+        <a href="reports.html"><span>日报归档</span><small>08:30</small></a>
       </nav>
       <div class="sidebar-foot">
         <div class="agent-card">
@@ -1251,13 +1252,6 @@
         $$('.layer-btn').forEach(item => item.classList.remove('active'));
         button.classList.add('active');
         openModal(button.textContent, `已切换到「${button.textContent}」图层。真实系统中这里会联动站点样式、风险热力、设备链路或调度推演结果。`);
-      });
-    });
-
-    $$('.nav button').forEach(button => {
-      button.addEventListener('click', () => {
-        $$('.nav button').forEach(item => item.classList.remove('active'));
-        button.classList.add('active');
       });
     });
 
