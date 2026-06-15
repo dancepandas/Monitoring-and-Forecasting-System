@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>水文监测指挥核心</title>
+  <title>日报归档 - 水文监测指挥核心</title>
   <style>
     :root {
       --paper: #f5f5f7;
@@ -732,84 +732,6 @@
     .modal-card p { margin: 0; color: var(--ink-2); line-height: 1.75; }
     .modal-actions { margin-top: 24px; display: flex; justify-content: flex-end; }
 
-    /* ===== Fullscreen stage for homepage panels ===== */
-    .tile, .panel, .risk-item, .video-card { cursor: zoom-in; }
-    .tile button, .panel button, .panel input, .panel a, .risk-item button, .video-card button { cursor: auto; }
-
-    .stage-modal {
-      position: fixed;
-      inset: 0;
-      z-index: 60;
-      display: none;
-      flex-direction: column;
-      padding: 24px;
-      background: rgba(37,33,28,.32);
-      backdrop-filter: blur(18px);
-    }
-
-    .stage-modal.show { display: flex; }
-
-    .stage-card {
-      flex: 1;
-      min-height: 0;
-      display: grid;
-      grid-template-rows: auto 1fr;
-      border: 1px solid var(--line-strong);
-      border-radius: var(--radius-xl);
-      background: rgba(255,255,255,.96);
-      box-shadow: 0 34px 90px rgba(37,33,28,.22);
-      overflow: hidden;
-    }
-
-    .stage-head {
-      height: 64px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 22px;
-      border-bottom: 1px solid var(--line);
-      background: rgba(255,255,255,.78);
-    }
-
-    .stage-head h2 {
-      margin: 0;
-      font-family: var(--serif);
-      font-size: 28px;
-      letter-spacing: -.04em;
-      font-weight: 500;
-    }
-
-    .stage-close {
-      min-height: 36px;
-      border: 1px solid var(--line-strong);
-      border-radius: 999px;
-      padding: 0 16px;
-      background: rgba(255,255,255,.68);
-      cursor: pointer;
-      transition: transform .18s ease, box-shadow .18s ease;
-    }
-
-    .stage-close:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(0,0,0,.07); }
-
-    .stage-body {
-      position: relative;
-      overflow: auto;
-      padding: 22px;
-    }
-
-    .stage-body .panel { background: transparent; border: 0; box-shadow: none; }
-    .stage-body .map-wrap { height: min(76vh, 640px); }
-    .stage-body .forecast-chart { height: 360px; }
-    .stage-body .risk-list { max-width: 800px; margin: 0 auto; }
-    .stage-body .video-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-    .stage-body .agent-feed { max-width: 860px; margin: 0 auto; height: calc(100% - 44px); }
-    .stage-body .messages { max-height: none; }
-
-    @media (max-width: 720px) {
-      .stage-modal { padding: 10px; }
-      .stage-head h2 { font-size: 22px; }
-    }
-
     @media (max-width: 1180px) {
       .app { grid-template-columns: 1fr; }
       .sidebar { position: static; height: auto; grid-template-rows: auto; }
@@ -1017,7 +939,152 @@
       .agent-input input { height: 38px; }
     }
   </style>
-</head>
+  <style>
+    /* ===== Shared page extras ===== */
+    .nav a {
+      width: 100%;
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: transparent;
+      color: var(--ink-2);
+      cursor: pointer;
+      transition: background .18s ease, color .18s ease, transform .18s ease;
+      text-align: left;
+      text-decoration: none;
+    }
+    .nav a:hover { background: rgba(37,33,28,.045); transform: translateX(2px); }
+    .nav a.active { color: var(--ink); background: rgba(200,111,76,.12); font-weight: 700; }
+
+    .page-content {
+      min-width: 0;
+      display: grid;
+      gap: 16px;
+      align-content: start;
+    }
+
+    .section-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: rgba(255, 255, 255, .58);
+      box-shadow: var(--shadow-soft);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    .panel-head h2 { margin: 0; font-family: var(--serif); font-size: 18px; font-weight: 500; }
+    .panel-head span { color: var(--muted); font-size: 12px; }
+
+    .panel-body { padding: 16px; }
+
+    .item-list { display: grid; gap: 10px; }
+    .item-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: rgba(255,255,255,.48);
+      transition: background .18s ease, transform .18s ease;
+    }
+    .item-row:hover { background: rgba(255,255,255,.78); transform: translateX(2px); }
+    .item-row b { font-weight: 600; }
+    .item-row p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+    .item-meta { text-align: right; color: var(--muted); font-family: var(--mono); font-size: 11px; }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .badge.danger { color: var(--danger); background: rgba(169,79,67,.10); }
+    .badge.warn { color: var(--amber); background: rgba(181,139,63,.10); }
+    .badge.ok { color: var(--ok); background: rgba(95,117,103,.10); }
+
+    .progress {
+      margin-top: 8px;
+      height: 5px;
+      border-radius: 999px;
+      background: rgba(29,29,31,.08);
+      overflow: hidden;
+    }
+    .progress i { display: block; height: 100%; width: calc(var(--p, 0) * 1%); background: var(--clay); border-radius: inherit; }
+
+    .video-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+    .video-cell {
+      aspect-ratio: 16 / 10;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: rgba(255,255,255,.48);
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform .2s ease, box-shadow .2s ease;
+    }
+    .video-cell:hover { transform: translateY(-2px); box-shadow: var(--shadow-soft); }
+    .video-cell::before {
+      content: "";
+      position: absolute;
+      inset: 12px;
+      border-radius: 10px;
+      background: var(--paper-deep);
+      border: 1px solid var(--line);
+    }
+    .video-cell span {
+      position: absolute;
+      left: 18px;
+      bottom: 14px;
+      font-size: 12px;
+      color: var(--ink-2);
+    }
+    .video-cell small {
+      position: absolute;
+      right: 14px;
+      top: 12px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--ok);
+    }
+
+    @media (max-width: 1100px) {
+      .section-grid { grid-template-columns: repeat(2, 1fr); }
+      .video-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 720px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { position: static; height: auto; }
+      .nav { grid-template-columns: repeat(3, 1fr); }
+      .nav a { padding: 10px; border-radius: 13px; }
+      .section-grid { grid-template-columns: 1fr; }
+      .video-grid { grid-template-columns: 1fr; }
+      .topbar { flex-direction: column; align-items: flex-start; }
+    }
+
+  </style>
 <body>
   <main class="app">
     <aside class="sidebar">
@@ -1028,12 +1095,12 @@
         </div>
       </div>
       <nav class="nav" aria-label="主导航">
-        <button class="active"><span>流域总览</span><small>LIVE</small></button>
-        <button><span>监测站点</span><small>42</small></button>
-        <button><span>预警处置</span><small>02</small></button>
-        <button><span>模型预报</span><small>0.91</small></button>
-        <button><span>视频巡检</span><small>39</small></button>
-        <button><span>日报归档</span><small>08:30</small></button>
+        <a href="index.html" class=""><span>流域总览</span><small>LIVE</small></a>
+        <a href="stations.html" class=""><span>监测站点</span><small>42</small></a>
+        <a href="warnings.html" class=""><span>预警处置</span><small>02</small></a>
+        <a href="forecast.html" class=""><span>模型预报</span><small>0.91</small></a>
+        <a href="devices.html" class=""><span>视频巡检</span><small>39</small></a>
+        <a href="reports.html" class="active"><span>日报归档</span><small>08:30</small></a>
       </nav>
       <div class="sidebar-foot">
         <div class="agent-card">
@@ -1046,8 +1113,8 @@
     <section class="workspace">
       <header class="topbar">
         <div class="page-title">
-          <h1>流域态势</h1>
-          <p>融合实时水位、流量、雨量雷达、视频巡检与模型预报。</p>
+          <h1>日报归档</h1>
+          <p>自动生成的流域运行日报与处置记录。</p>
         </div>
         <div class="top-actions">
           <div class="clock" id="clock">--:--:--</div>
@@ -1056,159 +1123,49 @@
         </div>
       </header>
 
-      <section class="overview">
-        <article class="tile river">
-          <div class="tile-label">实时监测水位</div>
-          <div class="tile-value"><b>7.84</b><span>m</span></div>
-          <div class="tile-note danger">距橙色阈值 0.06m</div>
-        </article>
-        <article class="tile">
-          <div class="tile-label">实时监测流量</div>
-          <div class="tile-value"><b>2,118</b><span>m³/s</span></div>
-          <div class="tile-note">10 分钟环比 ↑ 3.2%</div>
-        </article>
-        <article class="tile moss">
-          <div class="tile-label">模型可信度</div>
-          <div class="tile-value"><b>0.91</b></div>
-          <div class="tile-note ok">LSTM / 水动力融合</div>
-        </article>
-        <article class="tile amber">
-          <div class="tile-label">待处置预警</div>
-          <div class="tile-value"><b>2</b><span>项</span></div>
-          <div class="tile-note">1 项橙色，1 项黄色</div>
-        </article>
-      </section>
-
-      <section class="command-grid">
-        <article class="panel map-panel">
-          <div class="panel-head"><h2>监测设备分布与流域态势</h2><span>实时刷新 · 42 路设备接入</span></div>
-          <div class="panel-body">
-            <div class="map-wrap">
-              <svg viewBox="0 0 900 560" aria-hidden="true">
-                <path class="basin" d="M170 92 L312 56 L484 82 L678 128 L782 252 L730 410 L548 492 L356 470 L160 390 L104 224 Z" />
-                <path class="basin" opacity=".65" d="M254 158 L388 126 L542 152 L658 238 L612 364 L480 414 L334 396 L214 314 Z" />
-                <path class="river-main" d="M224 118 C254 182 334 190 394 232 C466 282 436 336 510 382 C576 424 580 456 558 500" />
-                <path class="river-main" style="stroke-width:11; opacity:.55" d="M138 312 C248 284 330 308 396 356 C458 400 532 382 646 322 C706 290 754 302 806 340" />
-                <path class="river-secondary" d="M244 126 C182 194 184 278 222 366" />
-                <path class="river-secondary" d="M620 146 C574 220 588 288 676 388" />
-              </svg>
-
-              <div class="map-note"><b>当前研判</b><p>城西站水位接近橙色阈值。模型预计 38 分钟后触达 7.90m，建议先复核上游雨量输入和闸门联动策略。</p></div>
-
-              <div class="map-layers">
-                <button class="layer-btn active">流域态势</button>
-                <button class="layer-btn">风险热力</button>
-                <button class="layer-btn">设备链路</button>
-                <button class="layer-btn">调度推演</button>
-              </div>
-
-              <button class="station" style="left:43%;top:28%" data-title="龙门站" data-detail="龙门站：水位 6.18m，流量 1,840m³/s，视频链路正常，趋势稳定。"><span class="station-label">龙门站</span></button>
-              <button class="station danger" style="left:56%;top:43%" data-title="城西站" data-detail="城西站：水位 7.84m，距橙色阈值 0.06m。预计 38 分钟后触达阈值，建议启动预案检查。"><span class="station-label">城西站</span></button>
-              <button class="station warn" style="left:44%;top:63%" data-title="泵闸站" data-detail="泵闸站：10 分钟流量环比 +18%，已触发视频复核任务。"><span class="station-label">泵闸站</span></button>
-              <button class="station" style="left:62%;top:69%" data-title="中心站" data-detail="中心站：融合模型可信度 0.91，未来 24 小时水位缓慢上升。"><span class="station-label">中心站</span></button>
-              <button class="station" style="left:36%;top:77%" data-title="南桥站" data-detail="南桥站：水位持续回落，预警建议转入观察。"><span class="station-label">南桥站</span></button>
-
-              <div class="map-card">
-                <h3>38 分钟</h3>
-                <p>预计城西站触达橙色阈值。系统已准备预警解释、短信草稿和视频复核清单。</p>
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <div class="side-stack">
-          <article class="panel">
-            <div class="panel-head"><h2>预警处置</h2><span>按紧急程度排序</span></div>
+      <section class="page-content">
+        <section class="section-grid">
+          <article class="panel" style="grid-column: span 2;">
+            <div class="panel-head"><h2>日报列表</h2><span>最近 30 天</span></div>
             <div class="panel-body">
-              <div class="risk-list">
-                <div class="risk-item" data-title="城西站水位逼近阈值" data-detail="城西站当前水位 7.84m，预计 38 分钟后触达橙色阈值。建议：通知值班人员、复核 CAM-17 视频、检查上游雨量输入。">
-                  <div class="risk-row"><b>城西站水位逼近阈值</b><span class="badge">橙色</span></div>
-                  <p>预计 38 分钟后触达 7.90m，模型可信度 0.86。</p>
-                  <div class="progress" style="--p:88%"><i></i></div>
+              <div class="item-list">
+                <div class="item-row">
+                  <div><b>2026-06-14 流域运行日报</b><p>降雨影响减弱，主河道水位整体回落，城西站与泵闸站仍需关注。</p></div>
+                  <div class="item-meta">08:30</div>
                 </div>
-                <div class="risk-item" data-title="泵闸站流量突增" data-detail="泵闸站 10 分钟流量环比增加 18%，建议核查泵闸运行状态与上游来水。">
-                  <div class="risk-row"><b>泵闸站流量突增</b><span class="badge warn">黄色</span></div>
-                  <p>已派发 AI 视频巡检，等待人工确认。</p>
-                  <div class="progress" style="--p:62%"><i style="background:var(--amber)"></i></div>
+                <div class="item-row">
+                  <div><b>2026-06-13 预警处置复盘</b><p>城西站橙色预警复核完成，闸门联动预案已归档。</p></div>
+                  <div class="item-meta">22:10</div>
                 </div>
-                <div class="risk-item" data-title="南桥站预警解除" data-detail="南桥站水位已连续 30 分钟回落，建议完成闭环记录并转为常规观察。">
-                  <div class="risk-row"><b>南桥站预警解除</b><span class="badge ok">观察</span></div>
-                  <p>水位连续回落，可转入常规监测。</p>
-                  <div class="progress" style="--p:24%"><i style="background:var(--moss)"></i></div>
+                <div class="item-row">
+                  <div><b>2026-06-12 设备在线率日报</b><p>42 台设备中 39 台在线，3 台计划维护，关键断面设备全部在线。</p></div>
+                  <div class="item-meta">14:20</div>
+                </div>
+                <div class="item-row">
+                  <div><b>2026-06-11 模型预报一致性检查</b><p>LSTM 与水动力模型峰现时间偏差 18 分钟，可信度 0.82。</p></div>
+                  <div class="item-meta">12:00</div>
                 </div>
               </div>
             </div>
           </article>
-
           <article class="panel">
-            <div class="panel-head"><h2>模型预报</h2><span>未来 72 小时</span></div>
-            <div class="panel-body forecast-card">
-              <div class="forecast-chart">
-                <svg viewBox="0 0 420 160" preserveAspectRatio="none">
-                  <defs><linearGradient id="flowArea" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#6d929f" stop-opacity=".26"/><stop offset="1" stop-color="#6d929f" stop-opacity="0"/></linearGradient></defs>
-                  <line class="axis" x1="24" y1="132" x2="396" y2="132"/><line class="axis" x1="24" y1="24" x2="24" y2="132"/>
-                  <line class="grid" x1="24" y1="96" x2="396" y2="96"/><line class="grid" x1="24" y1="60" x2="396" y2="60"/>
-                  <path class="flow-area" d="M24 104 C70 96 94 72 132 78 C184 86 194 112 246 86 C300 58 342 44 396 62 L396 132 L24 132 Z"/>
-                  <path class="flow-line" d="M24 104 C70 96 94 72 132 78 C184 86 194 112 246 86 C300 58 342 44 396 62"/>
-                  <path class="risk-line" d="M24 122 C80 112 118 104 164 108 C220 112 254 82 300 68 C346 54 368 70 396 84"/>
-                  <text class="chart-label" x="22" y="150">当前</text><text class="chart-label" x="172" y="150">+24h</text><text class="chart-label" x="286" y="150">+48h</text><text class="chart-label" x="360" y="150">+72h</text>
-                </svg>
-              </div>
-              <div class="forecast-summary">
-                <div class="mini-stat"><span>预报峰值</span><b>8.31m</b></div>
-                <div class="mini-stat"><span>峰现时间</span><b>+38m</b></div>
+            <div class="panel-head"><h2>归档统计</h2><span>本月</span></div>
+            <div class="panel-body">
+              <div class="item-list">
+                <div class="item-row"><b>日报</b><span class="item-meta">14</span></div>
+                <div class="item-row"><b>复盘</b><span class="item-meta">6</span></div>
+                <div class="item-row"><b>设备报告</b><span class="item-meta">4</span></div>
+                <div class="item-row"><b>模型评估</b><span class="item-meta">3</span></div>
               </div>
             </div>
           </article>
-        </div>
+        </section>
       </section>
-
-      <section class="bottom-grid">
-        <article class="panel">
-          <div class="panel-head"><h2>视频巡检</h2><span>关键断面</span></div>
-          <div class="panel-body">
-            <div class="video-grid">
-              <div class="video-card" data-title="CAM-17 上游闸口" data-detail="CAM-17 上游闸口：画面稳定，AI 检测到漂浮物 2 处，未影响主河道通行。"><div class="video-meta"><b>CAM-17 · LIVE</b><span>上游闸口 / AI 漂浮物识别</span></div></div>
-              <div class="video-card" data-title="CAM-22 桥涵断面" data-detail="CAM-22 桥涵断面：断面流速偏高，建议与泵闸站数据联动复核。"><div class="video-meta"><b>CAM-22 · AI</b><span>桥涵断面 / 流速估计</span></div></div>
-            </div>
-          </div>
-        </article>
-
-        <article class="panel">
-          <div class="panel-head"><h2>FloodMind 智能体</h2><span>自然语言调度</span></div>
-          <div class="panel-body">
-            <div class="agent-feed">
-              <div class="messages" id="messages">
-                <div class="message ai">我已读取 42 路监测设备、3 个模型预报和 6 小时雨量外推。当前建议优先处理城西站橙色阈值风险。</div>
-                <div class="message user">生成城西站未来 72 小时预警解释，并列出复核证据。</div>
-                <div class="message ai">已生成草稿：触发原因、模型判断、视频复核清单、处置建议和日报归档字段。</div>
-              </div>
-              <div class="agent-input">
-                <input id="agentInput" placeholder="输入：模拟上游降雨增加20%的影响..." />
-                <button class="btn primary" id="sendAgent">发送</button>
-              </div>
-            </div>
-          </div>
-        </article>
-      </section>
-    </section>
-  </main>
-
   <div class="modal" id="modal" aria-hidden="true">
     <div class="modal-card">
       <h2 id="modalTitle">详情</h2>
       <p id="modalText"></p>
       <div class="modal-actions"><button class="btn primary" id="closeModal">关闭</button></div>
-    </div>
-  </div>
-
-  <div class="stage-modal" id="stageModal" aria-hidden="true">
-    <div class="stage-card">
-      <div class="stage-head">
-        <h2 id="stageTitle">全屏查看</h2>
-        <button class="stage-close" id="stageClose">关闭</button>
-      </div>
-      <div class="stage-body" id="stageBody"></div>
     </div>
   </div>
 
@@ -1279,89 +1236,6 @@
     $('#closeModal').addEventListener('click', closeModal);
     modal.addEventListener('click', event => { if (event.target === modal) closeModal(); });
     document.addEventListener('keydown', event => { if (event.key === 'Escape') closeModal(); });
-
-    // ===== Fullscreen stage =====
-    const stageModal = $('#stageModal');
-    const stageTitle = $('#stageTitle');
-    const stageBody = $('#stageBody');
-    let originalAgentParent = null;
-    let movedAgent = false;
-
-    function openStage(title, source) {
-      if (!source) return;
-      stageTitle.textContent = title;
-      stageBody.innerHTML = '';
-
-      if (source.classList.contains('agent-feed')) {
-        // Move the live agent feed so input/button events keep working
-        originalAgentParent = source.parentElement;
-        stageBody.appendChild(source);
-        movedAgent = true;
-        agentInput.focus();
-      } else {
-        const clone = source.cloneNode(true);
-        clone.removeAttribute('id');
-        stageBody.appendChild(clone);
-      }
-
-      stageModal.classList.add('show');
-      stageModal.setAttribute('aria-hidden', 'false');
-    }
-
-    function closeStage() {
-      stageModal.classList.remove('show');
-      stageModal.setAttribute('aria-hidden', 'true');
-      if (movedAgent && originalAgentParent) {
-        originalAgentParent.appendChild($('.agent-feed'));
-        movedAgent = false;
-        originalAgentParent = null;
-      }
-    }
-
-    function isInteractive(target) {
-      return target.closest('button, input, a, .layer-btn, .station, .risk-item, .video-card');
-    }
-
-    $$('.tile').forEach(tile => {
-      tile.addEventListener('click', () => openStage(tile.querySelector('.tile-label')?.textContent || '指标详情', tile));
-    });
-
-    $$('.panel').forEach(panel => {
-      panel.addEventListener('click', event => {
-        if (isInteractive(event.target) && event.target !== panel) return;
-        const heading = panel.querySelector('.panel-head h2')?.textContent || '详情';
-        const body = panel.querySelector('.panel-body');
-        if (panel.classList.contains('map-panel')) {
-          openStage('监测设备分布与流域态势', panel.querySelector('.map-wrap'));
-        } else if (heading.includes('视频巡检')) {
-          openStage('视频巡检', panel.querySelector('.video-grid'));
-        } else if (heading.includes('FloodMind')) {
-          openStage('FloodMind 智能体', panel.querySelector('.agent-feed'));
-        } else if (body) {
-          openStage(heading, body);
-        }
-      });
-    });
-
-    $$('.risk-item').forEach(item => {
-      item.addEventListener('click', event => {
-        if (event.target.closest('button')) return;
-        openStage(item.dataset.title || '预警详情', item);
-      });
-    });
-
-    $$('.video-card').forEach(card => {
-      card.addEventListener('click', event => {
-        event.stopPropagation();
-        openStage(card.dataset.title || '视频画面', card);
-      });
-    });
-
-    $('#stageClose').addEventListener('click', closeStage);
-    stageModal.addEventListener('click', event => { if (event.target === stageModal) closeStage(); });
-    document.addEventListener('keydown', event => {
-      if (event.key === 'Escape' && stageModal.classList.contains('show')) closeStage();
-    });
   </script>
 </body>
 </html>
