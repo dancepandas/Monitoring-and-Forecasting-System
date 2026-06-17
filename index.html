@@ -30,9 +30,9 @@
       --radius-xl: 28px;
       --radius-lg: 20px;
       --radius-md: 14px;
-      --serif: Georgia, "Times New Roman", "Songti SC", "SimSun", serif;
-      --sans: "Aptos", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
-      --mono: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+      --serif: "Times New Roman", "SimHei", "黑体", sans-serif;
+      --sans: "Times New Roman", "SimHei", "黑体", sans-serif;
+      --mono: "Times New Roman", Consolas, monospace;
     }
 
     * { box-sizing: border-box; }
@@ -297,11 +297,22 @@
     .tile-note.danger { color: var(--clay-deep); }
     .tile-note.ok { color: var(--ok); }
 
-    .command-grid {
+    .middle-grid {
       min-height: 0;
       display: grid;
-      grid-template-columns: minmax(460px, 1.38fr) minmax(340px, .9fr);
+      grid-template-columns: minmax(240px, .9fr) minmax(460px, 1.7fr) minmax(260px, 1fr);
       gap: 16px;
+    }
+
+    .video-panel .panel-body { padding: 0; }
+
+    .video-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 12px;
+      height: 100%;
+      padding: 18px;
     }
 
     .panel {
@@ -479,12 +490,6 @@
 
     .map-card p { margin: 0; color: var(--ink-2); line-height: 1.55; font-size: 13px; }
 
-    .side-stack {
-      display: grid;
-      gap: 16px;
-      align-content: start;
-    }
-
     .risk-list {
       display: grid;
       gap: 10px;
@@ -540,26 +545,42 @@
       border-radius: inherit;
     }
 
-    .forecast-card {
+    .bottom-grid {
       display: grid;
-      gap: 12px;
+      grid-template-columns: 1fr;
+      gap: 16px;
     }
 
-    .forecast-chart {
-      height: 164px;
+    .combined-card {
+      display: grid;
+      gap: 12px;
+      height: 100%;
+      grid-template-rows: minmax(0, 1fr) auto;
+    }
+
+    .combined-chart {
+      height: 100%;
+      min-height: 0;
       border: 1px solid rgba(37,33,28,.08);
       border-radius: 18px;
       background: rgba(246,246,248,.78);
       overflow: hidden;
     }
 
-    .forecast-chart svg { width: 100%; height: 100%; display: block; }
+    .combined-chart svg { width: 100%; height: 100%; display: block; }
     .axis { stroke: rgba(37,33,28,.12); }
     .grid { stroke: rgba(37,33,28,.08); stroke-dasharray: 4 7; }
-    .flow-area { fill: url(#flowArea); }
-    .flow-line { fill: none; stroke: var(--river); stroke-width: 3; }
-    .risk-line { fill: none; stroke: var(--clay); stroke-width: 3; stroke-dasharray: 8 6; }
+    .now-line { stroke: rgba(37,33,28,.18); stroke-width: 1; stroke-dasharray: 5 5; }
+    .history-area { fill: url(#historyArea); }
+    .history-line { fill: none; stroke: var(--river); stroke-width: 3; }
+    .history-dot { fill: var(--river); }
+    .forecast-area { fill: url(#forecastArea); }
+    .forecast-line { fill: none; stroke: var(--clay); stroke-width: 3; stroke-dasharray: 8 6; }
     .chart-label { fill: var(--muted); font-size: 11px; }
+
+    .combined-summary {
+      grid-template-columns: repeat(4, 1fr);
+    }
 
     .forecast-summary {
       display: grid;
@@ -576,18 +597,6 @@
 
     .mini-stat span { display: block; color: var(--muted); font-size: 12px; }
     .mini-stat b { display: block; margin-top: 5px; font-family: var(--serif); font-size: 24px; letter-spacing: -.045em; font-weight: 500; }
-
-    .bottom-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
-
-    .video-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-    }
 
     .video-card {
       position: relative;
@@ -721,6 +730,40 @@
       box-shadow: 0 34px 90px rgba(37,33,28,.22);
     }
 
+    .agent-modal-card {
+      width: min(720px, 100%);
+      max-height: min(640px, calc(100vh - 48px));
+      display: flex;
+      flex-direction: column;
+      padding: 22px 24px 24px;
+    }
+
+    .agent-modal-card h2 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: 32px;
+      line-height: 1;
+      letter-spacing: -.05em;
+      font-weight: 500;
+    }
+
+    .agent-modal-card .agent-feed {
+      min-height: 0;
+      flex: 1;
+      display: grid;
+      grid-template-rows: 1fr auto;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .agent-modal-card .messages {
+      overflow: auto;
+      display: grid;
+      align-content: start;
+      gap: 10px;
+      padding-right: 4px;
+    }
+
     .modal-card h2 {
       margin: 0 0 12px;
       font-family: var(--serif);
@@ -817,7 +860,7 @@
       .nav { grid-template-columns: repeat(3, 1fr); }
       .sidebar-foot { display: none; }
       .overview { grid-template-columns: repeat(2, 1fr); }
-      .command-grid, .bottom-grid { grid-template-columns: 1fr; }
+      .middle-grid, .bottom-grid { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 720px) {
@@ -837,41 +880,49 @@
       .app {
         height: 100vh;
         min-height: 0;
-        padding: 12px;
-        grid-template-columns: 240px minmax(0, 1fr);
-        gap: 12px;
+        padding: 10px;
+        grid-template-columns: 220px minmax(0, 1fr);
+        gap: 10px;
         overflow: hidden;
       }
 
       .sidebar {
-        top: 12px;
-        height: calc(100vh - 24px);
-        border-radius: 22px;
+        top: 10px;
+        height: calc(100vh - 20px);
+        border-radius: 20px;
       }
 
-      .brand { padding: 18px 18px 14px; }
-      .mark { width: 30px; height: 30px; border-radius: 10px; }
-      .nav { padding: 10px; gap: 4px; }
-      .nav button { padding: 10px; border-radius: 13px; }
-      .sidebar-foot { padding: 12px; }
-      .agent-card { padding: 12px; border-radius: 16px; }
+      .brand { padding: 14px 14px 10px; }
+      .brand b { font-size: 14px; }
+      .brand span { font-size: 11px; }
+      .mark { width: 28px; height: 28px; border-radius: 9px; }
+      .nav { padding: 8px; gap: 3px; }
+      .nav button { padding: 8px 10px; border-radius: 12px; font-size: 13px; }
+      .nav small { font-size: 10px; }
+      .sidebar-foot { padding: 10px; }
+      .agent-card { padding: 10px; border-radius: 14px; }
+      .agent-card b { font-size: 13px; }
+      .agent-card p { font-size: 11px; line-height: 1.45; }
 
       .workspace {
-        height: calc(100vh - 24px);
-        grid-template-rows: 68px 104px minmax(0, 1.65fr) minmax(0, .78fr);
-        gap: 12px;
+        height: calc(100vh - 20px);
+        min-height: 0;
+        grid-template-rows: 7.9fr 10.5fr 50.0fr 31.6fr;
+        gap: 10px;
         overflow: hidden;
       }
 
+      .workspace > * { min-height: 0; }
+
       .topbar {
-        height: 68px;
+        height: 100%;
         min-height: 0;
-        border-radius: 22px;
-        padding: 12px 16px;
+        border-radius: 20px;
+        padding: 10px 16px;
       }
 
-      .page-title h1 { font-size: 34px; }
-      .page-title p { margin-top: 5px; }
+      .page-title h1 { font-size: 24px; }
+      .page-title p { margin-top: 2px; font-size: 11px; }
 
       .overview {
         min-height: 0;
@@ -880,11 +931,11 @@
 
       .tile {
         min-height: 0;
-        padding: 14px 16px;
-        border-radius: 18px;
+        padding: 6px 12px;
+        border-radius: 16px;
       }
 
-      .tile-label { margin-bottom: 10px; }
+      .tile-label { margin-bottom: 3px; font-size: 10px; }
 
       .tile-value b,
       .mini-stat b {
@@ -895,38 +946,42 @@
       }
 
       .tile-value b {
-        width: 7ch;
-        font-size: 38px;
+        width: auto;
+        font-size: 22px;
         line-height: .95;
       }
 
-      .tile-value span { font-size: 12px; }
-      .tile-note { margin-top: 8px; font-size: 12px; }
+      .tile-value span { font-size: 10px; }
+      .tile-note { margin-top: 2px; font-size: 10px; }
 
-      .command-grid,
+      .middle-grid,
       .bottom-grid {
         min-height: 0;
-        gap: 12px;
+        gap: 10px;
         overflow: hidden;
       }
 
-      .command-grid { grid-template-columns: minmax(460px, 1.38fr) minmax(330px, .9fr); }
+      .middle-grid { grid-template-columns: minmax(220px, 21.6fr) minmax(420px, 51.0fr) minmax(240px, 27.5fr); }
+      .bottom-grid { grid-template-columns: 1fr; }
 
       .panel {
         min-height: 0;
         display: grid;
-        grid-template-rows: 50px minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr);
       }
 
       .panel-head {
         min-height: 0;
-        padding: 12px 16px;
+        padding: 10px 14px;
       }
+
+      .panel-head h2 { font-size: 14px; }
+      .panel-head span { font-size: 11px; }
 
       .panel-body {
         min-height: 0;
         overflow: hidden;
-        padding: 14px;
+        padding: 10px;
       }
 
       .map-wrap {
@@ -935,74 +990,81 @@
       }
 
       .map-note {
-        left: 18px;
-        top: 18px;
-        padding: 13px;
-        border-radius: 18px;
+        left: 12px;
+        top: 12px;
+        padding: 10px;
+        border-radius: 14px;
+        width: min(260px, calc(100% - 24px));
       }
+
+      .map-note b { font-size: 13px; margin-bottom: 4px; }
+      .map-note p { font-size: 11px; line-height: 1.4; }
 
       .map-layers {
-        right: 18px;
-        top: 18px;
-        gap: 6px;
+        right: 12px;
+        top: 12px;
+        gap: 5px;
       }
 
-      .layer-btn { padding: 8px 11px; }
+      .layer-btn { padding: 6px 9px; font-size: 11px; }
 
       .map-card {
-        right: 18px;
-        bottom: 18px;
-        padding: 13px;
-        border-radius: 18px;
+        right: 12px;
+        bottom: 12px;
+        padding: 10px;
+        border-radius: 14px;
+        width: min(240px, calc(100% - 24px));
       }
 
-      .map-card h3 { font-size: 26px; }
-
-      .side-stack {
-        min-height: 0;
-        grid-template-rows: minmax(0, 1fr) minmax(0, .78fr);
-        gap: 12px;
-        overflow: hidden;
-      }
+      .map-card h3 { font-size: 20px; margin-bottom: 4px; }
+      .map-card p { font-size: 11px; line-height: 1.4; }
 
       .risk-list {
         height: 100%;
-        grid-template-rows: repeat(3, minmax(0, 1fr));
-        gap: 8px;
+        min-height: 0;
+        align-content: start;
+        overflow: auto;
+        gap: 6px;
       }
 
       .risk-item {
-        padding: 11px 12px;
-        border-radius: 16px;
+        padding: 8px 10px;
+        border-radius: 14px;
       }
 
-      .risk-row { margin-bottom: 5px; }
-      .risk-item p { font-size: 12px; line-height: 1.42; }
-      .progress { height: 4px; margin-top: 8px; }
+      .risk-row { margin-bottom: 3px; }
+      .risk-row b { font-size: 12px; }
+      .badge { padding: 3px 6px; font-size: 10px; }
+      .risk-item p { font-size: 11px; line-height: 1.4; }
+      .progress { height: 3px; margin-top: 6px; }
 
-      .forecast-card {
+      .history-card,
+      .forecast-card,
+      .combined-card {
         height: 100%;
         grid-template-rows: minmax(0, 1fr) auto;
-        gap: 10px;
+        gap: 8px;
       }
 
-      .forecast-chart { height: 100%; }
-      .mini-stat { padding: 10px 12px; }
-      .mini-stat b { font-size: 22px; }
+      .history-chart,
+      .forecast-chart,
+      .combined-chart { height: 100%; min-height: 0; }
+      .mini-stat { padding: 8px 10px; }
+      .mini-stat b { font-size: 18px; }
+
+      .combined-summary { grid-template-columns: repeat(4, 1fr); }
 
       .video-grid {
         height: 100%;
+        min-height: 0;
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr 1fr;
         gap: 10px;
+        overflow: hidden;
+        padding: 10px;
       }
 
       .video-card { min-height: 0; }
-
-      .agent-feed {
-        height: 100%;
-        min-height: 0;
-        grid-template-rows: minmax(0, 1fr) 38px;
-        gap: 10px;
-      }
 
       .messages {
         min-height: 0;
@@ -1010,12 +1072,14 @@
       }
 
       .message {
-        padding: 10px 12px;
-        font-size: 12px;
-        line-height: 1.48;
+        padding: 8px 10px;
+        font-size: 11px;
+        line-height: 1.45;
       }
 
-      .agent-input input { height: 38px; }
+      .agent-input { gap: 6px; }
+      .agent-input input { height: 32px; padding: 0 10px; }
+      .agent-input .btn { min-height: 32px; padding: 0 10px; font-size: 12px; }
     }
   </style>
 </head>
@@ -1080,7 +1144,17 @@
         </article>
       </section>
 
-      <section class="command-grid">
+      <section class="middle-grid">
+        <article class="panel video-panel">
+          <div class="panel-head"><h2>视频巡检</h2><span>关键断面</span></div>
+          <div class="panel-body">
+            <div class="video-grid">
+              <div class="video-card" data-title="CAM-17 上游闸口" data-detail="CAM-17 上游闸口：画面稳定，AI 检测到漂浮物 2 处，未影响主河道通行。"><div class="video-meta"><b>CAM-17 · LIVE</b><span>上游闸口 / AI 漂浮物识别</span></div></div>
+              <div class="video-card" data-title="CAM-22 桥涵断面" data-detail="CAM-22 桥涵断面：断面流速偏高，建议与泵闸站数据联动复核。"><div class="video-meta"><b>CAM-22 · AI</b><span>桥涵断面 / 流速估计</span></div></div>
+            </div>
+          </div>
+        </article>
+
         <article class="panel map-panel">
           <div class="panel-head"><h2>监测设备分布与流域态势</h2><span>实时刷新 · 42 路设备接入</span></div>
           <div class="panel-body">
@@ -1117,77 +1191,42 @@
           </div>
         </article>
 
-        <div class="side-stack">
-          <article class="panel">
-            <div class="panel-head"><h2>预警处置</h2><span>按紧急程度排序</span></div>
-            <div class="panel-body">
-              <div class="risk-list">
-                <div class="risk-item" data-title="城西站水位逼近阈值" data-detail="城西站当前水位 7.84m，预计 38 分钟后触达橙色阈值。建议：通知值班人员、复核 CAM-17 视频、检查上游雨量输入。">
-                  <div class="risk-row"><b>城西站水位逼近阈值</b><span class="badge">橙色</span></div>
-                  <p>预计 38 分钟后触达 7.90m，模型可信度 0.86。</p>
-                  <div class="progress" style="--p:88%"><i></i></div>
-                </div>
-                <div class="risk-item" data-title="泵闸站流量突增" data-detail="泵闸站 10 分钟流量环比增加 18%，建议核查泵闸运行状态与上游来水。">
-                  <div class="risk-row"><b>泵闸站流量突增</b><span class="badge warn">黄色</span></div>
-                  <p>已派发 AI 视频巡检，等待人工确认。</p>
-                  <div class="progress" style="--p:62%"><i style="background:var(--amber)"></i></div>
-                </div>
-                <div class="risk-item" data-title="南桥站预警解除" data-detail="南桥站水位已连续 30 分钟回落，建议完成闭环记录并转为常规观察。">
-                  <div class="risk-row"><b>南桥站预警解除</b><span class="badge ok">观察</span></div>
-                  <p>水位连续回落，可转入常规监测。</p>
-                  <div class="progress" style="--p:24%"><i style="background:var(--moss)"></i></div>
-                </div>
-              </div>
-            </div>
-          </article>
-
-          <article class="panel">
-            <div class="panel-head"><h2>模型预报</h2><span>未来 72 小时</span></div>
-            <div class="panel-body forecast-card">
-              <div class="forecast-chart">
-                <svg viewBox="0 0 420 160" preserveAspectRatio="none">
-                  <defs><linearGradient id="flowArea" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#6d929f" stop-opacity=".26"/><stop offset="1" stop-color="#6d929f" stop-opacity="0"/></linearGradient></defs>
-                  <line class="axis" x1="24" y1="132" x2="396" y2="132"/><line class="axis" x1="24" y1="24" x2="24" y2="132"/>
-                  <line class="grid" x1="24" y1="96" x2="396" y2="96"/><line class="grid" x1="24" y1="60" x2="396" y2="60"/>
-                  <path class="flow-area" d="M24 104 C70 96 94 72 132 78 C184 86 194 112 246 86 C300 58 342 44 396 62 L396 132 L24 132 Z"/>
-                  <path class="flow-line" d="M24 104 C70 96 94 72 132 78 C184 86 194 112 246 86 C300 58 342 44 396 62"/>
-                  <path class="risk-line" d="M24 122 C80 112 118 104 164 108 C220 112 254 82 300 68 C346 54 368 70 396 84"/>
-                  <text class="chart-label" x="22" y="150">当前</text><text class="chart-label" x="172" y="150">+24h</text><text class="chart-label" x="286" y="150">+48h</text><text class="chart-label" x="360" y="150">+72h</text>
-                </svg>
-              </div>
-              <div class="forecast-summary">
-                <div class="mini-stat"><span>预报峰值</span><b>8.31m</b></div>
-                <div class="mini-stat"><span>峰现时间</span><b>+38m</b></div>
-              </div>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section class="bottom-grid">
         <article class="panel">
-          <div class="panel-head"><h2>视频巡检</h2><span>关键断面</span></div>
+          <div class="panel-head"><h2>预警处置</h2><span>按紧急程度排序</span></div>
           <div class="panel-body">
-            <div class="video-grid">
-              <div class="video-card" data-title="CAM-17 上游闸口" data-detail="CAM-17 上游闸口：画面稳定，AI 检测到漂浮物 2 处，未影响主河道通行。"><div class="video-meta"><b>CAM-17 · LIVE</b><span>上游闸口 / AI 漂浮物识别</span></div></div>
-              <div class="video-card" data-title="CAM-22 桥涵断面" data-detail="CAM-22 桥涵断面：断面流速偏高，建议与泵闸站数据联动复核。"><div class="video-meta"><b>CAM-22 · AI</b><span>桥涵断面 / 流速估计</span></div></div>
+            <div class="risk-list">
+              <div class="risk-item" data-title="城西站水位逼近阈值" data-detail="城西站当前水位 7.84m，预计 38 分钟后触达橙色阈值。建议：通知值班人员、复核 CAM-17 视频、检查上游雨量输入。">
+                <div class="risk-row"><b>城西站水位逼近阈值</b><span class="badge">橙色</span></div>
+                <p>预计 38 分钟后触达 7.90m，模型可信度 0.86。</p>
+                <div class="progress" style="--p:88%"><i></i></div>
+              </div>
+              <div class="risk-item" data-title="泵闸站流量突增" data-detail="泵闸站 10 分钟流量环比增加 18%，建议核查泵闸运行状态与上游来水。">
+                <div class="risk-row"><b>泵闸站流量突增</b><span class="badge warn">黄色</span></div>
+                <p>已派发 AI 视频巡检，等待人工确认。</p>
+                <div class="progress" style="--p:62%"><i style="background:var(--amber)"></i></div>
+              </div>
+              <div class="risk-item" data-title="南桥站预警解除" data-detail="南桥站水位已连续 30 分钟回落，建议完成闭环记录并转为常规观察。">
+                <div class="risk-row"><b>南桥站预警解除</b><span class="badge ok">观察</span></div>
+                <p>水位连续回落，可转入常规监测。</p>
+                <div class="progress" style="--p:24%"><i style="background:var(--moss)"></i></div>
+              </div>
             </div>
           </div>
         </article>
+      </section>
 
-        <article class="panel">
-          <div class="panel-head"><h2>FloodMind 智能体</h2><span>自然语言调度</span></div>
-          <div class="panel-body">
-            <div class="agent-feed">
-              <div class="messages" id="messages">
-                <div class="message ai">我已读取 42 路监测设备、3 个模型预报和 6 小时雨量外推。当前建议优先处理城西站橙色阈值风险。</div>
-                <div class="message user">生成城西站未来 72 小时预警解释，并列出复核证据。</div>
-                <div class="message ai">已生成草稿：触发原因、模型判断、视频复核清单、处置建议和日报归档字段。</div>
-              </div>
-              <div class="agent-input">
-                <input id="agentInput" placeholder="输入：模拟上游降雨增加20%的影响..." />
-                <button class="btn primary" id="sendAgent">发送</button>
-              </div>
+      <section class="bottom-grid">
+        <article class="panel combined-panel">
+          <div class="panel-head"><h2>历史数据与模型预报联合展示</h2><span>近 24h → 未来 72h</span></div>
+          <div class="panel-body combined-card">
+            <div class="combined-chart" id="trendChart">
+              <!-- SVG rendered by JS below -->
+            </div>
+            <div class="forecast-summary combined-summary">
+              <div class="mini-stat"><span>最高水位</span><b>8.14m</b></div>
+              <div class="mini-stat"><span>平均流量</span><b>1,980m³/s</b></div>
+              <div class="mini-stat"><span>预报峰值</span><b>8.31m</b></div>
+              <div class="mini-stat"><span>峰现时间</span><b>+38m</b></div>
             </div>
           </div>
         </article>
@@ -1200,6 +1239,26 @@
       <h2 id="modalTitle">详情</h2>
       <p id="modalText"></p>
       <div class="modal-actions"><button class="btn primary" id="closeModal">关闭</button></div>
+    </div>
+  </div>
+
+  <div class="modal" id="agentModal" aria-hidden="true">
+    <div class="modal-card agent-modal-card">
+      <div class="modal-actions" style="justify-content: space-between; align-items: center;">
+        <h2>FloodMind 智能体</h2>
+        <button class="btn" id="closeAgentModal">关闭</button>
+      </div>
+      <div class="agent-feed">
+        <div class="messages" id="messages">
+          <div class="message ai">我已读取 42 路监测设备、3 个模型预报和 6 小时雨量外推。当前建议优先处理城西站橙色阈值风险。</div>
+          <div class="message user">生成城西站未来 72 小时预警解释，并列出复核证据。</div>
+          <div class="message ai">已生成草稿：触发原因、模型判断、视频复核清单、处置建议和日报归档字段。</div>
+        </div>
+        <div class="agent-input">
+          <input id="agentInput" placeholder="输入：模拟上游降雨增加20%的影响..." />
+          <button class="btn primary" id="sendAgent">发送</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1219,6 +1278,7 @@
     const modal = $('#modal');
     const modalTitle = $('#modalTitle');
     const modalText = $('#modalText');
+    const agentModal = $('#agentModal');
     const clock = $('#clock');
     const messages = $('#messages');
     const agentInput = $('#agentInput');
@@ -1241,6 +1301,17 @@
     function closeModal() {
       modal.classList.remove('show');
       modal.setAttribute('aria-hidden', 'true');
+    }
+
+    function openAgentModal() {
+      agentModal.classList.add('show');
+      agentModal.setAttribute('aria-hidden', 'false');
+      setTimeout(() => agentInput.focus(), 50);
+    }
+
+    function closeAgentModal() {
+      agentModal.classList.remove('show');
+      agentModal.setAttribute('aria-hidden', 'true');
     }
 
     $$('[data-detail]').forEach(item => {
@@ -1268,36 +1339,30 @@
     agentInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendAgent(); });
 
     $('#openReport').addEventListener('click', () => openModal('今日流域日报草稿', '系统将汇总实时水位、流量、模型预报、视频巡检和预警处置记录，生成日报草稿。当前草稿包含：城西站风险解释、泵闸站复核建议、南桥站预警解除记录。'));
-    $('#openCommand').addEventListener('click', () => openModal('智能研判', 'FloodMind 建议：优先处理城西站橙色阈值风险；复核 CAM-17 与 CAM-22；模拟上游降雨增加 20% 的情景；提前准备闸门联动预案。'));
+    $('#openCommand').addEventListener('click', openAgentModal);
 
     $('#closeModal').addEventListener('click', closeModal);
     modal.addEventListener('click', event => { if (event.target === modal) closeModal(); });
-    document.addEventListener('keydown', event => { if (event.key === 'Escape') closeModal(); });
+    $('#closeAgentModal').addEventListener('click', closeAgentModal);
+    agentModal.addEventListener('click', event => { if (event.target === agentModal) closeAgentModal(); });
+    document.addEventListener('keydown', event => {
+      if (event.key !== 'Escape') return;
+      if (agentModal.classList.contains('show')) closeAgentModal();
+      else if (modal.classList.contains('show')) closeModal();
+    });
 
     // ===== Fullscreen stage =====
     const stageModal = $('#stageModal');
     const stageTitle = $('#stageTitle');
     const stageBody = $('#stageBody');
-    let originalAgentParent = null;
-    let movedAgent = false;
 
     function openStage(title, source) {
       if (!source) return;
       stageTitle.textContent = title;
       stageBody.innerHTML = '';
-
-      if (source.classList.contains('agent-feed')) {
-        // Move the live agent feed so input/button events keep working
-        originalAgentParent = source.parentElement;
-        stageBody.appendChild(source);
-        movedAgent = true;
-        agentInput.focus();
-      } else {
-        const clone = source.cloneNode(true);
-        clone.removeAttribute('id');
-        stageBody.appendChild(clone);
-      }
-
+      const clone = source.cloneNode(true);
+      clone.removeAttribute('id');
+      stageBody.appendChild(clone);
       stageModal.classList.add('show');
       stageModal.setAttribute('aria-hidden', 'false');
     }
@@ -1305,11 +1370,6 @@
     function closeStage() {
       stageModal.classList.remove('show');
       stageModal.setAttribute('aria-hidden', 'true');
-      if (movedAgent && originalAgentParent) {
-        originalAgentParent.appendChild($('.agent-feed'));
-        movedAgent = false;
-        originalAgentParent = null;
-      }
     }
 
     function isInteractive(target) {
@@ -1329,8 +1389,6 @@
           openStage('监测设备分布与流域态势', panel.querySelector('.map-wrap'));
         } else if (heading.includes('视频巡检')) {
           openStage('视频巡检', panel.querySelector('.video-grid'));
-        } else if (heading.includes('FloodMind')) {
-          openStage('FloodMind 智能体', panel.querySelector('.agent-feed'));
         } else if (body) {
           openStage(heading, body);
         }
@@ -1356,6 +1414,105 @@
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && stageModal.classList.contains('show')) closeStage();
     });
+
+    // ===== Responsive trend chart =====
+    const historyData = [
+      { t: '-24h', y: 34.92 },
+      { t: '-16h', y: 35.18 },
+      { t: '-8h', y: 35.05 },
+      { t: '当前', y: 35.12 }
+    ];
+    const forecastData = [
+      { t: '当前', y: 35.12 },
+      { t: '+24h', y: 35.58 },
+      { t: '+48h', y: 35.82 },
+      { t: '+72h', y: 35.46 }
+    ];
+    const labels = ['-24h', '-16h', '-8h', '当前', '+24h', '+48h', '+72h'];
+    const historyColor = '#6d929f';
+    const forecastColor = '#b96b55';
+    const margin = { top: 10, right: 16, bottom: 22, left: 32 };
+
+    function renderTrendChart() {
+      const wrap = $('#trendChart');
+      if (!wrap) return;
+      const rect = wrap.getBoundingClientRect();
+      const w = Math.floor(rect.width);
+      const h = Math.floor(rect.height);
+      const plot = {
+        x: margin.left,
+        y: margin.top,
+        w: Math.max(50, w - margin.left - margin.right),
+        h: Math.max(40, h - margin.top - margin.bottom)
+      };
+
+      const all = [...historyData, ...forecastData].map(d => d.y);
+      const minVal = Math.min(...all);
+      const maxVal = Math.max(...all);
+      const pad = (maxVal - minVal) * 0.12 || Math.abs(maxVal) * 0.1 || 1;
+      const yMin = minVal - pad;
+      const yMax = maxVal + pad;
+
+      const xAt = i => plot.x + (plot.w / (labels.length - 1)) * i;
+      const yAt = v => plot.y + plot.h - ((v - yMin) / (yMax - yMin)) * plot.h;
+      const nowIdx = historyData.length - 1;
+      const nowX = xAt(nowIdx);
+
+      function linePath(data, offset) {
+        return data.map((d, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i + offset)} ${yAt(d.y)}`).join(' ');
+      }
+      function areaPath(data, offset, closeX) {
+        const top = linePath(data, offset);
+        const base = plot.y + plot.h;
+        return `${top} L ${closeX} ${base} L ${xAt(offset)} ${base} Z`;
+      }
+
+      const steps = 3;
+      let gridLines = '';
+      for (let i = 0; i <= steps; i++) {
+        const v = yMin + (yMax - yMin) * (i / steps);
+        const y = yAt(v);
+        gridLines += `<line class="grid" x1="${plot.x}" y1="${y}" x2="${plot.x + plot.w}" y2="${y}"/>`;
+      }
+
+      let xLabels = '';
+      labels.forEach((l, i) => {
+        xLabels += `<text class="chart-label" x="${xAt(i)}" y="${plot.y + plot.h + 14}">${l}</text>`;
+      });
+
+      const historyAreaD = areaPath(historyData, 0, nowX);
+      const historyLineD = linePath(historyData, 0);
+      const forecastAreaD = areaPath(forecastData, nowIdx, xAt(labels.length - 1));
+      const forecastLineD = linePath(forecastData, nowIdx);
+
+      wrap.innerHTML = `
+        <svg width="${w}" height="${h}" aria-hidden="true">
+          <defs>
+            <linearGradient id="historyArea" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0" stop-color="${historyColor}" stop-opacity=".22"/>
+              <stop offset="1" stop-color="${historyColor}" stop-opacity="0"/>
+            </linearGradient>
+            <linearGradient id="forecastArea" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0" stop-color="${forecastColor}" stop-opacity=".16"/>
+              <stop offset="1" stop-color="${forecastColor}" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          ${gridLines}
+          <line class="axis" x1="${plot.x}" y1="${plot.y + plot.h}" x2="${plot.x + plot.w}" y2="${plot.y + plot.h}"/>
+          <line class="axis" x1="${plot.x}" y1="${plot.y}" x2="${plot.x}" y2="${plot.y + plot.h}"/>
+          <line class="now-line" x1="${nowX}" y1="${plot.y}" x2="${nowX}" y2="${plot.y + plot.h}"/>
+          <path class="history-area" d="${historyAreaD}" fill="url(#historyArea)"/>
+          <path class="history-line" d="${historyLineD}" fill="none" stroke="${historyColor}" stroke-width="2.5"/>
+          <path class="forecast-area" d="${forecastAreaD}" fill="url(#forecastArea)"/>
+          <path class="forecast-line" d="${forecastLineD}" fill="none" stroke="${forecastColor}" stroke-width="2.5" stroke-dasharray="6 5"/>
+          <circle class="history-dot" cx="${nowX}" cy="${yAt(historyData[historyData.length - 1].y)}" r="4"/>
+          ${xLabels}
+        </svg>
+      `;
+    }
+
+    renderTrendChart();
+    window.addEventListener('resize', renderTrendChart);
   </script>
 </body>
 </html>
