@@ -2,16 +2,14 @@ import asyncio
 import json
 import logging
 import queue
-from typing import AsyncGenerator, Optional
-
 from floodmind import Agent, ModelClient, build_agent_tool
 from floodmind.agent.runtime.contracts.messages import Message, MessageStore
 from floodmind.agent.runtime.contracts.permissions import PermissionBehavior, PermissionDecision
 from floodmind.agent.runtime.services.tool_execution_service import ToolExecutionService
-from floodmind.memory import session_store as flood_session_store
 
 from ..config import settings
 from .agent_tools import TOOLS_REGISTRY, TOOL_DESCRIPTIONS
+from . import session_store
 
 logger = logging.getLogger(__name__)
 
@@ -250,7 +248,7 @@ class InMemoryStore:
 
 
 class AgentService:
-    """每个 session 复用一个 AgentService 实例。持久化用 floodmind session_store。"""
+    """每个 session 复用一个 AgentService 实例。持久化用本地 session_store。"""
 
     _instances: dict[str, "AgentService"] = {}
 
@@ -289,11 +287,14 @@ class AgentService:
         # 连接 MCP 服务器 (如 HydroRAG 知识库)
         self._connect_mcp()
 
-        # 确保 session 存在于 SQLite
+        # 确保 session 存在于 SQLite（失败不阻塞，智能体仍可用）
         if session_id:
-            existing = flood_session_store.get_session(session_id)
-            if not existing:
-                flood_session_store.create_session(session_id=session_id)
+            try:
+                existing = session_store.get_session(session_id)
+                if not existing:
+                    session_store.create_session(session_id=session_id)
+            except Exception:
+                logger.warning("floodmind session init failed for %s, agent continues without persistence", session_id)
 
     def _connect_mcp(self):
         """加载并连接 floodmind mcp.json 中配置的 MCP 服务器"""
@@ -350,7 +351,7 @@ class AgentService:
     async def stream(
         self, session_id: str, message: str, uploaded_files: Optional[list] = None,
     ) -> AsyncGenerator[dict, None]:
-        flood_session_store.add_message(session_id, "user", parts=[{"type": "text", "text": message}])
+        session_store.add_message(session_id, "user", parts=[{"type": "text", "text": message}])
         self.agent.raw.session_id = session_id
 
         loop = asyncio.get_event_loop()
@@ -379,12 +380,12 @@ class AgentService:
             if answer_text:
                 parts.append({"type": "text", "text": answer_text})
             if parts:
-                flood_session_store.add_message(session_id, "assistant", parts=parts)
+                session_store.add_message(session_id, "assistant", parts=parts)
 
-            session_info = flood_session_store.get_session(session_id)
+            session_info = session_store.get_session(session_id)
             if session_info and (not session_info.get("title")):
                 title = self._generate_title(message, answer_text)
-                flood_session_store.rename_session(session_id, title)
+                session_store.rename_session(session_id, title)
 
             yield {"type": "stream_end"}
 

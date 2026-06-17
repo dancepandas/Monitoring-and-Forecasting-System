@@ -11,8 +11,6 @@ from starlette.status import HTTP_404_NOT_FOUND, HTTP_400_BAD_REQUEST
 
 from ..auth.middleware import get_current_user
 from ..config import settings
-from floodmind.memory import session_store as flood_sessions
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["agent"])
@@ -31,7 +29,7 @@ async def _ndjson_stream(gen: AsyncGenerator[dict, None]) -> AsyncGenerator[str,
 # ===== 1. 会话列表（floodmind SQLite） =====
 @router.get("/sessions")
 async def api_list_sessions(user: dict = Depends(get_current_user)):
-    sessions = flood_sessions.list_sessions()
+    sessions = session_store.list_sessions()
     result = []
     for s in sessions:
         result.append({
@@ -46,7 +44,7 @@ async def api_list_sessions(user: dict = Depends(get_current_user)):
 
 @router.get("/sessions/{session_id}")
 async def api_get_session(session_id: str, user: dict = Depends(get_current_user)):
-    s = flood_sessions.get_session(session_id)
+    s = session_store.get_session(session_id)
     if not s:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="会话不存在")
     return {"session": s}
@@ -55,7 +53,7 @@ async def api_get_session(session_id: str, user: dict = Depends(get_current_user
 # ===== 2. 会话消息历史 =====
 @router.get("/sessions/{session_id}/messages")
 async def api_get_messages(session_id: str, user: dict = Depends(get_current_user)):
-    messages = flood_sessions.get_messages(session_id)
+    messages = session_store.get_messages(session_id)
     result = []
     for msg in messages:
         item = {
@@ -73,7 +71,7 @@ async def api_get_messages(session_id: str, user: dict = Depends(get_current_use
 @router.delete("/sessions/{session_id}")
 async def api_delete_session(session_id: str, user: dict = Depends(get_current_user)):
     try:
-        flood_sessions.delete_session(session_id)
+        session_store.delete_session(session_id)
     except Exception:
         pass
     return {"ok": True}
@@ -84,7 +82,7 @@ async def api_save_session(body: dict, user: dict = Depends(get_current_user)):
     session_id = body.get("session_id")
     if not session_id:
         raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail="session_id 不能为空")
-    return {"session": flood_sessions.get_session(session_id)}
+    return {"session": session_store.get_session(session_id)}
 
 
 # ===== 3. 初始化 =====
@@ -93,9 +91,9 @@ async def api_init(body: dict, user: dict = Depends(get_current_user)):
     session_id = body.get("session_id")
     if not session_id:
         session_id = f"ses_{uuid.uuid4().hex[:12]}"
-    existing = flood_sessions.get_session(session_id)
+    existing = session_store.get_session(session_id)
     if not existing:
-        flood_sessions.create_session(session_id=session_id, title="")
+        session_store.create_session(session_id=session_id, title="")
     session_store.get_or_create(session_id)
     return {"session": {"session_id": session_id}}
 
@@ -133,12 +131,12 @@ async def api_stream_resume(
     after_index: int = Query(0),
     user: dict = Depends(get_current_user)
 ):
-    s = flood_sessions.get_session(session_id)
+    s = session_store.get_session(session_id)
     if not s:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="会话不存在")
 
     async def _resume():
-        events = flood_sessions.get_sync_events(session_id, after_index)
+        events = session_store.get_sync_events(session_id, after_index)
         for ev in events:
             yield {"type": ev["event_type"], "data": json.loads(ev.get("event_data", "{}"))}
 
