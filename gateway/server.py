@@ -50,17 +50,18 @@ async def lifespan(app: FastAPI):
 
     # collector 健康监控：每 60 秒检查子进程是否存活
     async def _watch_collector():
+        nonlocal collector_proc, log_fh
         while True:
             await asyncio.sleep(60)
             if collector_proc.returncode is not None:
                 logger.error(f"[collector] subprocess died (rc={collector_proc.returncode}), restarting...")
                 try:
-                    new_proc = await asyncio.create_subprocess_exec(
+                    collector_proc = await asyncio.create_subprocess_exec(
                         sys.executable, "-m", "gateway.services.collector",
                         stdout=log_fh, stderr=log_fh,
                     )
-                    app.state.collector_proc = new_proc
-                    logger.info(f"[collector] restarted: pid={new_proc.pid}")
+                    app.state.collector_proc = collector_proc
+                    logger.info(f"[collector] restarted: pid={collector_proc.pid}")
                 except Exception as e:
                     logger.exception(f"[collector] restart failed: {e}")
 
