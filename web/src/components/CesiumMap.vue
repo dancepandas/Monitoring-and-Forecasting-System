@@ -36,9 +36,6 @@ onMounted(() => {
     creditContainer: undefined,
   })
 
-  // 移除 Cesium logo/credit（干净背景）
-  viewer.cesiumWidget.creditContainer.style.display = 'none'
-
   const scene = viewer.scene
   scene.globe.enableLighting = true
   scene.skyAtmosphere.show = false
