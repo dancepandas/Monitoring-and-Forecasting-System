@@ -31,6 +31,12 @@ def init_scheduler(app=None) -> AsyncIOScheduler:
     return _scheduler
 
 
+def get_scheduler() -> AsyncIOScheduler:
+    if _scheduler is None:
+        raise RuntimeError("Scheduler not initialized")
+    return _scheduler
+
+
 def create_task(task_type: str, cron: str, params: dict) -> str:
     if _scheduler is None:
         raise RuntimeError("Scheduler not initialized")
@@ -97,14 +103,11 @@ async def _execute_task(task_type: str, params: dict) -> None:
                 logger.error("generate_report timed out after 120s")
         elif task_type == "run_forecast":
             station = params.get("station_code", settings.station_codes.split(",")[0] if settings.station_codes else "00106")
-            prediction_length = params.get("prediction_length", 72)
-            flow_data = await data_cache.get(f"aiflow:flow_raw:{station}:{settings.default_device_code}", max_age=600)
-            raw_items = (flow_data or {}).get("data", []) or []
-            if raw_items:
-                series = _time_series_for_forecast(raw_items, "virtualFlow")
-                if len(series) >= 10:
-                    from . import chronos_client
-                    await chronos_client.predict_flow(series, prediction_length, context_length=min(len(series), 72))
+            try:
+                await data_cache.rebuild_aligned(station)
+                logger.info("scheduled forecast: aligned rebuilt for %s", station)
+            except Exception as e:
+                logger.exception("scheduled forecast failed for %s: %s", station, e)
         elif task_type == "check_warnings":
             logger.info("check_warnings: placeholder – no action yet")
         else:

@@ -33,26 +33,44 @@ def _safe_sync(coro):
     return fut.result(timeout=30)
 
 async def _get_cached_level(station_code: str, max_age: int = 600) -> dict:
-    """从本地缓存读取水位数据，避免直接请求 aiflow2。"""
-    data = await data_cache.get(f"aiflow:level:{station_code}", max_age=max_age)
-    if not data:
-        return {"code": 200, "msg": "缓存未就绪", "data": [], "pageInfo": {"current": 1, "pages": 0, "size": 10, "total": 0}}
-    return data
-
-
-async def _get_cached_flow(station_code: str, max_age: int = 600) -> dict:
-    """从本地缓存读取流量原始数据（flow_raw），返回与 query_flow 兼容的格式。"""
+    """从 flow_raw 缓存读取水位数据（统一数据源为 realTimeInfo）。"""
     data = await data_cache.get(f"aiflow:flow_raw:{station_code}:{_DEVICE_CODE}", max_age=max_age)
     if not data:
         return {"code": 200, "msg": "缓存未就绪", "data": [], "pageInfo": {"current": 1, "pages": 0, "size": 10, "total": 0}}
     raw_items = data.get("data", []) or []
     mapped = []
     for it in raw_items:
-        if it.get("virtualFlow") is not None:
+        if it.get("waterLevel") is not None:
             mapped.append({
-                "measureTime": it.get("measureTime"),
-                "waterFlow": it.get("virtualFlow"),
-                "virtualFlow": it.get("virtualFlow"),
+                "measureTime": it.get("time") or it.get("measureTime"),
+                "waterLevel": it.get("waterLevel"),
+                "waterVelocity": it.get("waterVelocity"),
+                "videoUrl": it.get("videoUrl"),
+                "deviceCode": it.get("deviceCode", _DEVICE_CODE),
+                "programState": it.get("programState"),
+                "stationCode": station_code,
+            })
+    return {"code": 200, "msg": "ok", "data": mapped, "pageInfo": {"current": 1, "pages": 1, "size": len(mapped), "total": len(mapped)}}
+
+
+async def _get_cached_flow(station_code: str, max_age: int = 600) -> dict:
+    """从 flow_raw 缓存读取流量数据（统一数据源为 realTimeInfo）。"""
+    data = await data_cache.get(f"aiflow:flow_raw:{station_code}:{_DEVICE_CODE}", max_age=max_age)
+    if not data:
+        return {"code": 200, "msg": "缓存未就绪", "data": [], "pageInfo": {"current": 1, "pages": 0, "size": 10, "total": 0}}
+    raw_items = data.get("data", []) or []
+    mapped = []
+    for it in raw_items:
+        vf = it.get("virtualFlow") or it.get("waterFlow")
+        if vf is not None:
+            mapped.append({
+                "measureTime": it.get("time") or it.get("measureTime"),
+                "waterFlow": vf,
+                "virtualFlow": vf,
+                "waterVelocity": it.get("waterVelocity"),
+                "videoUrl": it.get("videoUrl"),
+                "deviceCode": it.get("deviceCode", _DEVICE_CODE),
+                "programState": it.get("programState"),
                 "stationCode": station_code,
             })
     return {"code": 200, "msg": "ok", "data": mapped, "pageInfo": {"current": 1, "pages": 1, "size": len(mapped), "total": len(mapped)}}
@@ -201,11 +219,25 @@ class QueryDevicesArgs(BaseModel):
 
 def query_devices(**kwargs) -> dict:
     args = QueryDevicesArgs(**kwargs)
+    # 从缓存读最新设备状态
+    data = _safe_sync(_get_cached_flow(args.station_code, max_age=600))
+    items = data.get("data", []) or []
+    device_state = "unknown"
+    device_code = _DEVICE_CODE
+    if items:
+        device_code = items[0].get("deviceCode") or _DEVICE_CODE
+        ps = items[0].get("programState")
+        if ps == 1:
+            device_state = "online"
+        elif ps == 0:
+            device_state = "offline"
+
     return {
         "station_code": args.station_code,
         "devices": [
-            {"device_code": f"{args.station_code}_D01", "type": "水位计", "status": "online"},
-            {"device_code": f"{args.station_code}_D02", "type": "流量计", "status": "online"},
+            {"device_code": device_code, "type": "遥测终端(RTU)", "status": device_state},
+            {"device_code": f"{args.station_code}_WL", "type": "水位计", "status": "online" if items else "unknown"},
+            {"device_code": f"{args.station_code}_FL", "type": "AiFlow 流量计", "status": "online" if items else "unknown"},
         ]
     }
 
@@ -216,12 +248,26 @@ class QueryVideoStatusArgs(BaseModel):
 
 def query_video_status(**kwargs) -> dict:
     args = QueryVideoStatusArgs(**kwargs)
-    return {
-        "station_code": args.station_code,
-        "cameras": [
-            {"id": f"{args.station_code}_CAM01", "status": "online", "url": ""},
-        ]
-    }
+    try:
+        resp = _safe_sync(aiflow_client.get_camera_info(_DEVICE_CODE))
+        cameras = resp.get("data", []) or []
+        return {
+            "station_code": args.station_code,
+            "device_code": _DEVICE_CODE,
+            "cameras": [
+                {
+                    "cameraId": c.get("cameraId"),
+                    "name": c.get("name", ""),
+                    "liveAddress": c.get("liveAddress", ""),
+                    "programState": c.get("programState", 0),
+                    "stateText": {0: "离线", 1: "在线", 2: "未知"}.get(c.get("programState"), "未知"),
+                }
+                for c in cameras
+            ],
+        }
+    except Exception as e:
+        logger.warning(f"query_video_status failed: {e}")
+        return {"station_code": args.station_code, "cameras": [], "error": str(e)}
 
 
 # ---------------------------------------------------------------------------
@@ -377,7 +423,7 @@ def list_warnings(**kwargs) -> dict:
                     "name": "数据连续缺测",
                     "level": "提示",
                     "station_code": code,
-                    "message": f"测站 {code} 最近 10 条数据中有 {null_count} 条流量为空。可能原因：传感器瞬时故障或 ADCP 测量异常。建议现场检查传感器状态。如持续缺测，请联系管理员（{admin}）。",
+                    "message": f"测站 {code} 最近 10 条数据中有 {null_count} 条流量为空。可能原因：传感器瞬时故障或 AiFlow 测量异常。建议现场检查传感器状态。如持续缺测，请联系管理员（{admin}）。",
                     "time": datetime.now().isoformat(),
                 })
 
@@ -1006,6 +1052,105 @@ def _time_series(raw_data: list, value_key: str, time_key: str = "measureTime") 
     return result
 
 
+class SendNotificationArgs(BaseModel):
+    channel: str = Field("dingtalk", description="推送渠道：dingtalk 或 wecom")
+    title: str = Field(..., description="消息标题")
+    message: str = Field(..., description="消息正文")
+    level: str = Field("提示", description="预警级别：红色/橙色/黄色/蓝色/提示")
+    station_code: str = Field("", description="相关测站编码，可选")
+    webhook_url: str = Field("", description="自定义 webhook 地址，为空则读配置")
+    secret: str = Field("", description="钉钉加签 secret，为空则读配置")
+    alert_id: str = Field("", description="关联的告警事件ID，推送成功后会更新该事件的推送计数")
+
+
+def send_notification(**kwargs) -> dict:
+    """向钉钉/企业微信推送一条通知消息；若提供 alert_id，会自动标记该告警已推送。"""
+    import asyncio
+    from .notifier import push_alert
+    from .monitor_engine import get_engine
+    channel = kwargs.get("channel", "dingtalk")
+    title = kwargs.get("title", "")
+    message = kwargs.get("message", "")
+    level = kwargs.get("level", "提示")
+    station_code = kwargs.get("station_code", "")
+    webhook_url = kwargs.get("webhook_url", "") or ""
+    secret = kwargs.get("secret", "") or ""
+    alert_id = kwargs.get("alert_id", "") or ""
+    try:
+        result = asyncio.run(push_alert(
+            title=title,
+            message=message,
+            level=level,
+            station_code=station_code,
+            channel=channel,
+            webhook_url=webhook_url or None,
+            secret=secret or None,
+        ))
+        if result.get("ok") and alert_id:
+            try:
+                get_engine()._tracker.mark_notified(alert_id, [channel])
+            except Exception as mark_err:
+                logger.warning("mark_notified failed: %s", mark_err)
+        return {"code": 200 if result.get("ok") else 500, "data": result}
+    except Exception as e:
+        return {"code": 500, "error": str(e)}
+
+
+class ListActiveAlertsArgs(BaseModel):
+    station_code: str = Field("", description="按测站编码筛选，为空则返回全部")
+    level: str = Field("", description="按级别筛选：红色/橙色/黄色/蓝色/提示，为空则返回全部")
+
+
+def list_active_alerts(**kwargs) -> dict:
+    """列出当前未解除的告警事件。"""
+    from .monitor_engine import get_engine
+    station_code = kwargs.get("station_code", "") or ""
+    level = kwargs.get("level", "") or ""
+    engine = get_engine()
+    events = engine._tracker.list_active(station_code=station_code or None, level=level or None)
+    return {
+        "code": 200,
+        "total": len(events),
+        "alerts": [e.to_dict() for e in events],
+    }
+
+
+class AcknowledgeAlertArgs(BaseModel):
+    alert_id: str = Field(..., description="要确认的告警ID")
+    by: str = Field("智能体", description="确认人")
+
+
+def acknowledge_alert(**kwargs) -> dict:
+    """确认一条告警，表示已收到并正在处理。"""
+    from .monitor_engine import get_engine
+    alert_id = kwargs.get("alert_id", "")
+    by = kwargs.get("by", "智能体")
+    engine = get_engine()
+    event = engine._tracker.acknowledge(alert_id, by=by)
+    if not event:
+        return {"code": 404, "error": "告警不存在或已解除"}
+    return {"code": 200, "alert": event.to_dict()}
+
+
+class ResolveAlertArgs(BaseModel):
+    alert_id: str = Field(..., description="要解除的告警ID")
+    resolution: str = Field("已处理", description="处置说明")
+    by: str = Field("智能体", description="解除人")
+
+
+def resolve_alert(**kwargs) -> dict:
+    """解除一条告警并记录处置结果。"""
+    from .monitor_engine import get_engine
+    alert_id = kwargs.get("alert_id", "")
+    resolution = kwargs.get("resolution", "已处理")
+    by = kwargs.get("by", "智能体")
+    engine = get_engine()
+    event = engine._tracker.resolve(alert_id, resolution=resolution, by=by)
+    if not event:
+        return {"code": 404, "error": "告警不存在或已解除"}
+    return {"code": 200, "alert": event.to_dict()}
+
+
 # ---------------------------------------------------------------------------
 # 工具注册表（供 AgentService 使用）
 # ---------------------------------------------------------------------------
@@ -1032,117 +1177,61 @@ TOOLS_REGISTRY = {
     "CancelScheduledTask": (CancelScheduledTaskArgs, cancel_scheduled_task),
     "diagnose_system": (DiagnoseSystemArgs, diagnose_system),
     "retry_failed_reports": (RetryFailedReportsArgs, retry_failed_reports),
+    "send_notification": (SendNotificationArgs, send_notification),
+    "list_active_alerts": (ListActiveAlertsArgs, list_active_alerts),
+    "acknowledge_alert": (AcknowledgeAlertArgs, acknowledge_alert),
+    "resolve_alert": (ResolveAlertArgs, resolve_alert),
 }
 
 TOOL_DESCRIPTIONS = {
     "query_water_level":
-        "查询指定测站的水位数据（从本地缓存读取，每5分钟刷新一次）。"
-        "参数: station_code(必填,如'00106'), begin(可选,开始时间), end(可选,结束时间), count(默认200)。"
-        "返回: {code, msg, data:[{measureTime, waterLevel, ...}], pageInfo}。"
-        "注意: 数据按上报频率(5min/30min)缓存，并非实时数据。不传 begin/end 则返回全部缓存数据。"
-        "快速查看最新状态优先用 query_latest。",
-
+        "查询测站水位历史数据（含流速，本地累积缓存）。",
     "query_flow":
-        "查询指定测站的流量数据（从本地缓存读取，基于原始上报数据）。"
-        "参数: station_code(必填,如'00106'), begin(可选), end(可选), count(默认200)。"
-        "返回: {code, msg, data:[{measureTime, virtualFlow, waterFlow, ...}], pageInfo}。"
-        "注意: 数据按上报频率缓存，不传 begin/end 返回全部。流量字段为 virtualFlow。",
-
+        "查询测站流量历史数据（含流速，本地累积缓存）。",
     "query_latest":
-        "查询一个或多个测站最新一条水位数据（从缓存读取）。"
-        "参数: station_codes(逗号分隔,如'00106'或'00106,00107',默认'00106')。"
-        "返回: {stations: {code: {level: {measureTime, waterLevel, ...}}}, updated}。"
-        "这是获取最新水情最直接的方式，无需指定时间范围。",
-
+        "获取测站最新水位/流量/流速/视频地址（实时快照）。",
     "list_stations":
-        "列出系统中已接入的所有测站清单,无需参数。"
-        "返回: {stations: [{code, name, river}]}。",
-
+        "列出全部已接入测站及编码。",
     "compare_stations":
-        "对多个测站的最新水位或流量数据进行统计对比(最大值/最小值/平均值)。"
-        "参数: station_codes(必填,逗号分隔), metric('level'或'flow',默认level)。"
-        "返回: {metric, stations: {code: {count, max, min, avg}}}。"
-        "注意: 从缓存读取各站全部可用数据做统计，无需指定时间范围。",
-
+        "多站水位/流量统计对比（最大/最小/平均）。",
     "query_devices":
-        "查询指定测站下挂载的设备清单及在线状态。"
-        "参数: station_code(必填)。"
-        "返回: {station_code, devices: [{device_code, type, status}]}。",
-
+        "查询测站设备清单及在线状态（从实时数据解析）。",
     "query_video_status":
-        "查询指定测站的视频监控摄像头状态。"
-        "参数: station_code(必填)。"
-        "返回: {station_code, cameras: [{id, status, url}]}。",
-
+        "查询测站摄像头实时状态及视频流播放地址。",
     "list_warnings":
-        "列出当前系统预警信息（从缓存读取最新数据后根据阈值判断）。"
-        "参数: station_code(可选,为空则查00106/00107/00108), level(可选,值:blue/yellow/orange/red)。"
-        "返回: {warnings: [{id, station_code, level, message, time}], total}。",
-
+        "列出当前预警和系统告警（含水位/流量阈值判定）。",
     "generate_disposal":
-        "针对指定测站和预警级别生成应急处置建议。"
-        "参数: station_code(必填), level(预警级别:blue/yellow/orange/red,默认yellow), metric(指标:level水位/flow流量,默认level)。"
-        "返回: {station_code, level, metric, suggestions: [措施列表], generated_at}。",
-
+        "根据预警级别生成分级处置建议。",
     "update_warning_standard":
-        "修改预警标准阈值,修改后立即生效。"
-        "参数: category(必填,level水位/flow流量/rate_of_change变化率), level(必填,blue/yellow/orange/red), value(必填,新阈值)。"
-        "示例: category='level', level='yellow', value=35.0 表示将黄色水位预警阈值设为35.0m。",
-
+        "修改预警阈值，立即生效。",
     "run_forecast":
-        "基于缓存中的历史流量数据运行 Chronos 时序预测模型。自动从缓存拉数据、预处理（等间隔对齐、空缺值插值）。"
-        "参数: station_code(必填), prediction_length(预测步长,默认72), target(默认'Flow')。"
-        "返回: {station_code, input_count, preprocess: {interval, raw_count, clean_count, gap_info}, result}。"
-        "注意: 无需手动传时间范围，工具自动读取缓存中的全部可用数据。",
-
+        "Chronos-2 时序预测模型，自动预处理空缺值。",
     "analyze_trend":
-        "对指定测站的水位或流量数据进行线性趋势分析(最小二乘法)。"
-        "参数: station_code(必填), metric('level'或'flow',默认level), days(回溯天数,默认7)。"
-        "返回: {station_code, metric, count, slope, trend('up'/'down'/'stable'), latest}。",
-
+        "水位/流量线性趋势分析（最小二乘法）。",
     "generate_report":
-        "调用报告脚本生成水文报告(Word文档),保存到 reports 目录。"
-        "参数: report_type('daily'/'weekly'/'monthly',默认daily), station_code(必填), date(可选,格式YYYY-MM-DD,默认昨天)。"
-        "返回: {path, filename, size, summary}。",
-
+        "生成 Word 水文报告（日报/周报/月报）。",
     "query_reports":
-        "列出已生成的所有报告文件,无需参数。"
-        "返回: {reports: [{filename, path, size, modified}]}。",
-
+        "列出已生成的报告文件列表。",
     "Glob":
-        "按glob模式搜索文件。"
-        "参数: pattern(必填,如'**/*.py'), path(搜索根目录,默认'.')。"
-        "返回: {matches: [路径列表], count}。",
-
+        "按文件名模式搜索项目文件。",
     "Grep":
-        "按正则表达式搜索文件内容。"
-        "参数: pattern(必填,正则表达式), path(搜索根目录,默认'.'), glob(文件过滤,默认'*')。"
-        "返回: {matches: [{file, line, text}], count}。",
-
+        "按正则表达式搜索文件内容。",
     "CreateScheduledTask":
-        "创建定时任务。"
-        "参数: task_type(必填，支持以下类型), cron(必填，如'0 0 * * *'表示每天0点), params(可选)。"
-        "agent_daily_report: 采集全站水位/流量/预警数据，LLM整理为完整日报，存为 daily_{date}.txt。"
-        "agent_weekly_report: 读取最近7天日报，LLM汇总为周报，存为 weekly_{start}_{end}.txt。"
-        "返回: {task_id, task_type, cron}。",
-
+        "创建定时任务（日报/周报/系统巡检）。",
     "ListScheduledTasks":
-        "列出所有已创建的定时任务,无需参数。"
-        "返回: {tasks: [{task_id, task_type, params, next_run_time, trigger}]}。",
-
+        "列出所有定时任务。",
     "CancelScheduledTask":
-        "取消指定ID的定时任务。"
-        "参数: task_id(必填)。"
-        "返回: {success: bool, task_id}。",
-
+        "取消指定定时任务。",
     "diagnose_system":
-        "全系统诊断：检查 00106/00107/00108 三个站点的缓存状态、数据时效、缺测情况，判断是单站故障还是全局故障。"
-        "无需参数。"
-        "返回: {diagnosis: global_failure/partial_failure/degraded/healthy, conclusion: 人可读的诊断结论, stations: [{station_code, level_records, flow_records, last_data_time, data_age_hours, recent_nulls, status}]}。",
-
+        "全系统诊断：检查站点缓存、数据时效、判断故障范围。",
     "retry_failed_reports":
-        "重试生成失败的日报或周报。先调用 diagnose_system 确认缓存数据可用后再重试。"
-        "参数: report_type(必填,'daily'或'weekly'), date(可选,日报默认昨天,周报自动计算当周范围)。"
-        "返回: {success: bool, report_type, message, error}。"
-        "注意: 重试会自动写入 reports 目录，与定时任务使用的同一套生成逻辑。",
+        "重试失败的报告生成。",
+    "send_notification":
+        "向钉钉或企业微信推送一条通知/告警消息（支持加签）。",
+    "list_active_alerts":
+        "列出当前未解除的值守告警事件。",
+    "acknowledge_alert":
+        "确认一条告警（表示已收到并正在处理）。",
+    "resolve_alert":
+        "解除一条告警并记录处置结果。",
 }

@@ -8,15 +8,18 @@
 
 .tile {
   position: relative;
+  z-index: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(255,255,255,.2);
   border-radius: 16px;
   padding: 10px 14px;
-  background: rgba(255,255,255,.64);
-  box-shadow: var(--shadow-soft);
+  background: rgba(255,255,255,.35);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 24px rgba(0,0,0,.06);
   overflow: hidden;
 }
 
@@ -29,6 +32,7 @@
   height: 130px;
   border-radius: 50%;
   background: rgba(200,111,76,.08);
+  pointer-events: none;
 }
 
 .tile.river::after { background: rgba(109,146,159,.11); }
@@ -88,17 +92,24 @@
 }
 
 .video-panel .panel-body { padding: 0; }
+.video-panel { background: transparent; box-shadow: none; }
+
+.map-panel { background: transparent !important; border-color: transparent !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; z-index: -1 !important; pointer-events: none; }
+.map-panel .panel-body { padding: 0; }
 
 .panel {
   position: relative;
+  z-index: 1;
   min-width: 0;
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  border: 1px solid var(--line);
+  border: 1px solid rgba(255,255,255,.18);
   border-radius: var(--radius-xl);
-  background: rgba(255,255,255,.64);
-  box-shadow: var(--shadow-soft);
+  background: rgba(255,255,255,.38);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 8px 32px rgba(0,0,0,.08);
   overflow: hidden;
 }
 
@@ -106,11 +117,12 @@
   height: 38px;
   min-height: 0;
   padding: 0 14px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid rgba(255,255,255,.15);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  background: rgba(255,255,255,.3);
 }
 
 .panel-head h2 {
@@ -121,7 +133,7 @@
 }
 
 .panel-head span { color: var(--muted); font-size: 11px; font-weight: 400; }
-.panel-body { min-height: 0; overflow: hidden; padding: 10px; }
+.panel-body { min-height: 0; overflow: hidden; padding: 10px; background: transparent; }
 
 .map-panel .panel-body { padding: 0; }
 
@@ -246,10 +258,11 @@
 
 /* ===== Warning / Risk List ===== */
 .risk-list { display: grid; gap: 6px; align-content: start; }
-.risk-item { border: 1px solid rgba(37,33,28,.1); border-radius: 14px; padding: 8px 10px; background: rgba(246,246,248,.72); }
+.risk-item { border: 1px solid rgba(37,33,28,.08); border-radius: 14px; padding: 8px 10px; background: rgba(255,255,255,.25); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 .risk-row { display: flex; justify-content: space-between; margin-bottom: 3px; gap: 10px; }
 .risk-row b { font-size: 12px; }
-.badge { border-radius: 999px; padding: 3px 6px; font-size: 10px; font-weight: 700; color: var(--clay-deep); background: rgba(200,111,76,.12); }
+.badge { border-radius: 999px; padding: 3px 6px; font-size: 10px; font-weight: 700; color: var(--ok); background: rgba(104,119,100,.13); }
+.badge.danger { color: var(--clay); background: rgba(200,111,76,.15); }
 .badge.warn { color: #80601f; background: rgba(201,154,66,.15); }
 .badge.ok { color: var(--ok); background: rgba(104,119,100,.13); }
 .risk-item p { margin: 0; color: var(--ink-2); font-size: 11px; line-height: 1.4; }
@@ -272,7 +285,7 @@
   height: 100%; min-height: 0;
   border: 1px solid rgba(37,33,28,.08);
   border-radius: 14px;
-  background: rgba(246,246,248,.78);
+  background: transparent;
   overflow: hidden;
 }
 
@@ -325,43 +338,52 @@
   min-height: 0;
   border: 1px solid rgba(37,33,28,.1);
   border-radius: 14px; overflow: hidden;
-  background:
-    linear-gradient(18deg, transparent 48%, rgba(109,146,159,.16) 49%, transparent 52%),
-    radial-gradient(circle at 56% 48%, rgba(109,146,159,.18), transparent 12rem),
-    #e3e5e8;
+  background: #000;
   cursor: pointer;
 }
 
-.video-card::before {
-  content: "";
-  position: absolute; left: -12%; top: 53%;
-  width: 124%; height: 22%;
-  border-radius: 50%; transform: rotate(-6deg);
-  background: linear-gradient(90deg, transparent, rgba(109,146,159,.45), rgba(104,119,100,.23), transparent);
-  filter: blur(.5px);
+.video-player {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+  border-radius: 14px;
 }
 
-.video-card::after {
-  content: "";
-  position: absolute; inset: 0;
-  background: repeating-linear-gradient(0deg, transparent 0 6px, rgba(255,255,255,.26) 7px 8px);
-  opacity: .4;
+.video-placeholder {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted, #999);
+  font-size: 0.9em;
+  background: #1a1a1a;
+  border-radius: 14px;
 }
 
 .video-meta {
-  position: absolute; z-index: 1; inset: 12px;
-  display: flex; flex-direction: column; justify-content: space-between;
-  color: var(--ink);
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  z-index: 2;
+  padding: 6px 10px;
+  background: rgba(0,0,0,.55);
+  color: #fff;
+  font-size: .75em;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  backdrop-filter: blur(4px);
 }
 
-.video-meta b {
-  align-self: flex-start;
-  border-radius: 999px; padding: 4px 7px;
-  color: var(--white); background: rgba(37,33,28,.78);
-  font-size: 10px;
-}
-
-.video-meta span { color: var(--ink-2); font-size: 11px; }
+.video-meta b { color: #fff; font-size: inherit; }
+.video-meta span { opacity: .75; font-size: inherit; }
 
 /* ===== Agent Feed ===== */
 .agent-feed { display: grid; grid-template-rows: 1fr auto; gap: 12px; min-height: 374px; }
@@ -511,6 +533,7 @@
 .stage-body .forecast-chart { height: 360px; }
 .stage-body .risk-list { max-width: 800px; margin: 0 auto; }
 .stage-body .video-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.stage-body .video-player-large { width: 100%; max-height: 70vh; background: #000; }
 .stage-body .agent-feed { max-width: 860px; margin: 0 auto; height: calc(100% - 44px); }
 .stage-body .messages { max-height: none; }
 

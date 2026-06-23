@@ -1,7 +1,7 @@
 <template>
   <Topbar
     title="流域态势"
-    subtitle="融合水位、流量、雨量雷达、视频巡检与模型预报。"
+    subtitle="融合水位、流量、视频巡检与模型预报。"
     action-label="智能研判"
     @primary-action="showAgentModal = true"
   />
@@ -30,40 +30,19 @@
 
     <section class="middle-grid">
       <article class="panel video-panel">
-        <div class="panel-head"><h2>视频巡检</h2><span>关键断面</span></div>
+        <div class="panel-head"><h2>视频巡检</h2><span>最近两次快照</span></div>
         <div class="panel-body">
           <div class="video-grid">
-            <div class="video-card" v-for="v in videoFeeds" :key="v.cam||v.id" @click="openStage(v.title, 'video')">
-              <div class="video-meta"><b>{{ v.cam }}</b><span>{{ v.label }}</span></div>
+            <div class="video-card" v-for="(v, i) in displaySnapshots" :key="v.time || i" @click="openStage(v.label, 'video', v.live_address)">
+              <video v-if="v.live_address" :ref="el => setVideoRef(i, el)" muted autoplay playsinline class="video-player"></video>
+              <div v-else class="video-placeholder">无视频信号</div>
+              <div v-if="v.label" class="video-meta"><span>{{ v.label }}</span></div>
             </div>
           </div>
         </div>
       </article>
 
-      <article class="panel map-panel">
-        <div class="panel-head"><h2>监测设备分布与流域态势</h2><span>定期刷新</span></div>
-        <div class="panel-body">
-          <div class="map-wrap">
-            <svg viewBox="0 0 900 560" aria-hidden="true">
-              <path class="basin" d="M170 92 L312 56 L484 82 L678 128 L782 252 L730 410 L548 492 L356 470 L160 390 L104 224 Z" />
-              <path class="basin" opacity=".65" d="M254 158 L388 126 L542 152 L658 238 L612 364 L480 414 L334 396 L214 314 Z" />
-              <path class="river-main" d="M224 118 C254 182 334 190 394 232 C466 282 436 336 510 382 C576 424 580 456 558 500" />
-              <path class="river-main" style="stroke-width:11; opacity:.55" d="M138 312 C248 284 330 308 396 356 C458 400 532 382 646 322 C706 290 754 302 806 340" />
-              <path class="river-secondary" d="M244 126 C182 194 184 278 222 366" />
-              <path class="river-secondary" d="M620 146 C574 220 588 288 676 388" />
-            </svg>
-            <div class="map-layers">
-              <button :class="['layer-btn', { active: mapLayer === 'flow' }]" @click="mapLayer = 'flow'">流域态势</button>
-              <button :class="['layer-btn', { active: mapLayer === 'risk' }]" @click="mapLayer = 'risk'">风险热力</button>
-              <button :class="['layer-btn', { active: mapLayer === 'links' }]" @click="mapLayer = 'links'">设备链路</button>
-              <button :class="['layer-btn', { active: mapLayer === 'plan' }]" @click="mapLayer = 'plan'">调度推演</button>
-            </div>
-            <button v-for="s in stations" :key="s.code" :class="['station', statusClass(s)]" :style="{ left: s.x + '%', top: s.y + '%' }" :title="s.name">
-              <span class="station-label">{{ s.name }}</span>
-            </button>
-          </div>
-        </div>
-      </article>
+      <article class="panel map-panel" />
 
       <article class="panel">
         <div class="panel-head"><h2>预警与告警</h2><span>共 {{ displayWarnings.length }} 条</span></div>
@@ -96,10 +75,14 @@
     </section>
 
     <Teleport to="body">
-      <div v-if="stageVisible" class="stage-modal" @click.self="stageVisible = false">
+      <div v-if="stageVisible" class="stage-modal" @click.self="closeStage">
         <div class="stage-card">
-          <div class="stage-head"><h2>{{ stageTitle }}</h2><button class="stage-close" @click="stageVisible = false">关闭</button></div>
-          <div class="stage-body"><p style="color:var(--muted);text-align:center;padding:60px 0;">{{ stageTitle }} — 全屏详情（数据接入后展示完整内容）</p></div>
+          <div class="stage-head"><h2>{{ stageTitle }}</h2><button class="stage-close" @click="closeStage">关闭</button></div>
+          <div v-if="stageVideoUrl" class="stage-body" style="padding:0; background:#000; display:flex; align-items:center; justify-content:center; min-height:360px;">
+            <video :ref="el => { if (el) stageVideoEl = el }" muted autoplay playsinline controls
+              style="width:100%; max-height:70vh; background:#000;"></video>
+          </div>
+          <div v-else class="stage-body"><p style="color:var(--muted);text-align:center;padding:60px 0;">{{ stageTitle }} — 全屏详情（数据接入后展示完整内容）</p></div>
         </div>
       </div>
 
@@ -116,13 +99,60 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, nextTick, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick, computed, watch } from 'vue'
+import flvjs from 'flv.js'
 import Topbar from '../components/Topbar.vue'
 import TrendChart from '../components/TrendChart.vue'
 import AgentChatPanel from '../components/AgentChatPanel.vue'
 import { api } from '../api'
 
 const overviewAgentSid = 'overview-agent-modal'
+
+const videoPlayers = []
+const videoRefs = {}
+const videoSnapshots = ref([])
+
+const displaySnapshots = computed(() => {
+  const snaps = videoSnapshots.value.slice(0, 2)
+  while (snaps.length < 2) {
+    snaps.push({ time: '', label: '等待数据...', live_address: '', status: 'offline' })
+  }
+  return snaps
+})
+
+function setVideoRef(index, el) {
+  if (el) videoRefs[index] = el
+}
+
+function destroyPlayers() {
+  videoPlayers.forEach(p => { try { p.destroy() } catch(e) {} })
+  videoPlayers.length = 0
+}
+
+function initPlayers() {
+  destroyPlayers()
+  nextTick(() => {
+    displaySnapshots.value.forEach((v, i) => {
+      const el = videoRefs[i]
+      if (!el || !v.live_address) return
+      try {
+        const player = flvjs.createPlayer({
+          type: 'flv',
+          url: v.live_address,
+          isLive: true,
+        })
+        player.attachMediaElement(el)
+        player.load()
+        player.play().catch(() => {})
+        videoPlayers.push(player)
+      } catch (e) {
+        console.warn('flv player init failed:', e)
+      }
+    })
+  })
+}
+
+watch(displaySnapshots, () => initPlayers(), { deep: true })
 
 const waterLevel = ref('—')
 const waterFlow = ref('—')
@@ -136,11 +166,13 @@ const forecastPeak = ref('—')
 const forecastPeakTime = ref('—')
 const historyMaxFlow = ref('—')
 const historyAvgFlow = ref('—')
-const videoFeeds = ref([])
 const deviceCount = ref('—')
 const mapLayer = ref('flow')
 const stageVisible = ref(false)
 const stageTitle = ref('')
+const stageVideoUrl = ref('')
+const stageVideoEl = ref(null)
+const stagePlayer = ref(null)
 const showAgentModal = ref(false)
 
 const trendHistory = ref([])
@@ -164,7 +196,7 @@ const displayWarnings = computed(() => {
 })
 
 function badgeClass(w) {
-  const m = { '红色': 'danger', '橙色': 'warn', '黄色': 'warn', '蓝色预警': 'ok', '提示': 'ok' }
+  const m = { '红色': 'danger', '橙色': 'warn', '黄色': 'warn', '蓝色预警': 'ok', '提示': 'ok', '正常': 'ok' }
   return m[w.level] || ''
 }
 
@@ -178,18 +210,31 @@ async function refreshData() {
   console.log('[overview] refreshData start')
   try {
     // 并行拉取水位数据和预警数据
-    console.log('[overview] fetching flow-raw + warnings')
-    const [flowData, warnData, chartData, deviceData] = await Promise.all([
+    console.log('[overview] fetching flow-raw + warnings + video')
+    const [flowData, warnData, chartData, deviceData, snapData] = await Promise.all([
       api.getFlowRaw('00106', 'FD000489923695'),
-      api.getWarnings('00106,00107,00108').catch(() => ({ warnings: [], total: 0 })),
+      api.getWarnings('00106').catch(() => ({ warnings: [], total: 0 })),
       api.getAlignedChart('00106', 'virtualFlow').catch(() => ({ history: [], forecast: [] })),
-      api.getDeviceStats('00106,00107,00108').catch(() => ({ total: 0, online: 0 })),
+      api.getDeviceStats('00106').catch(() => ({ total: 0, online: 0 })),
+      api.getVideoSnapshots('00106', 10).catch(() => ({ snapshots: [], total: 0 })),
     ])
     console.log('[overview] flowData', flowData)
     console.log('[overview] warnData', warnData)
 
     // 更新预警与告警
     deviceCount.value = deviceData.online ? String(deviceData.online) : '—'
+
+    // 更新视频巡检 — 取最近两次快照，附时间标签
+    const snaps = snapData?.snapshots || []
+    videoSnapshots.value = snaps.map(s => {
+      const t = s.time ? new Date(s.time.replace(' ', 'T')) : null
+      return {
+        time: s.time,
+        label: t ? `${t.getMonth()+1}/${t.getDate()} ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}` : '',
+        live_address: s.live_address,
+        status: s.status,
+      }
+    })
 
     pendingWarnings.value = warnData.total || '0'
     const allWarnings = [...(warnData.warnings || []), ...(warnData.alerts || [])]
@@ -203,8 +248,9 @@ async function refreshData() {
 
     const items = flowData?.data || []
     if (items.length > 0) {
-      const latest = items[0]
-      const level = latest.waterLevel
+      // 从最新记录中找第一个有水位/流量值的条目
+      const latestWL = items.find(i => i.waterLevel != null)
+      const level = latestWL?.waterLevel
       if (level !== null && level !== undefined) {
         waterLevel.value = level.toFixed(2)
         const dist = WARNING_LEVEL - level
@@ -216,7 +262,8 @@ async function refreshData() {
         modelConfidence.value = '—'
       }
 
-      const wf = latest.virtualFlow
+      const latestFlow = items.find(i => i.virtualFlow != null || i.waterFlow != null)
+      const wf = latestFlow?.virtualFlow ?? latestFlow?.waterFlow
       if (wf !== null && wf !== undefined) {
         waterFlow.value = wf.toFixed(0)
         flowChangeNote.value = '已更新'
@@ -225,7 +272,7 @@ async function refreshData() {
         flowChangeNote.value = '该站无流量数据'
       }
 
-      // 使用 aligned 层历史数据
+      // 使用 aligned 层数据：实测 + Chronos-2 协变量预报
       trendHistory.value = chartData.history || []
       if (trendHistory.value.length) {
         const flowVals = trendHistory.value.map(d => d.y).filter(v => typeof v === 'number')
@@ -233,28 +280,14 @@ async function refreshData() {
         historyAvgFlow.value = flowVals.length ? Math.round(flowVals.reduce((a, b) => a + b, 0) / flowVals.length).toLocaleString() : '—'
       }
 
-      // 运行预报模型
-      try {
-        const fc = await api.runForecast('00106', 12, 'univariate', 72)
-        const preds = fc.result?.predictions || fc.result?.forecast || fc.result?.series || []
-        if (preds.length) {
-          const lastH = trendHistory.value[trendHistory.value.length - 1]
-          const stepMs = 3600000
-          trendForecast.value = preds.map((v, i) => {
-            const t = new Date((lastH?.time || Date.now()) + (i + 1) * stepMs)
-            return { time: t.getTime(), t: String(t.getDate()).padStart(2,'0') + '日' + String(t.getHours()).padStart(2,'0') + '时', y: typeof v === 'number' ? v : (v.Flow || v.value || 0), source: 'forecast' }
-          })
-        } else {
-          trendForecast.value = chartData.forecast || []
-        }
-      } catch {
-        trendForecast.value = chartData.forecast || []
-      }
+      // 预报数据直接取自 aligned 层（Chronos-2 协变量已运行）
+      trendForecast.value = chartData.forecast || []
       if (trendForecast.value.length) {
         const peak = Math.max(...trendForecast.value.map(d => d.y).filter(v => typeof v === 'number'))
         const peakVal = peak ? peak.toFixed(0) : null
         forecastPeak.value = peakVal || '—'
-        forecastPeakTime.value = trendForecast.value.find(d => d.y === peak)?.t || '—'      }
+        forecastPeakTime.value = trendForecast.value.find(d => d.y === peak)?.t || '—'
+      }
       computeModelConfidence()
 
       saveCache()
@@ -323,7 +356,7 @@ onMounted(() => {
   refreshData()
   pollTimer = setInterval(refreshData, 60000)
 })
-onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
+onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); destroyPlayers(); closeStage() })
 
 function computeModelConfidence() {
   const vals = trendForecast.value.map(d => d.y).filter(v => typeof v === 'number' && !isNaN(v))
@@ -343,7 +376,31 @@ function computeModelConfidence() {
 
 function statusClass(s) { return s.status === 'warn' ? 'warn' : s.status === 'danger' ? 'danger' : '' }
 
-function openStage(title, type) { stageTitle.value = title; stageVisible.value = true }
+function openStage(title, type, videoUrl) {
+  stageTitle.value = title
+  stageVideoUrl.value = videoUrl || ''
+  stageVisible.value = true
+  if (videoUrl) {
+    nextTick(() => {
+      if (stagePlayer.value) { try { stagePlayer.value.destroy() } catch(e) {} }
+      const el = stageVideoEl.value
+      if (!el) return
+      try {
+        const player = flvjs.createPlayer({ type: 'flv', url: videoUrl, isLive: true })
+        player.attachMediaElement(el)
+        player.load()
+        player.play().catch(() => {})
+        stagePlayer.value = player
+      } catch (e) { console.warn('stage flv init failed:', e) }
+    })
+  }
+}
+
+function closeStage() {
+  if (stagePlayer.value) { try { stagePlayer.value.destroy() } catch(e) {}; stagePlayer.value = null }
+  stageVisible.value = false
+  stageVideoUrl.value = ''
+}
 </script>
 
 <style scoped>

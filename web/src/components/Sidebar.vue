@@ -10,6 +10,7 @@
       <router-link to="/"><span>流域总览</span><small>概览</small></router-link>
       <router-link to="/stations"><span>监测站点</span><small>{{ stationCount }}</small></router-link>
       <router-link to="/warnings"><span>预警处置</span><small>{{ warningCount }}</small></router-link>
+      <router-link to="/alerts"><span>告警中心</span><small>{{ alertCount }}</small></router-link>
       <router-link to="/forecast"><span>模型预报</span><small>AI</small></router-link>
       <router-link to="/devices"><span>视频巡检</span><small>{{ videoCount }}</small></router-link>
       <router-link to="/reports"><span>日报归档</span><small>{{ reportCount }}</small></router-link>
@@ -29,21 +30,24 @@ import { ref, onMounted } from 'vue'
 import { api } from '../api'
 
 const warningCount = ref('—')
+const alertCount = ref('—')
 const videoCount = ref('—')
 const stationCount = ref('—')
 const reportCount = ref('—')
 
 async function loadBadges() {
   try {
-    const [warnData, deviceData, reportData] = await Promise.all([
-      api.getWarnings('00106,00107,00108').catch(() => ({ total: 0 })),
-      api.getDeviceStats('00106,00107,00108').catch(() => ({ total: 0 })),
+    const [warnData, alertData, deviceData, reportData] = await Promise.all([
+      api.getWarnings('00106').catch(() => ({ warning_count: 0, alert_count: 0 })),
+      api.getActiveAlerts().catch(() => ({ alerts: [] })),
+      api.getDeviceStats('00106').catch(() => ({ total: 0, online: 0 })),
       api.listReports().catch(() => ({ total: 0 })),
     ])
     const wc = (warnData.warning_count || 0) + (warnData.alert_count || 0)
     warningCount.value = wc > 0 ? String(wc) : '—'
-    stationCount.value = deviceData.total ? String(deviceData.total) : '3'
-    videoCount.value = deviceData.online ? String(deviceData.online) : '—'
+    alertCount.value = (alertData.alerts?.length || 0) > 0 ? String(alertData.alerts.length) : '—'
+    stationCount.value = deviceData.total ? String(deviceData.total) : '1'
+    videoCount.value = deviceData.online != null ? String(deviceData.online) : '—'
     reportCount.value = reportData.total ? String(reportData.total) : '—'
   } catch { /* offline */ }
 }

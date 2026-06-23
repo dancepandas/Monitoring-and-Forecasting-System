@@ -2,9 +2,9 @@
   --paper: #f5f5f7;
   --paper-soft: #fbfbfd;
   --paper-deep: #e8e8ed;
-  --ink: #1d1d1f;
-  --ink-2: #515154;
-  --muted: #86868b;
+  --ink: #000;
+  --ink-2: #000;
+  --muted: #000;
   --line: rgba(29, 29, 31, .10);
   --line-strong: rgba(29, 29, 31, .18);
   --clay: #b96b55;

@@ -67,7 +67,7 @@ DEFAULT_STANDARDS = {
             "category": "系统",
             "level": "提示",
             "trigger": "最近 10 条数据中连续 3 条以上 virtualFlow 或 waterLevel 为 null",
-            "message_template": "测站 {station_code} 最近数据存在连续缺测（共 {missing_count} 条）。可能原因：传感器瞬时故障、信号干扰或 ADCP 测量异常。建议现场检查传感器状态，必要时重启设备。如持续缺测，请联系管理员（管理员：{admin_contact}）。",
+            "message_template": "测站 {station_code} 最近数据存在连续缺测（共 {missing_count} 条）。可能原因：传感器瞬时故障、信号干扰或 AiFlow 测量异常。建议现场检查传感器状态，必要时重启设备。如持续缺测，请联系管理员（管理员：{admin_contact}）。",
         },
         "data_spike": {
             "name": "数据异常跳变",
@@ -122,6 +122,9 @@ DEFAULT_STANDARDS = {
 
     # ── 管理员联系方式 ──
     "admin_contact": "系统管理员（值班电话：请在此处填写实际联系方式）",
+    "wecom_webhook": "",
+    "dingtalk_webhook": "",
+    "dingtalk_secret": "",
     "description": "默认预警标准 — 适用于汉江流域中游测站",
 }
 

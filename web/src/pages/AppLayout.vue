@@ -1,5 +1,6 @@
 <template>
   <div class="app-layout">
+    <CesiumMap />
     <Sidebar />
     <main class="workspace" :data-page="$route.name">
       <router-view />
@@ -10,6 +11,7 @@
 
 <script setup>
 import { onMounted } from 'vue'
+import CesiumMap from '../components/CesiumMap.vue'
 import Sidebar from '../components/Sidebar.vue'
 import ContextMenu from '../components/ContextMenu.vue'
 

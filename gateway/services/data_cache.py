@@ -153,12 +153,16 @@ async def merge_raw(station_code: str, data_type: str, api_response: dict) -> di
             for field in ("waterLevel", "virtualFlow", "waterFlow", "sectionArea", "waterWidth",
                          "surfaceAverageVelocity", "conversionFlow", "conversionVelocity",
                          "predictFlow", "predictVelocity", "originalValueProp", "waterDeviceCode",
-                         "uploadStatus", "waterLevelType", "dataType"):
+                         "uploadStatus", "waterLevelType", "dataType",
+                         "waterVelocity", "videoUrl", "deviceCode", "programState"):
                 val = it.get(field)
-                try:
-                    rec[field] = round(float(val), 2) if val not in (None, "") else None
-                except (ValueError, TypeError):
-                    rec[field] = None
+                if field in ("videoUrl", "deviceCode"):
+                    rec[field] = str(val) if val else None
+                else:
+                    try:
+                        rec[field] = round(float(val), 2) if val not in (None, "") else None
+                    except (ValueError, TypeError):
+                        rec[field] = None
                 rec[f"{field}_source"] = "measured" if rec[field] is not None else "unknown"
             incoming.append(rec)
 
@@ -236,150 +240,261 @@ def _compute_stats(records: list) -> dict:
     return stats
 
 
-async def _chronos_fill(context_series: list[dict], gap_length: int, target: str,
-                        covariates: list[str] = None) -> list[float]:
-    """用 Chronos 预报填充空缺。返回 float 列表，长度 = gap_length。"""
-    try:
-        from . import chronos_client
-        mode = "multivariate" if covariates else "univariate"
-        series = context_series[-_MAX_CONTEXT:]
-        result = await chronos_client.predict_flow(
-            series, prediction_length=gap_length, target=target,
-            context_length=min(len(series), _MAX_CONTEXT), mode=mode,
-        )
-        if "error" in result:
-            logger.warning(f"Chronos fill failed: {result['error']}, falling back to context avg")
-            vals = [float(s[target]) for s in series if s.get(target) is not None]
-            avg = sum(vals) / len(vals) if vals else 0
-            return [avg] * gap_length
-        preds = result.get("predictions", result.get("forecast", result.get("series", [])))
-        return [float(p) for p in preds[:gap_length]]
-    except Exception as e:
-        logger.warning(f"Chronos fill error: {e}")
-        vals = [float(s[target]) for s in context_series if s.get(target) is not None]
-        avg = sum(vals) / len(vals) if vals else 0
-        return [avg] * gap_length
+
+
+def _interpolate_missing(values: list) -> list:
+    """对列表中的 None 值做线性插值，两端缺失则用最近有效值填充。"""
+    if not values:
+        return values
+    n = len(values)
+    result = list(values)
+    # 找到所有有效值的索引
+    valid_indices = [i for i, v in enumerate(result) if v is not None]
+    if len(valid_indices) < 2:
+        # 不足 2 个有效值，用唯一有效值填充全部
+        fill_val = result[valid_indices[0]] if valid_indices else 0
+        return [fill_val] * n
+    for i in range(n):
+        if result[i] is None:
+            # 找左右最近有效值
+            left_idx, right_idx = None, None
+            for j in range(i - 1, -1, -1):
+                if result[j] is not None:
+                    left_idx = j
+                    break
+            for j in range(i + 1, n):
+                if result[j] is not None:
+                    right_idx = j
+                    break
+            if left_idx is not None and right_idx is not None:
+                # 线性插值
+                ratio = (i - left_idx) / (right_idx - left_idx)
+                result[i] = result[left_idx] + ratio * (result[right_idx] - result[left_idx])
+            elif left_idx is not None:
+                result[i] = result[left_idx]  # 右端缺失，前值填充
+            elif right_idx is not None:
+                result[i] = result[right_idx]  # 左端缺失，后值填充
+    return result
 
 
 async def rebuild_aligned(station_code: str) -> dict:
-    """从 raw.flow_raw 重建 aligned 层：等间隔网格 + Chronos 填充空缺。"""
+    """从 raw.flow_raw 重建 aligned 层（Chronos-2 推理在锁外执行）。
+
+    三阶段：
+    1. 加锁：读取 raw 数据，构建等间隔网格
+    2. 无锁：运行 Chronos-2 预报和空缺填充
+    3. 加锁：回写结果到 aligned 缓存
+    """
+    # ── Phase 1: 加锁读取，构建网格 ──
     async with _lock:
         data = _load_full()
         raw_station = data.get("raw", {}).get(station_code, {})
         flow_raw = raw_station.get("flow_raw", {})
-        records = flow_raw.get("records", [])
+        records = list(flow_raw.get("records", []))  # 浅拷贝
 
         if not records:
             return _ensure_aligned(data, station_code)
 
-        # 1. 检测时间间隔
+        # 1. 检测主导时间间隔
         interval = _detect_interval(records)
 
-        # 2. 找到连续实测段
+        # 2. 按时间排序，建实测映射
+        record_by_dt = {}
         all_times = []
         for r in records:
             dt = _parse_dt(r.get("time", ""))
             if dt:
-                all_times.append(dt)
-        all_times.sort()
-        if len(all_times) < 2:
+                aligned_dt = _snap_to_grid(dt, interval)
+                record_by_dt[aligned_dt] = r
+                all_times.append(aligned_dt)
+        if len(all_times) < 1:
             return _ensure_aligned(data, station_code)
+        all_times.sort()
 
         grid_start = all_times[0]
         grid_end = all_times[-1]
-        total_points = int((grid_end - grid_start).total_seconds() / 60 / interval) + 1
+        total_points = max(1, int((grid_end - grid_start).total_seconds() / 60 / interval)) + 1
 
-        # 3. 建网格 → 对齐实测值
+        # 3. 建等间隔网格 → 映射实测值
         aligned_records = []
-        record_by_time = {}
-        for r in records:
-            dt = _parse_dt(r.get("time", ""))
-            if dt:
-                record_by_time[dt] = r
-
         for i in range(total_points):
             target = grid_start + timedelta(minutes=interval * i)
-            half = timedelta(minutes=interval / 2)
-            # 找最近实测
-            best_dt, best_rec = None, None
-            for dt, rec in record_by_time.items():
-                if abs(dt - target) <= half:
-                    if best_dt is None or abs(dt - target) < abs(best_dt - target):
-                        best_dt, best_rec = dt, rec
+            t_str = target.strftime("%Y-%m-%d %H:%M:%S")
+            best_rec = record_by_dt.get(target)
             if best_rec:
-                rec = {"time": target.strftime("%Y-%m-%d %H:%M:%S")}
-                for field in ("waterLevel", "virtualFlow", "waterFlow", "sectionArea", "waterWidth",
-                             "surfaceAverageVelocity", "conversionFlow"):
+                rec = {"time": t_str}
+                for field in ("waterLevel", "virtualFlow", "waterFlow", "waterVelocity",
+                             "sectionArea", "waterWidth", "surfaceAverageVelocity"):
                     val = best_rec.get(field)
                     rec[field] = round(float(val), 2) if val is not None else None
                     rec[f"{field}_source"] = "measured" if val is not None else "unknown"
                     rec[f"{field}_fill"] = None
                 aligned_records.append(rec)
             else:
-                rec = {"time": target.strftime("%Y-%m-%d %H:%M:%S")}
-                for field in ("waterLevel", "virtualFlow", "waterFlow"):
-                    rec[field] = None
-                    rec[f"{field}_source"] = "unknown"
-                    rec[f"{field}_fill"] = None
-                aligned_records.append(rec)
+                aligned_records.append({
+                    "time": t_str,
+                    "waterLevel": None, "waterLevel_source": "unknown", "waterLevel_fill": None,
+                    "virtualFlow": None, "virtualFlow_source": "unknown", "virtualFlow_fill": None,
+                    "waterFlow": None, "waterFlow_source": "unknown", "waterFlow_fill": None,
+                })
 
-        # 4. 填充所有空缺（尾部和内部）
-        # 找所有连续空缺段
-        gap_runs = []
-        in_gap = False
-        gap_start = -1
-        for i, r in enumerate(aligned_records):
-            is_missing = (r.get("virtualFlow_source") == "unknown" or r.get("virtualFlow") is None)
-            if is_missing and not in_gap:
-                gap_start = i
-                in_gap = True
-            elif not is_missing and in_gap:
-                gap_runs.append((gap_start, i - gap_start))
-                in_gap = False
-        if in_gap:
-            gap_runs.append((gap_start, len(aligned_records) - gap_start))
+    # ── Phase 2: 无锁运行 Chronos-2 ──
+    MIN_POINTS = 10
+    FORECAST_STEPS = 12
+    future_records = []
 
-        for gs, glen in gap_runs:
-            if glen > _MAX_FILL_LENGTH or gs < 2:
-                continue  # 空缺太大或上下文太少，跳过
+    wl_measured = [r for r in aligned_records if r.get("waterLevel_source") == "measured" and r.get("waterLevel") is not None]
+    vf_measured = [r for r in aligned_records if r.get("virtualFlow_source") == "measured" and r.get("virtualFlow") is not None]
+    wl_ok = len(wl_measured) >= MIN_POINTS
+    vf_ok = len(vf_measured) >= MIN_POINTS
 
-            # 找空缺前的连续实测点做上下文
-            ctx_start = max(0, gs - _MAX_CONTEXT)
-            context = []
-            for r in aligned_records[ctx_start:gs]:
-                if r.get("virtualFlow") is not None or r.get("waterLevel") is not None:
-                    ctx = {"Time": r["time"]}
-                    for f in ("waterLevel", "virtualFlow"):
-                        if r.get(f) is not None:
-                            ctx[f] = r[f]
-                    if ctx not in context:
-                        context.append(ctx)
+    if wl_ok or vf_ok:
+        try:
+            from . import chronos_client
 
-            if len(context) < 3:
-                continue
+            # 生成未来时间网格
+            future_start = grid_end + timedelta(minutes=interval)
+            for i in range(FORECAST_STEPS):
+                ft = future_start + timedelta(minutes=interval * i)
+                future_records.append({
+                    "time": ft.strftime("%Y-%m-%d %H:%M:%S"),
+                    "waterLevel": None, "waterLevel_source": "unknown", "waterLevel_fill": None,
+                    "virtualFlow": None, "virtualFlow_source": "unknown", "virtualFlow_fill": None,
+                    "waterFlow": None, "waterFlow_source": "unknown", "waterFlow_fill": None,
+                })
 
-            fill_len = min(glen, _MAX_FILL_LENGTH)
-            # 流量填充（用水位做协变量）
-            flow_preds = await _chronos_fill(context, fill_len, "virtualFlow", covariates=["waterLevel"] if any(c.get("waterLevel") for c in context) else None)
-            # 水位填充（用流量做协变量）
-            wl_preds = await _chronos_fill(context, fill_len, "waterLevel", covariates=["virtualFlow"] if any(c.get("virtualFlow") for c in context) else None)
+            # 构建协变量序列的辅助函数：缺失值用插值填充，避免完全降级
+            def _build_covariates(measured_records, cov_field, cov_name, count):
+                """从实测记录中构建协变量序列，缺失值用插值填充。"""
+                raw_vals = [r.get(cov_field) for r in measured_records[-count:]]
+                if not raw_vals:
+                    return {}, "univariate"
+                # 统计缺失比例
+                none_count = sum(1 for v in raw_vals if v is None)
+                if none_count == 0:
+                    return {cov_name: [float(v) for v in raw_vals]}, "past_covariates"
+                # 缺失 <= 30% 时插值填充；否则降级
+                if none_count / len(raw_vals) <= 0.3:
+                    interp = _interpolate_missing(raw_vals)
+                    if all(v is not None for v in interp):
+                        logger.info("covariate '%s' %d/%d missing, interpolated", cov_name, none_count, len(raw_vals))
+                        return {cov_name: [float(v) for v in interp]}, "past_covariates"
+                return {}, "univariate"
 
-            for j in range(fill_len):
-                idx = gs + j
-                if idx >= len(aligned_records):
-                    break
-                if flow_preds and j < len(flow_preds):
-                    aligned_records[idx]["virtualFlow"] = round(float(flow_preds[j]), 2)
-                    aligned_records[idx]["virtualFlow_source"] = "forecast"
-                    aligned_records[idx]["virtualFlow_fill"] = "chronos"
-                if wl_preds and j < len(wl_preds):
-                    aligned_records[idx]["waterLevel"] = round(float(wl_preds[j]), 2)
-                    aligned_records[idx]["waterLevel_source"] = "forecast"
-                    aligned_records[idx]["waterLevel_fill"] = "chronos"
+            async def _chronos_predict(field, cov_field, cov_name, cov_ok):
+                measured = [r for r in aligned_records if r.get(f"{field}_source") == "measured" and r.get(field) is not None]
+                if len(measured) < MIN_POINTS:
+                    return
+                ctx_count = min(len(measured), 72)
+                ctx_series = []
+                for r in measured[-ctx_count:]:
+                    entry = {"Time": r["time"], field: r.get(field)}
+                    ctx_series.append(entry)
 
-        # 5. 计算统计 + 截断 + 保存
+                past_cv, mode = _build_covariates(measured, cov_field, cov_name, ctx_count) if cov_ok else ({}, "univariate")
+
+                try:
+                    result = await chronos_client.predict_flow(
+                        data=ctx_series,
+                        prediction_length=FORECAST_STEPS,
+                        target=field,
+                        context_length=ctx_count,
+                        mode=mode,
+                        past_covariates=past_cv or None,
+                    )
+                except Exception:
+                    return
+                if result and result.get("predictions"):
+                    for j, v in enumerate(result["predictions"]):
+                        if j < FORECAST_STEPS:
+                            future_records[j][field] = round(float(v), 2)
+                            future_records[j][f"{field}_source"] = "future_forecast"
+                            future_records[j][f"{field}_fill"] = "chronos"
+
+            if wl_ok:
+                await _chronos_predict("waterLevel", "virtualFlow", "virtualFlow", vf_ok)
+            if vf_ok:
+                await _chronos_predict("virtualFlow", "waterLevel", "waterLevel", wl_ok)
+
+            # 内部空缺填充（同样使用插值协变量）
+            async def _fill_gaps(field, cov_field, cov_name, cov_ok):
+                max_fill = _MAX_FILL_LENGTH
+                gap_start = -1
+                fill_tasks = []
+                for i, r in enumerate(aligned_records):
+                    src = r.get(f"{field}_source", "")
+                    val = r.get(field)
+                    if src in ("unknown", None) and val is None:
+                        if gap_start < 0:
+                            gap_start = i
+                    elif gap_start >= 0:
+                        glen = min(i - gap_start, max_fill)
+                        fill_tasks.append((gap_start, glen))
+                        gap_start = -1
+                if gap_start >= 0:
+                    glen = min(len(aligned_records) - gap_start, max_fill)
+                    fill_tasks.append((gap_start, glen))
+
+                for gs, glen in fill_tasks:
+                    if glen <= 0:
+                        continue
+                    ctx = aligned_records[max(0, gs - 72):gs]
+                    ctx_series = []
+                    ctx_cov_vals = []
+                    for r in ctx:
+                        v = r.get(field)
+                        if v is not None:
+                            entry = {"Time": r["time"], field: v}
+                            ctx_series.append(entry)
+                            if cov_ok and cov_field:
+                                ctx_cov_vals.append(r.get(cov_field))
+                    if len(ctx_series) < 5:
+                        continue
+
+                    past_cv, mode = {}, "univariate"
+                    if cov_ok and cov_field and ctx_cov_vals:
+                        none_count = sum(1 for v in ctx_cov_vals if v is None)
+                        if none_count == 0:
+                            past_cv = {cov_name: [float(v) for v in ctx_cov_vals]}
+                            mode = "past_covariates"
+                        elif none_count / len(ctx_cov_vals) <= 0.3:
+                            interp = _interpolate_missing(ctx_cov_vals)
+                            if all(v is not None for v in interp):
+                                past_cv = {cov_name: [float(v) for v in interp]}
+                                mode = "past_covariates"
+
+                    try:
+                        result = await chronos_client.predict_flow(
+                            data=ctx_series, prediction_length=glen,
+                            target=field, context_length=min(len(ctx_series), 72),
+                            mode=mode, past_covariates=past_cv or None,
+                        )
+                    except Exception:
+                        result = None
+                    if result and result.get("predictions"):
+                        for j, v in enumerate(result["predictions"]):
+                            idx = gs + j
+                            if idx >= len(aligned_records):
+                                break
+                            aligned_records[idx][field] = round(float(v), 2)
+                            aligned_records[idx][f"{field}_source"] = "forecast"
+                            aligned_records[idx][f"{field}_fill"] = "chronos"
+
+            if wl_ok:
+                await _fill_gaps("waterLevel", "virtualFlow", "virtualFlow", vf_ok)
+            if vf_ok:
+                await _fill_gaps("virtualFlow", "waterLevel", "waterLevel", wl_ok)
+        except ImportError:
+            pass
+
+    # ── Phase 3: 加锁回写 ──
+    async with _lock:
+        data = _load_full()
+        aligned_records.extend(future_records)
         max_records = _DEFAULT_MAX_ALIGNED
-        aligned_records = aligned_records[-max_records:]
+        # 确保未来预报不被截断：先截断历史头，保留尾部（含未来预报）
+        if len(aligned_records) > max_records:
+            aligned_records = aligned_records[-max_records:]
 
         entry = _ensure_aligned(data, station_code)
         entry["records"] = aligned_records
@@ -393,6 +508,16 @@ async def rebuild_aligned(station_code: str) -> dict:
         entry["stats"] = _compute_stats(aligned_records)
         _save_full(data)
         return entry
+
+
+def _snap_to_grid(dt: datetime, interval_min: int) -> datetime:
+    """将时间对齐到等间隔网格点（向下取整），正确处理小时进位。"""
+    base = dt.replace(second=0, microsecond=0)
+    total_minutes = base.hour * 60 + base.minute
+    snapped = (total_minutes // interval_min) * interval_min
+    hour = snapped // 60
+    minute = snapped % 60
+    return base.replace(hour=hour, minute=minute)
 
 
 # ── 读路径 ──
@@ -426,11 +551,11 @@ async def get_aligned_chronos(station_code: str, mode: str = "univariate",
     if not entry:
         return []
     records = entry.get("records", [])
-    # 只取 virtualFlow 有值的点（实测或填充均可）
+    # 只取 virtualFlow 有实测值的点（过滤 Chronos 填充值，避免级联预报误差）
     series = []
     for r in reversed(records):  # 从旧到新
         vf = r.get("virtualFlow")
-        if vf is not None:
+        if vf is not None and r.get("virtualFlow_source") == "measured":
             series.append({"Time": r["time"], "Flow": round(float(vf), 2)})
     return series[-context_length:] if len(series) > context_length else series
 
@@ -458,8 +583,11 @@ async def get_aligned_chart(station_code: str, field: str = "virtualFlow",
         }
         if point["source"] == "measured":
             history.append(point)
-        else:
+        elif point["source"] == "future_forecast":
             forecast.append(point)
+        else:
+            # gap-fill forecast: part of historical record
+            history.append(point)
     return {
         "history": history,
         "forecast": forecast,
@@ -524,3 +652,47 @@ async def all_keys() -> list:
             for dtype in types:
                 keys.append(f"aiflow:{dtype}:{station}:{_DEVICE_CODE}")
         return keys
+
+
+# ── 视频快照缓存（独立轻量存储） ──
+
+_VIDEO_SNAPSHOTS_FILE = CACHE_DIR / "video_snapshots.json"
+_video_lock = asyncio.Lock()
+_MAX_VIDEO_SNAPSHOTS = 10
+
+
+async def save_video_snapshot(station_code: str, snapshot: dict) -> list:
+    """保存一条视频快照，保留最近 10 条。返回当前全部快照列表。"""
+    async with _video_lock:
+        snaps = _load_video_snapshots()
+        station_snaps = snaps.get(station_code, [])
+        station_snaps.insert(0, snapshot)
+        station_snaps = station_snaps[:_MAX_VIDEO_SNAPSHOTS]
+        snaps[station_code] = station_snaps
+        _save_video_snapshots(snaps)
+        return station_snaps
+
+
+async def get_video_snapshots(station_code: str, limit: int = 10) -> list:
+    """读取视频快照列表。"""
+    async with _video_lock:
+        snaps = _load_video_snapshots()
+        return snaps.get(station_code, [])[:limit]
+
+
+def _load_video_snapshots() -> dict:
+    if not _VIDEO_SNAPSHOTS_FILE.exists():
+        return {}
+    try:
+        return json.loads(_VIDEO_SNAPSHOTS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_video_snapshots(data: dict):
+    try:
+        tmp = _VIDEO_SNAPSHOTS_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, default=str), encoding="utf-8")
+        tmp.replace(_VIDEO_SNAPSHOTS_FILE)
+    except Exception:
+        pass

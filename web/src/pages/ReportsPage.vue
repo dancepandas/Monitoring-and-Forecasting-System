@@ -273,7 +273,8 @@ onMounted(() => { loadStats() })
 .report-modal {
   width: min(720px, 100%);
   max-height: 80vh;
-  background: #fff;
+  background: rgba(255,255,255,.35);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   border-radius: 18px;
   box-shadow: 0 16px 48px rgba(0,0,0,.15);
   display: flex; flex-direction: column;

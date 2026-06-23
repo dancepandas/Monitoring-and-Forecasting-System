@@ -26,7 +26,7 @@
   </div>
 </template>
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import Topbar from '../components/Topbar.vue'
 import { api } from '../api'
 
@@ -34,16 +34,18 @@ const allItems = ref([])
 const suggestions = ref([])
 const totalCount = ref(0)
 
-const levelOrder = { '红色': 0, '橙色': 1, '黄色': 2, '蓝色预警': 3, '提示': 4, '正常': 5 }
+let pollTimer = null
+
+const levelOrder = { '红色': 0, '橙色': 1, '黄色': 2, '蓝色预警': 3, '预报红色预警': 4, '预报橙色预警': 5, '预报黄色预警': 6, '预报蓝色预警': 7, '提示': 8, '正常': 9 }
 
 function badgeCls(w) {
-  const m = { '红色': 'danger', '橙色': 'warn', '黄色': 'warn', '蓝色预警': 'ok', '提示': 'ok', '正常': 'ok' }
+  const m = { '红色': 'danger', '橙色': 'warn', '黄色': 'warn', '蓝色预警': 'ok', '预报红色预警': 'danger', '预报橙色预警': 'warn', '预报黄色预警': 'warn', '预报蓝色预警': 'ok', '提示': 'ok', '正常': 'ok' }
   return m[w.level] || ''
 }
 
 async function loadWarnings() {
   try {
-    const data = await api.getWarnings('00106,00107,00108')
+    const data = await api.getWarnings('00106')
     const warnings = data.warnings || []
     const alerts = data.alerts || []
     allItems.value = [...warnings, ...alerts].sort((a, b) =>
@@ -78,7 +80,13 @@ async function loadWarnings() {
   }
 }
 
-onMounted(loadWarnings)
+onMounted(() => {
+  loadWarnings()
+  pollTimer = setInterval(loadWarnings, 30000)
+})
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
+})
 </script>
 <style scoped>
 .suggest-list { display: grid; gap: 14px; }

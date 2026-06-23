@@ -229,6 +229,16 @@ function uid() {
   try { return crypto.randomUUID() } catch { return Date.now().toString(36) + Math.random().toString(36).slice(2, 10) }
 }
 
+function stripInternalPrefix(text) {
+  if (!text) return text
+  // 去掉后端/前端注入的 [当前系统时间: ...] 前缀
+  let t = text.replace(/^\[当前系统时间:[^\]]*\]\s*\n*/g, '')
+  // 如果是面板上下文包装，提取真正的用户问题
+  const m = t.match(/用户问题：([\s\S]*?)\n+请根据以上面板数据回答用户问题。/)
+  if (m) return m[1].trim()
+  return t.trim()
+}
+
 const sid = ref(localStorage.getItem('floodmind_sid') || uid())
 localStorage.setItem('floodmind_sid', sid.value)
 
@@ -336,10 +346,10 @@ const quickTasks = [
   {
     id: 'compare',    label: '多站对比',
     desc: '对比三个站点的最新水情',
-    prompt: `对比仙桃站(00106)、城西站(00107)、南桥站(00108)最新水情。
+    prompt: `对比仙桃站(00106)最新水情。
 
-1. 调用 compare_stations(station_codes="00106,00107,00108", metric="level")；
-2. 调用 compare_stations(station_codes="00106,00107,00108", metric="flow")。
+1. 调用 compare_stations(station_codes="00106", metric="level")；
+2. 调用 compare_stations(station_codes="00106", metric="flow")。
 
 工具从缓存读取各站最新可用数据做统计，无需指定时间范围。
 
@@ -522,6 +532,7 @@ async function streamChat(message, aMsg) {
     await readStream(res.body.getReader(), aMsg)
     finishMsg(aMsg)
     await agentApi.saveSession(sid.value).catch(() => {})
+    await loadSessions()  // 刷新会话列表，让新生成的标题生效
   } catch (e) {
     if (e.name === 'AbortError') { addBlock(aMsg, 'error', '已取消'); finishMsg(aMsg); return }
     if (retryCount.value < MAX_RETRIES) {
@@ -731,7 +742,7 @@ async function switchSess(newSid) {
     if (data?.messages) {
       data.messages.forEach(m => {
         if (m.role === 'user') {
-          msgs.push({ id: uid(), role: 'user', content: m.content || '' })
+          msgs.push({ id: uid(), role: 'user', content: stripInternalPrefix(m.content || '') })
         } else if (m.role === 'assistant') {
           msgs.push(reactive({
             id: uid(), role: 'assistant', content: m.content || '',
@@ -790,7 +801,7 @@ onMounted(async () => {
     if (data?.messages?.length) {
       data.messages.forEach(m => {
         if (m.role === 'user') {
-          msgs.push({ id: uid(), role: 'user', content: m.content || '' })
+          msgs.push({ id: uid(), role: 'user', content: stripInternalPrefix(m.content || '') })
         } else if (m.role === 'assistant') {
           msgs.push(reactive({
             id: uid(), role: 'assistant', content: m.content || '',
@@ -811,7 +822,7 @@ onUnmounted(() => { document.removeEventListener('visibilitychange', onVisibilit
 <style scoped>
 /* ── Layout ── */
 .agent-page { min-height:0; height:100%; display:grid; grid-template-columns:1fr 240px; gap:var(--gap,10px); }
-.agent-chat-panel { height:100%; min-height:0; display:block !important; overflow:hidden; border:1px solid var(--line); border-radius:var(--radius-xl); background:rgba(255,255,255,.64); box-shadow:var(--shadow-soft); }
+.agent-chat-panel { height:100%; min-height:0; display:block !important; overflow:hidden; border:1px solid rgba(255,255,255,.18); border-radius:var(--radius-xl); background:rgba(255,255,255,.35); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); box-shadow:0 8px 32px rgba(0,0,0,.08); }
 .agent-chat-panel .chat-body { display:flex; flex-direction:column; height:100%; min-height:0; gap:8px; padding:14px 14px 6px; }
 .agent-chat-panel .panel-head { display:none; }
 
@@ -861,7 +872,7 @@ onUnmounted(() => { document.removeEventListener('visibilitychange', onVisibilit
 .thought-text.live { color:var(--ink); }
 
 /* ── Tool card ── */
-.tool-card { border:1px solid var(--line); border-radius:8px; overflow:hidden; cursor:pointer; background:rgba(255,255,255,.7); transition:all .15s; }
+.tool-card { border:1px solid rgba(255,255,255,.18); border-radius:8px; overflow:hidden; cursor:pointer; background:rgba(255,255,255,.3); backdrop-filter:blur(8px); transition:all .15s; }
 .tool-card:hover { border-color:rgba(37,33,28,.18); }
 .tool-card.running { border-color:rgba(181,139,63,.25); background:rgba(181,139,63,.04); animation:toolPulse 2s ease-in-out infinite; }
 .tool-card.error { border-color:rgba(169,79,67,.2); background:rgba(169,79,67,.03); }
@@ -929,12 +940,12 @@ onUnmounted(() => { document.removeEventListener('visibilitychange', onVisibilit
 
 /* ── Input panel (workspace row 3) ── */
 .input-panel-wrap { min-height:0; display:grid; grid-template-columns:1fr 240px; gap:var(--gap,10px); }
-.input-panel-main { padding:10px 16px; border:1px solid var(--line); border-radius:16px; background:rgba(255,255,255,.72); box-shadow:var(--shadow-soft); display:grid; gap:8px; }
+.input-panel-main { padding:10px 16px; border:1px solid rgba(255,255,255,.18); border-radius:16px; background:rgba(255,255,255,.35); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); box-shadow:0 8px 32px rgba(0,0,0,.08); display:grid; gap:8px; }
 .input-panel-side { /* matches sidebar width */ }
 
 .input-row { display:flex; align-items:flex-end; gap:8px; }
 .upload-btn { flex-shrink:0; min-height:36px; min-width:36px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; }
-.chat-input { flex:1; min-width:0; min-height:38px; max-height:140px; border:1px solid rgba(37,33,28,.12); border-radius:18px; background:rgba(255,255,255,.72); padding:8px 14px; outline:none; color:var(--ink); font-size:13px; resize:none; line-height:1.45; font-family:inherit; }
+.chat-input { flex:1; min-width:0; min-height:38px; max-height:140px; border:1px solid rgba(37,33,28,.12); border-radius:18px; background:rgba(255,255,255,.35); backdrop-filter:blur(8px); padding:8px 14px; outline:none; color:var(--ink); font-size:13px; resize:none; line-height:1.45; font-family:inherit; }
 .chat-input:focus { border-color:var(--clay); }
 .chat-input::placeholder { color:var(--muted); }
 .send-btn { flex-shrink:0; min-height:36px; padding:0 18px; font-size:13px; }
@@ -947,7 +958,7 @@ onUnmounted(() => { document.removeEventListener('visibilitychange', onVisibilit
 
 /* ── Side panel ── */
 .agent-side { min-height:0; height:100%; display:flex; flex-direction:column; gap:var(--gap,10px); overflow:hidden; }
-.side-card { border:1px solid var(--line); border-radius:18px; background:rgba(255,255,255,.5); overflow:hidden; display:flex; flex-direction:column; }
+.side-card { border:1px solid rgba(255,255,255,.18); border-radius:18px; background:rgba(255,255,255,.3); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); overflow:hidden; display:flex; flex-direction:column; }
 .side-card:last-child { flex:1; min-height:0; }
 .side-hd { padding:10px 12px; border-bottom:1px solid var(--line); font-size:12px; font-weight:600; display:flex; align-items:center; justify-content:space-between; }
 .side-count { font-size:10px; color:var(--muted); font-weight:400; }

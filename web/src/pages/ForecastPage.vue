@@ -230,7 +230,8 @@ function buildFallbackHistory() {
 .param-item input {
   height: 34px; padding: 0 10px;
   border: 1px solid var(--line); border-radius: 10px;
-  background: rgba(255,255,255,.72);
+  background: rgba(255,255,255,.35);
+  backdrop-filter: blur(8px);
   font-family: var(--mono); font-size: 13px; outline: none;
 }
 .param-item input:focus { border-color: var(--clay); }
@@ -239,7 +240,8 @@ function buildFallbackHistory() {
   position: relative;
   height: 34px; padding: 0 10px;
   border: 1px solid var(--line); border-radius: 10px;
-  background: rgba(255,255,255,.72);
+  background: rgba(255,255,255,.35);
+  backdrop-filter: blur(8px);
   display: flex; align-items: center; justify-content: space-between;
   cursor: pointer; font-size: 13px; user-select: none;
   gap: 8px;
@@ -250,7 +252,7 @@ function buildFallbackHistory() {
 .dropdown-menu {
   margin: 0; padding: 4px 0; list-style: none; z-index: 9999;
   border: 1px solid var(--line); border-radius: 10px;
-  background: rgba(255,255,255,.96); box-shadow: 0 12px 32px rgba(0,0,0,.1);
+  background: rgba(255,255,255,.4); box-shadow: 0 12px 32px rgba(0,0,0,.1);
   backdrop-filter: blur(12px);
 }
 .dropdown-menu li {
@@ -288,7 +290,7 @@ function buildFallbackHistory() {
   min-height: 120px;
   border: 1px solid rgba(37,33,28,.08);
   border-radius: 14px;
-  background: rgba(246,246,248,.78);
+  background: rgba(255,255,255,.3);
   overflow: hidden;
 }
 .forecast-chart-area .combined-chart svg { display: block; width: 100%; height: 100%; }

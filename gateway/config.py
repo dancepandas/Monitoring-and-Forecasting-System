@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     scheduled_tasks_db: str = "./data/scheduled_tasks.db"
 
     # ── 缓存与采集配置 ──
-    station_codes: str = "00106,00107,00108"
+    station_codes: str = "00106"
     default_device_code: str = "FD000489923695"
     collector_interval: int = 300
     cache_max_raw: int = 2000

@@ -7,7 +7,7 @@ from ..services import data_cache, chronos_client
 
 router = APIRouter(prefix="/api/forecast", tags=["forecast"])
 
-_cache = {}
+_cache = {}  # module-level cache with per-entry TTL check in get_result
 
 
 @router.post("/run")
@@ -22,12 +22,16 @@ async def run_forecast(req: ForecastRequest, user: dict = Depends(get_current_us
         raise HTTPException(status_code=400, detail=f"历史数据不足（仅 {len(series)} 条），至少需要 10 条")
 
     mode = getattr(req, "mode", "univariate") or "univariate"
-    result = await chronos_client.predict_flow(
-        series, req.prediction_length,
-        context_length=min(len(series), getattr(req, "context_length", 72) or 72),
-        mode=mode,
-    )
-    if "error" in result:
+    try:
+        result = await chronos_client.predict_flow(
+            series, req.prediction_length,
+            context_length=min(len(series), getattr(req, "context_length", 72) or 72),
+            mode=mode,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Chronos-2 预测失败: {e}")
+
+    if result.get("error"):
         raise HTTPException(status_code=503, detail=result["error"])
 
     _cache[req.station_code] = {

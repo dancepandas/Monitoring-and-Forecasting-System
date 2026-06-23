@@ -102,10 +102,13 @@ export const api = {
   getDisposal: (stationCode, level = 'yellow', metric = 'level') =>
     request(`/data/disposal?station_code=${stationCode}&level=${level}&metric=${metric}`),
 
-  getVideoFeeds: (stationCodes = '00106,00107,00108') =>
+  getVideoFeeds: (stationCodes = '00106') =>
     request(`/data/video-feeds?station_codes=${stationCodes}`),
 
-  getDeviceStats: (stationCodes = '00106,00107,00108') =>
+  getVideoSnapshots: (stationCode = '00106', limit = 10) =>
+    request(`/data/video-snapshots?station_code=${stationCode}&limit=${limit}`),
+
+  getDeviceStats: (stationCodes = '00106') =>
     request(`/data/device-stats?station_codes=${stationCodes}`),
 
   // ── 报告 ──
@@ -131,6 +134,24 @@ export const api = {
 
   getStats: (stationCode, field) =>
     request(`/data/stats?station_code=${stationCode}&field=${field}`),
+
+  // ── 告警中心 ──
+  getActiveAlerts: (stationCode = '', level = '') => {
+    const params = new URLSearchParams()
+    if (stationCode) params.set('station_code', stationCode)
+    if (level) params.set('level', level)
+    const qs = params.toString()
+    return request(`/alerts/active${qs ? '?' + qs : ''}`)
+  },
+
+  getAlertHistory: (limit = 100) =>
+    request(`/alerts/history?limit=${limit}`),
+
+  acknowledgeAlert: (alertId, by = '') =>
+    request(`/alerts/${alertId}/acknowledge`, { method: 'POST', body: JSON.stringify({ by }) }),
+
+  resolveAlert: (alertId, resolution = '已处理', by = '') =>
+    request(`/alerts/${alertId}/resolve`, { method: 'POST', body: JSON.stringify({ resolution, by }) }),
 
   // ── 管理 ──
   getUsers: () => request('/auth/users'),

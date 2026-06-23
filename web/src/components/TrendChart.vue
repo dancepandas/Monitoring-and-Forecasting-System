@@ -211,11 +211,11 @@ onUnmounted(() => {
 
 <style scoped>
 .trend-chart-wrap { width: 100%; height: 100%; }
-.axis { stroke: rgba(37,33,28,.12); }
-.grid { stroke: rgba(37,33,28,.08); stroke-dasharray: 4 7; }
+.axis { stroke: rgba(37,33,28,.28); }
+.grid { stroke: rgba(37,33,28,.16); stroke-dasharray: 4 7; }
 .y-label { fill: var(--muted); font-size: 9px; text-anchor: end; }
 .y-unit { fill: var(--muted); font-size: 9px; text-anchor: start; font-weight: 600; }
-.now-line { stroke: rgba(37,33,28,.18); stroke-width: 1; stroke-dasharray: 5 5; }
+.now-line { stroke: rgba(37,33,28,.28); stroke-width: 1; stroke-dasharray: 5 5; }
 .history-dot { fill: #6d929f; }
 .chart-label { fill: var(--muted); font-size: 10px; text-anchor: middle; }
 </style>

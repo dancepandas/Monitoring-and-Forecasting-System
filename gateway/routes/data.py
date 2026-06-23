@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from datetime import datetime, timedelta
 import logging
 
@@ -6,7 +6,8 @@ logger = logging.getLogger(__name__)
 
 from ..auth.middleware import get_current_user
 from ..config import settings
-from ..services import data_cache, warning_config, station_names
+from ..services import data_cache, warning_config, station_names, aiflow_client
+from ..services.alert_tracker import AlertTracker
 
 router = APIRouter(prefix="/api/data", tags=["data"])
 
@@ -79,37 +80,36 @@ async def get_warnings(station_codes: str = settings.station_codes, user: dict =
     warnings = []
     alerts = []
 
-    for code in codes:
-        level_data = await data_cache.get(f"aiflow:level:{code}", max_age=600)
-        level_items = (level_data.get("data", []) or []) if level_data else []
-        flow_data = await data_cache.get(f"aiflow:flow_raw:{code}:{settings.default_device_code}", max_age=600)
-        flow_items = (flow_data.get("data", []) or []) if flow_data else []
+    # 从 AlertTracker 获取活跃告警（已确认的过滤掉）
+    tracker = AlertTracker()
+    tracker_alerts = tracker.list_active()
+    tracker_ids = set()  # 用于去重
 
-        # 缓存告警
-        if not level_items and not flow_items:
+    for code in codes:
+        # 使用 aligned 层数据，与 monitor_engine 和前端图表保持一致
+        aligned = await data_cache.get_aligned(code, max_age=600)
+        aligned_records = aligned.get("records", []) if aligned else []
+
+        # 只取实测记录
+        measured = [r for r in aligned_records if r.get("waterLevel_source") == "measured" or r.get("virtualFlow_source") == "measured"]
+
+        # 缓存告警：无实测数据才触发
+        if not measured:
+            alert_id = f"AL-cache-{code}"
+            tracker_ids.add(alert_id)
             alerts.append({
-                "id": f"AL-cache-{code}", "type": "告警", "category": "系统",
+                "id": alert_id, "type": "告警", "category": "系统",
                 "name": "数据缓存异常", "level": "提示", "station_code": code,
                 "message": f"测站 {station_names.station_name(code)} 数据缓存为空。可能 aiflow2 连接异常或采集程序未运行。如持续超过 10 分钟，请联系管理员（{admin}）。",
                 "time": datetime.now().isoformat(),
             })
-        elif not level_items:
-            alerts.append({
-                "id": f"AL-cache-{code}", "type": "告警", "category": "系统",
-                "name": "数据缓存异常", "level": "提示", "station_code": code,
-                "message": f"测站 {station_names.station_name(code)} 水位数据缓存为空。请联系管理员（{admin}）。",
-                "time": datetime.now().isoformat(),
-            })
 
-        # 水位预警
+        # 水位预警（取最新实测值）
         wl_val = None
-        for item in level_items:
-            if item.get("waterLevel") is not None:
-                wl_val = float(item["waterLevel"]); break
-        if wl_val is None:
-            for item in flow_items:
-                if item.get("waterLevel") is not None:
-                    wl_val = float(item["waterLevel"]); break
+        for r in reversed(aligned_records):
+            if r.get("waterLevel_source") == "measured" and r.get("waterLevel") is not None:
+                wl_val = float(r["waterLevel"])
+                break
         if wl_val is not None:
             lv = warning_config.check_level(wl_val, standards)
             if lv:
@@ -121,11 +121,12 @@ async def get_warnings(station_codes: str = settings.station_codes, user: dict =
                     "time": datetime.now().isoformat(),
                 })
 
-        # 流量预警
+        # 流量预警（取最新实测值）
         vf_val = None
-        for item in flow_items:
-            if item.get("virtualFlow") is not None:
-                vf_val = float(item["virtualFlow"]); break
+        for r in reversed(aligned_records):
+            if r.get("virtualFlow_source") == "measured" and r.get("virtualFlow") is not None:
+                vf_val = float(r["virtualFlow"])
+                break
         if vf_val is not None:
             lv = warning_config.check_flow(vf_val, standards)
             if lv:
@@ -136,6 +137,29 @@ async def get_warnings(station_codes: str = settings.station_codes, user: dict =
                     "message": f"测站 {station_names.station_name(code)} 当前流量 {vf_val:.0f}m³/s，已达到{standards['flow'].get(lv, 0)}m³/s（{warning_config.level_name(lv)}阈值）。请通知航运部门关注。",
                     "time": datetime.now().isoformat(),
                 })
+
+    # 合并 AlertTracker 中的活跃告警（未确认的），去重
+    for ta in tracker_alerts:
+        if ta.acknowledged:
+            continue  # 已确认的告警不展示在预警列表
+        if ta.station_code not in codes:
+            continue
+        alert_id = ta.id
+        if alert_id in tracker_ids:
+            continue
+        tracker_ids.add(alert_id)
+        alerts.append({
+            "id": alert_id,
+            "type": "告警",
+            "category": "系统",
+            "name": ta.title,
+            "level": ta.level,
+            "station_code": ta.station_code,
+            "message": ta.message,
+            "time": datetime.fromtimestamp(ta.triggered_at).isoformat(),
+            "notify_count": ta.notify_count,
+            "acknowledged": ta.acknowledged,
+        })
 
     return {
         "warnings": warnings, "warning_count": len(warnings),
@@ -170,43 +194,60 @@ async def get_disposal(station_code: str, level: str = "yellow", metric: str = "
 
 @router.get("/video-feeds")
 async def get_video_feeds(station_codes: str = settings.station_codes, user: dict = Depends(get_current_user)):
-    """聚合各站视频链路状态"""
+    """各站实时视频状态（调 deviceCamera 接口获取播放地址）。"""
     codes = [c.strip() for c in station_codes.split(",")]
     feeds = []
-    cam_id = 0
     for code in codes:
-        data = await data_cache.get(f"aiflow:flow:{code}", max_age=600)
-        if not data:
-            continue
-        items = data.get("data", []) or []
-        if items and items[0]:
-            item = items[0]
-            video_urls = []
-            for key in ("videoUrl", "videoUrlSecond", "videoUrlThird"):
-                url = item.get(key)
-                if url:
-                    video_urls.append(url)
-            cam_files = item.get("cameraVideoFiles") or []
-            for cf in cam_files:
-                if cf.get("videoUrl"):
-                    video_urls.append(cf["videoUrl"])
-            ai_tasks = []
-            if item.get("measureResult") is not None:
-                ai_tasks.append("流速估计")
-            if video_urls:
-                ai_tasks.append("漂浮物识别")
-            cam_id += 1
-            feeds.append({
-                "id": f"CAM-{cam_id:02d}",
-                "station_code": code,
-                "label": f"{code}站",
-                "status": "online" if item.get("uploadStatus") == 1 else "offline",
-                "ai_tasks": ai_tasks,
-                "video_count": len(video_urls),
-                "water_level": item.get("waterLevel"),
-                "water_flow": item.get("waterFlow"),
-            })
+        try:
+            # 先尝试调 deviceCamera 获取真实摄像头列表
+            cam_resp = await aiflow_client.get_camera_info(settings.default_device_code)
+            cameras = cam_resp.get("data", []) or []
+        except Exception:
+            cameras = []
+
+        if cameras:
+            for i, cam in enumerate(cameras):
+                cam_id = cam.get("cameraId", i + 1)
+                feeds.append({
+                    "id": f"CAM-{cam_id}",
+                    "station_code": code,
+                    "label": f"{code}站 · {cam.get('name', '摄像头')}",
+                    "status": "online" if cam.get("programState") == 1 else "offline",
+                    "ai_tasks": ["监测画面"],
+                    "live_address": cam.get("liveAddress", ""),
+                    "camera_index": cam.get("cameraIndex"),
+                })
+        else:
+            # 回退：从缓存读（可能有 videoUrl）
+            data = await data_cache.get(f"aiflow:flow_raw:{code}:{settings.default_device_code}", max_age=600)
+            if data:
+                items = data.get("data", []) or []
+                for i, item in enumerate(items[:3]):
+                    vu = item.get("videoUrl")
+                    if vu:
+                        feeds.append({
+                            "id": f"CAM-{i + 1:02d}",
+                            "station_code": code,
+                            "label": f"{code}站",
+                            "status": "online",
+                            "ai_tasks": ["监测画面"],
+                            "live_address": str(vu),
+                        })
+                    if len(feeds) >= 3:
+                        break
+
     return {"feeds": feeds, "total": len(feeds), "updated": datetime.now().isoformat()}
+
+
+@router.get("/video-snapshots")
+async def get_video_snapshots(
+    station_code: str = Query("00106"),
+    limit: int = Query(10, ge=1, le=10),
+    user: dict = Depends(get_current_user),
+):
+    """视频快照历史（collector 每轮采集时自动保存，最近 10 条）。"""
+    snaps = await data_cache.get_video_snapshots(station_code, limit=limit)
+    return {"snapshots": snaps, "total": len(snaps), "station_code": station_code}
 
 
 @router.get("/device-stats")
