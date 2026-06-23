@@ -331,11 +331,11 @@ class MonitorEngine:
         if not records:
             return
 
-        # 取未来预报记录（source="forecast" 且时间在未来）
+        # 取未来预报记录（source="future_forecast" 且时间在未来）
         now = datetime.now()
         forecast_records = []
         for r in records:
-            if r.get("waterLevel_source") == "forecast" or r.get("virtualFlow_source") == "forecast":
+            if r.get("waterLevel_source") == "future_forecast" or r.get("virtualFlow_source") == "future_forecast":
                 dt = self._parse_dt_str(r.get("time", ""))
                 if dt and dt > now:
                     forecast_records.append(r)

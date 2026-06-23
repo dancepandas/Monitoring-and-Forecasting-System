@@ -484,7 +484,21 @@ class AgentService:
 
         loop = asyncio.get_event_loop()
         q: queue.Queue = queue.Queue()
-        loop.run_in_executor(None, self._sync_stream, message, q)
+        future = loop.run_in_executor(None, self._sync_stream, message, q)
+
+        def _on_stream_done(f):
+            try:
+                f.result()
+            except Exception as ex:
+                logger.exception("[agent] sync stream failed: %s", ex)
+            finally:
+                # 确保消费者能退出
+                try:
+                    q.put(None, block=False)
+                except queue.Full:
+                    pass
+
+        future.add_done_callback(_on_stream_done)
 
         answer_text = ""
         reasoning_text = ""

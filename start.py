@@ -1,5 +1,7 @@
 """FloodMind 一键启动脚本"""
 
+import os
+import platform
 import subprocess
 import sys
 import time
@@ -24,6 +26,14 @@ def wait_port(port: int, timeout: int = 60):
     return False
 
 
+def _popen_kwargs():
+    """跨平台的 Popen 参数：Windows 下新建控制台窗口。"""
+    kwargs = {}
+    if platform.system() == "Windows":
+        kwargs["creationflags"] = subprocess.CREATE_NEW_CONSOLE
+    return kwargs
+
+
 def main():
     print()
     print("╔══════════════════════════════════════════╗")
@@ -36,34 +46,35 @@ def main():
     subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "gateway.server:app", "--host", "0.0.0.0", "--port", "15002"],
         cwd=str(ROOT),
-        creationflags=subprocess.CREATE_NEW_CONSOLE,
+        **_popen_kwargs(),
     )
     print("等待网关启动...")
     if wait_port(15002):
-        print("网关已就绪 ✓")
+        print("网关已就绪")
     else:
-        print("网关启动超时 ✗")
+        print("网关启动超时")
         return
 
     # ── 2. 前端 ──
     print("[2/2] 启动前端 (端口 5173)...")
     web_dir = ROOT / "web"
+    shell = platform.system() == "Windows"
     subprocess.Popen(
         ["npm", "run", "dev"],
         cwd=str(web_dir),
-        shell=True,
-        creationflags=subprocess.CREATE_NEW_CONSOLE,
+        shell=shell,
+        **_popen_kwargs(),
     )
     print("等待前端启动...")
     if wait_port(5173, timeout=90):
-        print("前端已就绪 ✓")
+        print("前端已就绪")
     else:
-        print("前端启动超时 ✗")
+        print("前端启动超时")
         return
 
     print()
     print("╔══════════════════════════════════════════╗")
-    print("║  ✅ 系统启动完成                          ║")
+    print("║  系统启动完成                            ║")
     print("║  后端: http://localhost:15002             ║")
     print("║  前端: http://localhost:5173              ║")
     print("╚══════════════════════════════════════════╝")

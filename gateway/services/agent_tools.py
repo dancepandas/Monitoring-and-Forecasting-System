@@ -25,12 +25,12 @@ _sync_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="agent-too
 def _safe_sync(coro):
     """安全地在同步/异步混合环境中运行协程。"""
     try:
-        asyncio.get_running_loop()
+        loop = asyncio.get_running_loop()
     except RuntimeError:
         return asyncio.run(coro)
-    # 已有运行中的事件循环，用线程跑
-    fut = _sync_executor.submit(asyncio.run, coro)
-    return fut.result(timeout=30)
+    # 已有运行中的事件循环，调度到该 loop 执行并等待结果
+    future = asyncio.run_coroutine_threadsafe(coro, loop)
+    return future.result(timeout=30)
 
 async def _get_cached_level(station_code: str, max_age: int = 600) -> dict:
     """从 flow_raw 缓存读取水位数据（统一数据源为 realTimeInfo）。"""
@@ -1077,7 +1077,7 @@ def send_notification(**kwargs) -> dict:
     secret = kwargs.get("secret", "") or ""
     alert_id = kwargs.get("alert_id", "") or ""
     try:
-        result = asyncio.run(push_alert(
+        result = _safe_sync(push_alert(
             title=title,
             message=message,
             level=level,

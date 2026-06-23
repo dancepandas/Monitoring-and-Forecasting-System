@@ -313,7 +313,10 @@ async def rebuild_aligned(station_code: str) -> dict:
 
         grid_start = all_times[0]
         grid_end = all_times[-1]
-        total_points = max(1, int((grid_end - grid_start).total_seconds() / 60 / interval)) + 1
+        if grid_start == grid_end:
+            total_points = 1
+        else:
+            total_points = int((grid_end - grid_start).total_seconds() / 60 / interval) + 1
 
         # 3. 建等间隔网格 → 映射实测值
         aligned_records = []
