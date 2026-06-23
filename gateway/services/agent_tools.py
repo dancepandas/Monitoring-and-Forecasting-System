@@ -578,42 +578,68 @@ def update_warning_standard(**kwargs) -> dict:
 
 class RunForecastArgs(BaseModel):
     station_code: str = Field(..., description="测站编码")
-    prediction_length: int = Field(default=72, description="预测步长（小时）")
-    target: str = Field(default="Flow", description="目标字段")
+    prediction_length: int = Field(default=12, description="预测步数（每个步长等同事先检测到的时间间隔）")
+    mode: str = Field(default="past_covariates", description="预报模式: univariate(单变量) / past_covariates(用历史协变量) / future_covariates(用未来协变量)")
+    target: str = Field(default="virtualFlow", description="目标字段: virtualFlow(流量) 或 waterLevel(水位)")
+    cov_field: str = Field(default="", description="协变量字段名。预报流量时可用 waterLevel，预报水位时可用 virtualFlow。留空则自动推断")
 
 
 def run_forecast(**kwargs) -> dict:
-    """Chronos 时序预报。优先从本地缓存读取 flow_raw 历史流量数据。"""
+    """Chronos-2 时序预报。支持单变量、协变量模式，自动使用 aligned 层等间隔数据。"""
     args = RunForecastArgs(**kwargs)
 
+    # 自动推断目标与协变量
+    mode = args.mode or "past_covariates"
+    target = args.target or "virtualFlow"
+    cov_field = args.cov_field or ""
+    if mode in ("past_covariates", "future_covariates") and not cov_field:
+        # 自动推断：预报流量用水位为协变量，预报水位用流量为协变量
+        cov_field = "waterLevel" if target == "virtualFlow" else "virtualFlow"
+
     try:
-        flow_data = _safe_sync(_get_cached_flow(args.station_code, max_age=600))
+        series = _safe_sync(data_cache.get_aligned_chronos(
+            args.station_code,
+            mode=mode,
+            context_length=72,
+            max_age=600,
+        ))
     except Exception as ex:
-        logger.warning(f"run_forecast get cached flow failed: {ex}")
+        logger.warning(f"run_forecast get aligned data failed: {ex}")
         return {"error": str(ex), "station_code": args.station_code}
 
-    raw_items = flow_data.get("data", [])
-    if not raw_items:
-        return {"error": "无历史流量数据", "station_code": args.station_code}
+    if not series or len(series) < 10:
+        return {"error": f"历史数据不足（仅 {len(series) if series else 0} 条），至少需要 10 条", "station_code": args.station_code}
 
-    series = _time_series(raw_items, "waterFlow")
-    if len(series) < 10:
-        return {"error": f"历史数据不足（仅 {len(series)} 条）", "station_code": args.station_code}
+    # 构建协变量数据
+    past_covariates = None
+    if mode in ("past_covariates", "future_covariates") and cov_field:
+        try:
+            aligned = _safe_sync(data_cache.get_aligned(args.station_code, max_age=600))
+            if aligned:
+                records = aligned.get("records", [])
+                cov_vals = []
+                for r in records:
+                    val = r.get(cov_field)
+                    if val is not None and r.get(f"{cov_field}_source") == "measured":
+                        cov_vals.append(float(val))
+                if cov_vals and len(cov_vals) >= 10:
+                    # 截取与目标序列相同长度的尾部
+                    cov_vals = cov_vals[-len(series):]
+                    if len(cov_vals) == len(series):
+                        past_covariates = {cov_field: cov_vals}
+        except Exception:
+            pass
 
-    # ── 预处理 ──
-    preprocess_result = _preprocess_series(series)
-    if preprocess_result.get("error"):
-        return preprocess_result
-
-    clean_series = preprocess_result["series"]
-    logger.info("run_forecast: raw=%d, clean=%d, interval=%s",
-                len(series), len(clean_series), preprocess_result.get("interval"))
+    logger.info("run_forecast: station=%s, steps=%d, mode=%s, target=%s, cov=%s, data=%d",
+                args.station_code, args.prediction_length, mode, target, cov_field, len(series))
 
     try:
         result = _safe_sync(chronos_client.predict_flow(
-            clean_series, args.prediction_length,
-            target=args.target,
-            context_length=min(len(clean_series), 72),
+            series, args.prediction_length,
+            target=target,
+            context_length=min(len(series), 72),
+            mode=mode,
+            past_covariates=past_covariates,
         ))
     except Exception as ex:
         logger.warning(f"run_forecast predict failed: {ex}")
@@ -621,8 +647,10 @@ def run_forecast(**kwargs) -> dict:
 
     return {
         "station_code": args.station_code,
-        "input_count": len(clean_series),
-        "preprocess": preprocess_result,
+        "input_count": len(series),
+        "mode": mode,
+        "target": target,
+        "cov_field": cov_field,
         "result": result,
     }
 
@@ -1214,7 +1242,7 @@ TOOL_DESCRIPTIONS = {
     "update_warning_standard":
         "修改预警阈值，立即生效。",
     "run_forecast":
-        "Chronos-2 时序预测模型，自动预处理空缺值。",
+        "Chronos-2 时序预测。支持单变量(univariate)、历史协变量(past_covariates)、未来协变量(future_covariates)三种模式。可用水位和流量互为协变量。",
     "analyze_trend":
         "水位/流量线性趋势分析（最小二乘法）。",
     "generate_report":
