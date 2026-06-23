@@ -18,6 +18,8 @@ AIFLOW_READ_TIMEOUT = 10
 CACHE_TTL = 300  # 5 minutes
 
 _cache = {}
+_CACHE_MAX_SIZE = 200  # 最多 200 个缓存条目
+
 _executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="aiflow")
 _session = requests.Session()
 
@@ -34,10 +36,17 @@ def _get_cached(key: str):
     if entry and now - entry["ts"] < CACHE_TTL:
         logger.info(f"aiflow2 cache hit: {key[:120]}")
         return entry["data"]
+    if entry:
+        del _cache[key]  # 过期条目立即清理
     return None
 
 
 def _set_cached(key: str, data: dict):
+    # LRU 策略：超过上限时清理最旧的 10% 条目
+    if len(_cache) >= _CACHE_MAX_SIZE:
+        to_remove = sorted(_cache.items(), key=lambda x: x[1]["ts"])[:_CACHE_MAX_SIZE // 10]
+        for k, _ in to_remove:
+            del _cache[k]
     _cache[key] = {"ts": time.time(), "data": data}
 
 
@@ -66,21 +75,20 @@ def _sync_post(url: str, json_data: dict, headers: dict = None) -> dict:
 
 
 def _sync_get(endpoint: str) -> dict:
-    """同步 HTTP GET，带 token 认证。"""
+    """同步 HTTP GET，带 token 认证和自动重试。"""
     token = _sync_get_token()
-    headers = {"Authorization": f"Bearer {token}"}
     url = f"{settings.aiflow_base_url}{endpoint}"
     logger.info(f"aiflow2 sync request: GET {url}")
     try:
-        r = _session.get(url, headers=headers, timeout=(AIFLOW_CONNECT_TIMEOUT, AIFLOW_READ_TIMEOUT))
+        r = _session.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=(AIFLOW_CONNECT_TIMEOUT, AIFLOW_READ_TIMEOUT))
         data = r.json()
         logger.info(f"aiflow2 sync response: GET {url} status={r.status_code} code={data.get('code')}")
         if r.status_code == 401:
             global _token
             _token = None
             token = _sync_get_token()
-            headers["Authorization"] = f"Bearer {token}"
-            r = _session.get(url, headers=headers, timeout=(AIFLOW_CONNECT_TIMEOUT, AIFLOW_READ_TIMEOUT))
+            # 重建 headers 避免使用 stale token
+            r = _session.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=(AIFLOW_CONNECT_TIMEOUT, AIFLOW_READ_TIMEOUT))
             data = r.json()
         return data
     except requests.exceptions.Timeout:
@@ -110,17 +118,15 @@ def _sync_get_token() -> str:
 
 def _sync_proxy_post(endpoint: str, json_data: dict) -> dict:
     token = _sync_get_token()
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     url = f"{settings.aiflow_base_url}{endpoint}"
     try:
-        return _sync_post(url, json_data, headers)
-    except requests.exceptions.HTTPError as e:
-        if e.response is not None and e.response.status_code == 401:
+        return _sync_post(url, json_data, {"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+    except Exception as e:
+        if hasattr(e, 'response') and e.response is not None and e.response.status_code == 401:
             global _token
             _token = None
             token = _sync_get_token()
-            headers["Authorization"] = f"Bearer {token}"
-            return _sync_post(url, json_data, headers)
+            return _sync_post(url, json_data, {"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
         raise
 
 

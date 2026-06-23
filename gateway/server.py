@@ -2,6 +2,7 @@ import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -18,6 +19,9 @@ from .services import scheduler
 from .services.monitor_engine import get_engine as get_monitor_engine
 from .services.agent_alert_dispatcher import init_dispatcher
 
+_COLLECTOR_LOG = Path(__file__).parent / "data" / "collector.log"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting gateway...")
@@ -27,17 +31,19 @@ async def lifespan(app: FastAPI):
 
     # 启动 24x7 值守引擎并注册智能体分发器
     monitor = get_monitor_engine()
-    monitor.start(scheduler.get_scheduler())
+    await monitor.start(scheduler.get_scheduler())
     init_dispatcher(monitor)
     logger.info("Monitor engine and alert dispatcher initialized")
 
-    # 把数据收集放到独立子进程，避免 aiflow2 的阻塞 IO/ThreadPoolExecutor 影响主 ASGI 事件循环
+    # 把数据收集放到独立子进程，stdout/stderr 重定向到日志文件以便诊断
+    log_fh = open(str(_COLLECTOR_LOG), "a", encoding="utf-8")
     collector_proc = await asyncio.create_subprocess_exec(
         sys.executable, "-m", "gateway.services.collector",
-        stdout=None,
-        stderr=None,
+        stdout=log_fh,
+        stderr=log_fh,
     )
     app.state.collector_proc = collector_proc
+    app.state.collector_log = log_fh
     logger.info(f"[collector] subprocess started: pid={collector_proc.pid}")
 
     # collector 健康监控：每 60 秒检查子进程是否存活
@@ -49,7 +55,7 @@ async def lifespan(app: FastAPI):
                 try:
                     new_proc = await asyncio.create_subprocess_exec(
                         sys.executable, "-m", "gateway.services.collector",
-                        stdout=None, stderr=None,
+                        stdout=log_fh, stderr=log_fh,
                     )
                     app.state.collector_proc = new_proc
                     logger.info(f"[collector] restarted: pid={new_proc.pid}")
@@ -68,6 +74,8 @@ async def lifespan(app: FastAPI):
     except Exception:
         collector_proc.kill()
         await collector_proc.wait()
+    finally:
+        log_fh.close()
 
 app = FastAPI(
     title="水文监测指挥核心 API Gateway",

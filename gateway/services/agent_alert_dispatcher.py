@@ -2,7 +2,9 @@
 
 import asyncio
 import logging
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Optional
 
@@ -14,6 +16,9 @@ from . import warning_config
 
 logger = logging.getLogger(__name__)
 
+# 专用线程池：APScheduler 线程中运行 agent 流时使用，避免耗尽 scheduler 线程池
+_dispatch_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="alert-dispatch")
+
 
 class AgentAlertDispatcher:
     """接收告警事件，启动一次 Agent 流，由智能体决定是否推送、如何处置。"""
@@ -21,25 +26,22 @@ class AgentAlertDispatcher:
     def __init__(self, tracker: AlertTracker):
         self._tracker = tracker
         self._running: set[str] = set()
+        self._lock = threading.Lock()  # 保护 _running set 的竞态
 
     def dispatch(self, event: AlertEvent):
         """同步入口，由 MonitorEngine 在 tick 中调用。内部转异步执行。"""
-        if event.id in self._running:
-            logger.info("[alert-dispatch] already handling %s", event.id)
-            return
-        self._running.add(event.id)
+        with self._lock:
+            if event.id in self._running:
+                logger.info("[alert-dispatch] already handling %s", event.id)
+                return
+            self._running.add(event.id)
 
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            # 无事件循环（如在 APScheduler 线程），同步运行
-            logger.warning("[alert-dispatch] no running event loop for %s, running async handler synchronously", event.id)
-            try:
-                asyncio.run(self._handle(event))
-            except Exception as e:
-                logger.exception("[alert-dispatch] sync run failed: %s", e)
-            finally:
-                self._running.discard(event.id)
+            # 无事件循环（如在 APScheduler 线程），提交到专用线程池运行，避免阻塞 scheduler
+            logger.warning("[alert-dispatch] no running event loop for %s, dispatching via executor", event.id)
+            _dispatch_executor.submit(self._run_sync, event)
             return
 
         # 已在事件循环中，创建任务并确保任务结束时清理 _running
@@ -53,6 +55,15 @@ class AgentAlertDispatcher:
                 logger.exception("[alert-dispatch] task failed: %s", e)
 
         task.add_done_callback(_on_done)
+
+    def _run_sync(self, event: AlertEvent):
+        """在专用线程池中同步运行 agent 流（无事件循环时使用）。"""
+        try:
+            asyncio.run(self._handle(event))
+        except Exception as e:
+            logger.exception("[alert-dispatch] sync run failed: %s", e)
+        finally:
+            self._running.discard(event.id)
 
     async def _handle(self, event: AlertEvent):
         try:
