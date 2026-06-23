@@ -53,14 +53,20 @@ async function loadWarnings() {
     )
     totalCount.value = allItems.value.length
 
-    // 取第一条预警生成处置建议
+    // 取第一条预警生成处置建议（优先用 Agent 动态生成）
     const firstWarn = warnings[0]
     if (firstWarn) {
       try {
         const lv = firstWarn.level
         const lvMap = { '蓝色预警': 'blue', '黄色预警': 'yellow', '橙色预警': 'orange', '红色预警': 'red' }
         const code = lvMap[lv] || 'yellow'
-        const d = await api.getDisposal(firstWarn.station_code, code, 'level')
+        const wl = firstWarn.value != null ? firstWarn.value : 0
+        let d
+        try {
+          d = await api.getDisposalAgent(firstWarn.station_code, code, 'level', wl, 0)
+        } catch {
+          d = await api.getDisposal(firstWarn.station_code, code, 'level')
+        }
         suggestions.value = (d.suggestions || []).map(s => ({
           text: typeof s === 'string' ? s : s.text || s,
           color: 'var(--river)'

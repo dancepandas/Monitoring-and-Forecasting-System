@@ -1,13 +1,39 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from datetime import datetime
 
 from ..auth.middleware import get_current_user
 from ..schemas import ForecastRequest
 from ..services import data_cache, chronos_client
+from ..services.agent_utils import interpret_forecast
 
 router = APIRouter(prefix="/api/forecast", tags=["forecast"])
 
-_cache = {}  # module-level cache with per-entry TTL check in get_result
+_cache: dict[str, dict] = {}
+
+
+@router.get("/interpret")
+async def get_forecast_interpret(
+    station_code: str = Query("00106"),
+    field: str = Query("virtualFlow"),
+    user: dict = Depends(get_current_user),
+):
+    """Agent 解读最新预报结果，返回自然语言总结。"""
+    chart = await data_cache.get_aligned_chart(station_code, field)
+    history = chart.get("history", [])
+    forecast = chart.get("forecast", [])
+
+    label = "流量" if field == "virtualFlow" else "水位"
+    text = await interpret_forecast(
+        station_code=station_code,
+        station_name="仙桃站",
+        history=history,
+        forecast=forecast,
+        field=label,
+    )
+    return {
+        "interpretation": text or "Agent 暂时无法生成解读，请稍后重试。",
+        "generated": datetime.now().isoformat(),
+    }  # module-level cache with per-entry TTL check in get_result
 
 
 @router.post("/run")

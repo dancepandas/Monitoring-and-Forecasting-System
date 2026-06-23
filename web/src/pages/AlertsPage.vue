@@ -61,6 +61,10 @@
               <span>触发：{{ fmtTime(a.triggered_at) }}</span>
               <span v-if="a.resolved_at">解除：{{ fmtTime(a.resolved_at) }}</span>
             </div>
+            <div v-if="a.postmortem" class="postmortem">
+              <span class="postmortem-label">AI 复盘</span>
+              <p>{{ a.postmortem }}</p>
+            </div>
           </div>
         </div>
       </div>
@@ -141,6 +145,26 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.postmortem {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(104,119,100,.05);
+  border-left: 3px solid var(--moss);
+}
+.postmortem-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--moss);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.postmortem p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
 .alert-meta {
   display: flex;
   gap: 12px;

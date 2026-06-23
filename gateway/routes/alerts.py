@@ -67,4 +67,18 @@ async def api_resolve_alert(
     event = await engine._tracker.resolve(alert_id, resolution=resolution, by=by)
     if not event:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="告警不存在或已解除")
+
+    # 后台异步生成复盘总结
+    import asyncio
+    from ..services.agent_utils import generate_postmortem
+    async def _do_postmortem():
+        try:
+            summary = await generate_postmortem(event.to_dict())
+            if summary:
+                event.postmortem = summary
+                await engine._tracker._save()
+        except Exception:
+            pass
+    asyncio.create_task(_do_postmortem())
+
     return {"ok": True, "alert": event.to_dict()}

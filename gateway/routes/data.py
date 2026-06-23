@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from datetime import datetime, timedelta
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -167,6 +168,63 @@ async def get_warnings(station_codes: str = settings.station_codes, user: dict =
         "alerts": alerts, "alert_count": len(alerts),
         "total": len(warnings) + len(alerts),
         "updated": datetime.now().isoformat(),
+    }
+
+
+@router.get("/disposal/agent")
+async def get_disposal_agent(
+    station_code: str,
+    level: str = "yellow",
+    metric: str = "level",
+    wl_value: float = 0,
+    vf_value: float = 0,
+    user: dict = Depends(get_current_user),
+):
+    """Agent 动态生成处置建议，基于实时数值而非静态字典。"""
+    from ..services.agent_utils import quick_ask
+    from . import station_names
+
+    unit = "m" if metric == "level" else "m³/s"
+    value = wl_value if metric == "level" else vf_value
+    name = station_names.station_name(station_code)
+    standards = warning_config.get_standards()
+    thresholds = standards.get(metric, {})
+
+    prompt = f"""你是防汛专家。请为以下情况生成 3-5 条具体的处置建议：
+
+- 测站：{name}（{station_code}）
+- 当前{ '水位' if metric == 'level' else '流量' }：{value:.2f} {unit}
+- 预警级别：{level}
+- 各级阈值：{json.dumps(thresholds, ensure_ascii=False)}
+
+要求：
+1. 每行一条建议，以 - 开头
+2. 建议应具体可操作，包含时间频率和具体行动
+3. 针对当前数值给出针对性建议，不要泛泛而谈
+4. 纯文本，不要 markdown 代码块
+
+示例格式：
+- 每1小时记录一次水位数据，关注变化趋势
+- 通知下游航运部门注意航行安全
+- 检查堤防和闸门设备运行状态"""
+
+    system = "你是防汛指挥专家，用中文输出具体可操作的处置建议，每条一行以 - 开头。"
+    text = await quick_ask(prompt, system, max_tokens=600)
+    if not text:
+        # fallback to static disposal
+        return await get_disposal(station_code, level, metric, user)
+    suggestions = [{"text": s.lstrip("- ").strip(), "color": "var(--river)"}
+                   for s in text.strip().split("\n") if s.strip().startswith("-")]
+    if not suggestions:
+        suggestions = [{"text": s.strip(), "color": "var(--river)"}
+                       for s in text.strip().split("\n") if s.strip()]
+    return {
+        "station_code": station_code,
+        "level": level,
+        "metric": metric,
+        "suggestions": suggestions or [{"text": "保持常规监测，关注水情变化趋势。", "color": "var(--river)"}],
+        "generated_at": datetime.now().isoformat(),
+        "source": "agent",
     }
 
 

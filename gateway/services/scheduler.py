@@ -205,11 +205,14 @@ async def _run_agent_daily_report(params: dict):
 
     data_context = "\n".join(lines)
 
-    prompt = f"""你是专业水文日报编辑。根据以下全系统监测数据，生成一份完整日报。
+    # 自适应报告：无预警日简化，有事件日详述
+    has_warnings = any(s["warnings"] != "无" for s in stations_info)
+    if has_warnings:
+        prompt = f"""你是专业水文日报编辑。今天有预警事件，请生成一份详细日报。
 
 {data_context}
 
-请用以下格式直接输出（不要加```标记）：
+请按以下格式直接输出（不要加```标记）：
 
 ## 水文监测日报
 **日期**: {date}
@@ -222,13 +225,26 @@ async def _run_agent_daily_report(params: dict):
 （按站点分节，简述各站水位/流量特征）
 
 ### 三、预警与处置
-（当天预警触发情况及级别）
+（当天预警触发情况及级别，重点展开）
 
 ### 四、设备与视频巡检
 （汇总设备在线情况）
 
 ### 五、关注要点与建议
 （次日需关注 2-3 条）"""
+    else:
+        prompt = f"""你是专业水文日报编辑。今天比较平静，请生成一份精简日报（2-3 句即可）。
+
+{data_context}
+
+请直接输出（不要加```标记）：
+
+## 水文监测日报
+**日期**: {date}
+**覆盖站点**: {', '.join(STATIONS)}
+
+### 今日概况
+（2-3 句话简述水位/流量数据和设备状态，无需分节展开）"""
 
     report_body = await _call_llm(prompt, data_context, date)
 

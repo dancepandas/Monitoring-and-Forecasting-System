@@ -96,11 +96,17 @@ export const api = {
   getForecastResult: (stationCode) =>
     request(`/forecast/result?station_code=${stationCode}`),
 
+  getForecastInterpret: (stationCode = '00106', field = 'virtualFlow') =>
+    request(`/forecast/interpret?station_code=${stationCode}&field=${field}`),
+
   getWarnings: (stationCodes = '00106') =>
     request(`/data/warnings?station_codes=${stationCodes}`),
 
   getDisposal: (stationCode, level = 'yellow', metric = 'level') =>
     request(`/data/disposal?station_code=${stationCode}&level=${level}&metric=${metric}`),
+
+  getDisposalAgent: (stationCode, level = 'yellow', metric = 'level', wlValue = 0, vfValue = 0) =>
+    request(`/data/disposal/agent?station_code=${stationCode}&level=${level}&metric=${metric}&wl_value=${wlValue}&vf_value=${vfValue}`),
 
   getVideoFeeds: (stationCodes = '00106') =>
     request(`/data/video-feeds?station_codes=${stationCodes}`),

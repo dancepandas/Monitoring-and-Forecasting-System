@@ -28,6 +28,7 @@ class AlertEvent:
     acknowledged_by: str = ""
     resolved_at: Optional[float] = None
     resolution: str = ""
+    postmortem: str = ""
     evidence: dict = field(default_factory=dict)
     notify_count: int = 0
     last_notify_at: Optional[float] = None

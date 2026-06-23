@@ -70,6 +70,10 @@
             <div class="mini-stat"><span>预报峰值</span><b>{{ forecastPeak }}m³/s</b></div>
             <div class="mini-stat"><span>峰现时间</span><b>{{ forecastPeakTime }}</b></div>
           </div>
+          <div v-if="forecastInsight" class="forecast-insight">
+            <span class="insight-label">AI 解读</span>
+            <p>{{ forecastInsight }}</p>
+          </div>
         </div>
       </article>
     </section>
@@ -164,6 +168,7 @@ const waterLevelNoteClass = ref('')
 const flowChangeNote = ref('加载中...')
 const forecastPeak = ref('—')
 const forecastPeakTime = ref('—')
+const forecastInsight = ref('')
 const historyMaxFlow = ref('—')
 const historyAvgFlow = ref('—')
 const deviceCount = ref('—')
@@ -290,6 +295,11 @@ async function refreshData() {
       }
       computeModelConfidence()
 
+      // AI 预报解读（异步拉取，不阻塞主流程）
+      api.getForecastInterpret('00106', 'virtualFlow').then(d => {
+        forecastInsight.value = d.interpretation || ''
+      }).catch(() => {})
+
       saveCache()
     }
     console.log('[overview] refreshData done')
@@ -404,6 +414,28 @@ function closeStage() {
 </script>
 
 <style scoped>
+.forecast-insight {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(104,119,100,.06);
+  border-left: 3px solid var(--ok);
+}
+.insight-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ok);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 4px;
+  display: block;
+}
+.forecast-insight p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink);
+}
 .agent-modal-card2 {
   width: min(720px, 100%);
   height: min(600px, calc(100vh - 80px));
