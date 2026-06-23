@@ -25,12 +25,11 @@ class AgentAlertDispatcher:
             logger.info("[alert-dispatch] already handling %s", event.id)
             return
         self._running.add(event.id)
+
         try:
             loop = asyncio.get_running_loop()
-            # 已在事件循环中，直接创建任务
-            asyncio.create_task(self._handle(event))
         except RuntimeError:
-            # 无事件循环（如在 APScheduler 线程），调度到主循环或单独运行
+            # 无事件循环（如在 APScheduler 线程），同步运行
             logger.warning("[alert-dispatch] no running event loop for %s, running async handler synchronously", event.id)
             try:
                 asyncio.run(self._handle(event))
@@ -38,6 +37,19 @@ class AgentAlertDispatcher:
                 logger.exception("[alert-dispatch] sync run failed: %s", e)
             finally:
                 self._running.discard(event.id)
+            return
+
+        # 已在事件循环中，创建任务并确保任务结束时清理 _running
+        task = asyncio.create_task(self._handle(event))
+
+        def _on_done(t):
+            self._running.discard(event.id)
+            try:
+                t.result()
+            except Exception as e:
+                logger.exception("[alert-dispatch] task failed: %s", e)
+
+        task.add_done_callback(_on_done)
 
     async def _handle(self, event: AlertEvent):
         try:

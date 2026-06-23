@@ -243,20 +243,22 @@ def _compute_stats(records: list) -> dict:
 
 
 def _interpolate_missing(values: list) -> list:
-    """对列表中的 None 值做线性插值，两端缺失则用最近有效值填充。"""
+    """对列表中的 None 值做线性插值，两端缺失则用最近有效值填充。
+    若完全没有有效值，返回原列表（不做 0 填充，避免水文数据误报）。"""
     if not values:
         return values
     n = len(values)
     result = list(values)
-    # 找到所有有效值的索引
     valid_indices = [i for i, v in enumerate(result) if v is not None]
-    if len(valid_indices) < 2:
-        # 不足 2 个有效值，用唯一有效值填充全部
-        fill_val = result[valid_indices[0]] if valid_indices else 0
+    if not valid_indices:
+        # 完全没有有效值，不能猜测为 0
+        return result
+    if len(valid_indices) == 1:
+        # 只有一个有效值，用它填充全部
+        fill_val = result[valid_indices[0]]
         return [fill_val] * n
     for i in range(n):
         if result[i] is None:
-            # 找左右最近有效值
             left_idx, right_idx = None, None
             for j in range(i - 1, -1, -1):
                 if result[j] is not None:
@@ -267,13 +269,12 @@ def _interpolate_missing(values: list) -> list:
                     right_idx = j
                     break
             if left_idx is not None and right_idx is not None:
-                # 线性插值
                 ratio = (i - left_idx) / (right_idx - left_idx)
                 result[i] = result[left_idx] + ratio * (result[right_idx] - result[left_idx])
             elif left_idx is not None:
-                result[i] = result[left_idx]  # 右端缺失，前值填充
+                result[i] = result[left_idx]
             elif right_idx is not None:
-                result[i] = result[right_idx]  # 左端缺失，后值填充
+                result[i] = result[right_idx]
     return result
 
 
