@@ -18,6 +18,7 @@ AIFLOW_READ_TIMEOUT = 10
 CACHE_TTL = 300  # 5 minutes
 
 _cache = {}
+_cache_lock = threading.Lock()
 _CACHE_MAX_SIZE = 200  # 最多 200 个缓存条目
 
 _executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="aiflow")
@@ -32,22 +33,24 @@ def _cache_key(endpoint: str, json_data: dict = None) -> str:
 
 def _get_cached(key: str):
     now = time.time()
-    entry = _cache.get(key)
-    if entry and now - entry["ts"] < CACHE_TTL:
-        logger.info(f"aiflow2 cache hit: {key[:120]}")
-        return entry["data"]
-    if entry:
-        del _cache[key]  # 过期条目立即清理
+    with _cache_lock:
+        entry = _cache.get(key)
+        if entry and now - entry["ts"] < CACHE_TTL:
+            logger.info(f"aiflow2 cache hit: {key[:120]}")
+            return entry["data"]
+        if entry:
+            del _cache[key]  # 过期条目立即清理
     return None
 
 
 def _set_cached(key: str, data: dict):
     # LRU 策略：超过上限时清理最旧的 10% 条目
-    if len(_cache) >= _CACHE_MAX_SIZE:
-        to_remove = sorted(_cache.items(), key=lambda x: x[1]["ts"])[:_CACHE_MAX_SIZE // 10]
-        for k, _ in to_remove:
-            del _cache[k]
-    _cache[key] = {"ts": time.time(), "data": data}
+    with _cache_lock:
+        if len(_cache) >= _CACHE_MAX_SIZE:
+            to_remove = sorted(_cache.items(), key=lambda x: x[1]["ts"])[:_CACHE_MAX_SIZE // 10]
+            for k, _ in to_remove:
+                del _cache[k]
+        _cache[key] = {"ts": time.time(), "data": data}
 
 
 def _sync_post(url: str, json_data: dict, headers: dict = None) -> dict:

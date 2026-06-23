@@ -446,12 +446,6 @@ class MonitorEngine:
         return None
 
 
-# 兼容直接 import 的便捷入口
-_engine: Optional[MonitorEngine] = None
-
-
+# 兼容直接 import 的便捷入口（统一到 MonitorEngine.get() 单例）
 def get_engine() -> MonitorEngine:
-    global _engine
-    if _engine is None:
-        _engine = MonitorEngine()
-    return _engine
+    return MonitorEngine.get()

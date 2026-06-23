@@ -52,10 +52,10 @@ async function request(path, options = {}) {
       if (e.name === 'AbortError') {
         console.error(`[api] aborted by timeout: ${url}`)
         lastErr = new Error(`请求超时 (${timeout}ms)`)
-        if (i < retries) continue
       } else {
         console.error(`[api] fetch failed: ${url}`, e)
       }
+      if (i < retries) continue
       throw lastErr
     }
   }

@@ -48,7 +48,6 @@ class AgentAlertDispatcher:
         task = asyncio.create_task(self._handle(event))
 
         def _on_done(t):
-            self._running.discard(event.id)
             try:
                 t.result()
             except Exception as e:

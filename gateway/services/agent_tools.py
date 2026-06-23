@@ -1088,10 +1088,7 @@ def send_notification(**kwargs) -> dict:
         ))
         if result.get("ok") and alert_id:
             try:
-                asyncio.run_coroutine_threadsafe(
-                    get_engine()._tracker.mark_notified(alert_id, [channel]),
-                    asyncio.get_event_loop(),
-                ).result(timeout=10)
+                _safe_sync(get_engine()._tracker.mark_notified(alert_id, [channel]))
             except Exception as mark_err:
                 logger.warning("mark_notified failed: %s", mark_err)
         return {"code": 200 if result.get("ok") else 500, "data": result}

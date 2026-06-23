@@ -19,6 +19,8 @@ async def get_forecast_interpret(
 ):
     """Agent 解读最新预报结果，返回自然语言总结。"""
     chart = await data_cache.get_aligned_chart(station_code, field)
+    if not chart:
+        return {"interpretation": "缓存未就绪，请等待数据采集后重试。", "generated": datetime.now().isoformat()}
     history = chart.get("history", [])
     forecast = chart.get("forecast", [])
 
@@ -44,8 +46,8 @@ async def run_forecast(req: ForecastRequest, user: dict = Depends(get_current_us
         context_length=getattr(req, "context_length", 72) or 72,
         max_age=600,
     )
-    if len(series) < 10:
-        raise HTTPException(status_code=400, detail=f"历史数据不足（仅 {len(series)} 条），至少需要 10 条")
+    if not series or len(series) < 10:
+        raise HTTPException(status_code=400, detail=f"历史数据不足（仅 {len(series) if series else 0} 条），至少需要 10 条")
 
     mode = getattr(req, "mode", "univariate") or "univariate"
     try:

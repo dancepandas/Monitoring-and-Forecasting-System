@@ -80,7 +80,7 @@ async def api_resolve_alert(
                 event.postmortem = summary
                 await engine._tracker._save()
         except Exception:
-            pass
+            logger.exception("[postmortem] generation failed for %s", alert_id)
     asyncio.create_task(_do_postmortem())
 
     return {"ok": True, "alert": event.to_dict()}

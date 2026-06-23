@@ -8,7 +8,6 @@ logger = logging.getLogger(__name__)
 from ..auth.middleware import get_current_user
 from ..config import settings
 from ..services import data_cache, warning_config, station_names, aiflow_client
-from ..services.alert_tracker import AlertTracker
 
 router = APIRouter(prefix="/api/data", tags=["data"])
 
@@ -81,9 +80,9 @@ async def get_warnings(station_codes: str = settings.station_codes, user: dict =
     warnings = []
     alerts = []
 
-    # 从 AlertTracker 获取活跃告警（已确认的过滤掉）
-    tracker = AlertTracker()
-    await tracker.load()
+    # 从 AlertTracker 获取活跃告警（已确认的过滤掉），使用引擎单例的 tracker
+    from ..services.monitor_engine import MonitorEngine
+    tracker = MonitorEngine.get()._tracker
     tracker_alerts = await tracker.list_active()
     tracker_ids = set()  # 用于去重
 
@@ -326,7 +325,7 @@ async def get_device_stats(station_codes: str = settings.station_codes, user: di
         if items and items[0]:
             item = items[0]
             total += 1
-            status = "online" if item.get("uploadStatus") in (1, None, 0) else "offline"
+            status = "online" if item.get("uploadStatus") == 1 else "offline"
             if status == "online":
                 online += 1
             detail.append({

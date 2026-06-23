@@ -25,6 +25,8 @@ _COLLECTOR_LOG = Path(__file__).parent / "data" / "collector.log"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting gateway...")
+    if settings.jwt_secret == "change-me":
+        logger.critical("SECURITY: jwt_secret is default 'change-me'. Set JWT_SECRET in environment!")
     seed()
     scheduler.init_scheduler(app)
     logger.info("Scheduler initialized")
