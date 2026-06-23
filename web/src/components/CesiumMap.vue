@@ -17,7 +17,10 @@ const XIANTAO_LAT = 30.3795
 onMounted(() => {
   if (!container.value) return
 
-  Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJmYjVhMjk3MS03ZmIzLTQ3YjQtYjllYi0xYzE4NTQ4Zjg4ZTUiLCJpZCI6NDQ3NDUyLCJpc3MiOiJodHRwczovL2FwaS5jZXNpdW0uY29tIiwiYXVkIjoidW5kZWZpbmVkX2RlZmF1bHQiLCJpYXQiOjE3ODIxMTE1NTl9.bt56Y9CIvF_erxZZ42Zs3OV3xCsyffuRTLMsYGNEcEc'
+  Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_ION_TOKEN || ''
+  if (!Cesium.Ion.defaultAccessToken) {
+    console.warn('[CesiumMap] VITE_CESIUM_ION_TOKEN not set')
+  }
 
   viewer = new Cesium.Viewer(container.value, {
     animation: false,

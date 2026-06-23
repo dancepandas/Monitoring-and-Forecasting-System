@@ -39,7 +39,7 @@ async def _tick_wrapper():
 async def _cleanup_wrapper():
     """APScheduler job 包装函数，调用引擎实例的清理逻辑。"""
     engine = MonitorEngine.get()
-    engine._tracker.cleanup_resolved()
+    await engine._tracker.cleanup_resolved()
 
 
 class MonitorEngine:
@@ -60,9 +60,10 @@ class MonitorEngine:
             cls._instance = cls()
         return cls._instance
 
-    def start(self, scheduler):
+    async def start(self, scheduler):
         global _scheduler
         _scheduler = scheduler
+        await self._tracker.load()
         # 每 5 分钟巡检一次（用模块级包装函数，避免 pickle 引擎实例）
         scheduler.add_job(_tick_wrapper, trigger=CronTrigger(minute="*/5"), id=self._tick_job_id, replace_existing=True)
         # 每天凌晨清理已恢复告警
@@ -99,7 +100,7 @@ class MonitorEngine:
             msg = standards["alerts"]["cache_stale"]["message_template"].format(
                 station_code=station_code, admin_contact=admin
             )
-            event, is_new = self._tracker.create_or_update(
+            event, is_new = await self._tracker.create_or_update(
                 station_code=station_code,
                 alert_type="cache_stale",
                 level="提示",
@@ -116,7 +117,7 @@ class MonitorEngine:
             msg = standards["alerts"]["cache_stale"]["message_template"].format(
                 station_code=station_code, admin_contact=admin
             )
-            event, is_new = self._tracker.create_or_update(
+            event, is_new = await self._tracker.create_or_update(
                 station_code=station_code,
                 alert_type="cache_stale",
                 level="提示",
@@ -135,7 +136,7 @@ class MonitorEngine:
             msg = standards["alerts"]["cache_stale"]["message_template"].format(
                 station_code=station_code, admin_contact=admin
             )
-            event, is_new = self._tracker.create_or_update(
+            event, is_new = await self._tracker.create_or_update(
                 station_code=station_code,
                 alert_type="cache_stale",
                 level="提示",
@@ -157,7 +158,7 @@ class MonitorEngine:
             msg = standards["alerts"]["data_frozen_severe"]["message_template"].format(
                 station_code=station_code, hours=f"{age_hours:.1f}", last_time=last_time, admin_contact=admin
             )
-            event, is_new = self._tracker.create_or_update(
+            event, is_new = await self._tracker.create_or_update(
                 station_code=station_code,
                 alert_type="data_frozen",
                 level="红色",
@@ -171,7 +172,7 @@ class MonitorEngine:
             msg = standards["alerts"]["data_frozen"]["message_template"].format(
                 station_code=station_code, hours=f"{age_hours:.1f}", last_time=last_time, admin_contact=admin
             )
-            event, is_new = self._tracker.create_or_update(
+            event, is_new = await self._tracker.create_or_update(
                 station_code=station_code,
                 alert_type="data_frozen",
                 level="黄色",
@@ -183,8 +184,8 @@ class MonitorEngine:
                 self._emit(event)
         else:
             # 数据恢复正常，自动解除相关告警
-            self._auto_resolve(station_code, "cache_stale", "数据已恢复")
-            self._auto_resolve(station_code, "data_frozen", "数据已恢复")
+            await self._auto_resolve(station_code, "cache_stale", "数据已恢复")
+            await self._auto_resolve(station_code, "data_frozen", "数据已恢复")
 
         # 连续缺测检查：最近 10 个网格点
         recent = records[-10:]
@@ -193,7 +194,7 @@ class MonitorEngine:
             msg = standards["alerts"]["data_missing"]["message_template"].format(
                 station_code=station_code, missing_count=null_count, admin_contact=admin
             )
-            event, is_new = self._tracker.create_or_update(
+            event, is_new = await self._tracker.create_or_update(
                 station_code=station_code,
                 alert_type="data_missing",
                 level="提示",
@@ -204,7 +205,7 @@ class MonitorEngine:
             if is_new:
                 self._emit(event)
         else:
-            self._auto_resolve(station_code, "data_missing", "缺测已恢复")
+            await self._auto_resolve(station_code, "data_missing", "缺测已恢复")
 
     # ------------------------------------------------------------------
     # 2. 水文阈值检查（基于 aligned 层实测值）
@@ -235,7 +236,7 @@ class MonitorEngine:
             if lv:
                 lv_name = warning_config.level_name(lv)  # 完整名称，如 "蓝色预警"
                 threshold = standards["level"][lv]
-                event, is_new = self._tracker.create_or_update(
+                event, is_new = await self._tracker.create_or_update(
                     station_code=station_code,
                     alert_type=f"level_{lv}",
                     level=lv_name,
@@ -247,7 +248,7 @@ class MonitorEngine:
                     self._emit(event)
             else:
                 for lv in ("blue", "yellow", "orange", "red"):
-                    self._auto_resolve(station_code, f"level_{lv}", "水位已回落至阈值以下")
+                    await self._auto_resolve(station_code, f"level_{lv}", "水位已回落至阈值以下")
 
         # 流量
         if vf is not None:
@@ -255,7 +256,7 @@ class MonitorEngine:
             if lv:
                 lv_name = warning_config.level_name(lv)
                 threshold = standards["flow"][lv]
-                event, is_new = self._tracker.create_or_update(
+                event, is_new = await self._tracker.create_or_update(
                     station_code=station_code,
                     alert_type=f"flow_{lv}",
                     level=lv_name,
@@ -267,7 +268,7 @@ class MonitorEngine:
                     self._emit(event)
             else:
                 for lv in ("blue", "yellow", "orange", "red"):
-                    self._auto_resolve(station_code, f"flow_{lv}", "流量已回落至阈值以下")
+                    await self._auto_resolve(station_code, f"flow_{lv}", "流量已回落至阈值以下")
 
     # ------------------------------------------------------------------
     # 3. 数据突变检查（基于 aligned 层实测值）
@@ -303,10 +304,10 @@ class MonitorEngine:
         elif delta >= warning_delta:
             level = "提示"
         else:
-            self._auto_resolve(station_code, "data_spike", "数据波动恢复正常")
+            await self._auto_resolve(station_code, "data_spike", "数据波动恢复正常")
             return
 
-        event, is_new = self._tracker.create_or_update(
+        event, is_new = await self._tracker.create_or_update(
             station_code=station_code,
             alert_type="data_spike",
             level=level,
@@ -343,8 +344,8 @@ class MonitorEngine:
         if not forecast_records:
             # 无预报数据，清除旧的预报告警
             for lv in ("blue", "yellow", "orange", "red"):
-                self._auto_resolve(station_code, f"forecast_level_{lv}", "预报已过期")
-                self._auto_resolve(station_code, f"forecast_flow_{lv}", "预报已过期")
+                await self._auto_resolve(station_code, f"forecast_level_{lv}", "预报已过期")
+                await self._auto_resolve(station_code, f"forecast_flow_{lv}", "预报已过期")
             return
 
         # 预报水位检查
@@ -356,7 +357,7 @@ class MonitorEngine:
                     lv_name = warning_config.level_name(lv)
                     threshold = standards["level"][lv]
                     forecast_time = r.get("time", "")
-                    event, is_new = self._tracker.create_or_update(
+                    event, is_new = await self._tracker.create_or_update(
                         station_code=station_code,
                         alert_type=f"forecast_level_{lv}",
                         level=f"预报{lv_name}",
@@ -377,7 +378,7 @@ class MonitorEngine:
                     lv_name = warning_config.level_name(lv)
                     threshold = standards["flow"][lv]
                     forecast_time = r.get("time", "")
-                    event, is_new = self._tracker.create_or_update(
+                    event, is_new = await self._tracker.create_or_update(
                         station_code=station_code,
                         alert_type=f"forecast_flow_{lv}",
                         level=f"预报{lv_name}",
@@ -396,13 +397,13 @@ class MonitorEngine:
                 for r in forecast_records
             )
             if not has_wl:
-                self._auto_resolve(station_code, f"forecast_level_{lv}", "预报值未达该级别阈值")
+                await self._auto_resolve(station_code, f"forecast_level_{lv}", "预报值未达该级别阈值")
             has_vf = any(
                 r.get("virtualFlow") is not None and warning_config.check_flow(float(r["virtualFlow"]), standards) == lv
                 for r in forecast_records
             )
             if not has_vf:
-                self._auto_resolve(station_code, f"forecast_flow_{lv}", "预报值未达该级别阈值")
+                await self._auto_resolve(station_code, f"forecast_flow_{lv}", "预报值未达该级别阈值")
 
     # ------------------------------------------------------------------
     # 事件分发
@@ -415,11 +416,11 @@ class MonitorEngine:
             except Exception as e:
                 logger.exception("[monitor] alert handler failed: %s", e)
 
-    def _auto_resolve(self, station_code: str, alert_type: str, reason: str):
+    async def _auto_resolve(self, station_code: str, alert_type: str, reason: str):
         """自动解除指定类型的活动告警。"""
-        for event in self._tracker.list_active(station_code=station_code):
+        for event in await self._tracker.list_active(station_code=station_code):
             if event.alert_type == alert_type and event.resolved_at is None:
-                self._tracker.resolve(event.id, reason)
+                await self._tracker.resolve(event.id, reason)
                 logger.info("[monitor] auto resolved %s: %s", event.id, reason)
 
     @staticmethod

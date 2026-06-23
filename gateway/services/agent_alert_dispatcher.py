@@ -6,8 +6,11 @@ import time
 from datetime import datetime
 from typing import Optional
 
-from .alert_tracker import AlertEvent, AlertTracker
 from .agent_service import AgentService
+from .alert_tracker import AlertEvent, AlertTracker
+from .notifier import push_alert
+from ..config import settings
+from . import warning_config
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +30,7 @@ class AgentAlertDispatcher:
         self._running.add(event.id)
 
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
         except RuntimeError:
             # 无事件循环（如在 APScheduler 线程），同步运行
             logger.warning("[alert-dispatch] no running event loop for %s, running async handler synchronously", event.id)
@@ -78,7 +81,7 @@ class AgentAlertDispatcher:
     async def _fallback_push(self, event: AlertEvent):
         """Agent 流结束后检查是否已推送，红色/橙色告警未推送则兜底直推。"""
         # 重新加载事件状态
-        updated = self._tracker.get(event.id)
+        updated = await self._tracker.get(event.id)
         if not updated:
             return
         if updated.notify_count > 0:
@@ -96,17 +99,7 @@ class AgentAlertDispatcher:
     async def _direct_push(self, event: AlertEvent, reason: str):
         """绕过 Agent，直接推送告警到钉钉。"""
         try:
-            from .notifier import push_alert
-            from ..config import settings
-            import json
-            from pathlib import Path
-
-            # 读取告警配置
-            cfg_path = Path(__file__).parent.parent / "data" / "warning_standards.json"
-            cfg = {}
-            if cfg_path.exists():
-                cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-
+            cfg = warning_config.get_standards()
             webhook = cfg.get("dingtalk_webhook", "")
             secret = cfg.get("dingtalk_secret", "")
 
@@ -123,7 +116,7 @@ class AgentAlertDispatcher:
                 webhook_url=webhook,
                 secret=secret or None,
             )
-            self._tracker.mark_notified(event.id)
+            await self._tracker.mark_notified(event.id)
             logger.info("[alert-dispatch] fallback push success for %s", event.id)
         except Exception as e:
             logger.exception("[alert-dispatch] fallback push failed: %s", e)

@@ -18,7 +18,7 @@ async def api_list_active_alerts(
     user: dict = Depends(get_current_user),
 ):
     engine = get_engine()
-    events = engine._tracker.list_active(station_code=station_code, level=level)
+    events = await engine._tracker.list_active(station_code=station_code, level=level)
     return {"alerts": [e.to_dict() for e in events], "total": len(events)}
 
 
@@ -28,14 +28,14 @@ async def api_list_alert_history(
     user: dict = Depends(get_current_user),
 ):
     engine = get_engine()
-    events = engine._tracker.list_all(limit=limit)
+    events = await engine._tracker.list_all(limit=limit)
     return {"alerts": [e.to_dict() for e in events], "total": len(events)}
 
 
 @router.get("/{alert_id}")
 async def api_get_alert(alert_id: str, user: dict = Depends(get_current_user)):
     engine = get_engine()
-    event = engine._tracker.get(alert_id)
+    event = await engine._tracker.get(alert_id)
     if not event:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="告警不存在")
     return {"alert": event.to_dict()}
@@ -49,7 +49,7 @@ async def api_acknowledge_alert(
 ):
     engine = get_engine()
     by = body.get("by") or user.get("username", "unknown")
-    event = engine._tracker.acknowledge(alert_id, by=by)
+    event = await engine._tracker.acknowledge(alert_id, by=by)
     if not event:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="告警不存在或已解除")
     return {"ok": True, "alert": event.to_dict()}
@@ -64,7 +64,7 @@ async def api_resolve_alert(
     engine = get_engine()
     resolution = body.get("resolution", "已处理")
     by = body.get("by") or user.get("username", "unknown")
-    event = engine._tracker.resolve(alert_id, resolution=resolution, by=by)
+    event = await engine._tracker.resolve(alert_id, resolution=resolution, by=by)
     if not event:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="告警不存在或已解除")
     return {"ok": True, "alert": event.to_dict()}

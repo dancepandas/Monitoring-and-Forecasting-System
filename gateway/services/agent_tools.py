@@ -1088,7 +1088,10 @@ def send_notification(**kwargs) -> dict:
         ))
         if result.get("ok") and alert_id:
             try:
-                get_engine()._tracker.mark_notified(alert_id, [channel])
+                asyncio.run_coroutine_threadsafe(
+                    get_engine()._tracker.mark_notified(alert_id, [channel]),
+                    asyncio.get_event_loop(),
+                ).result(timeout=10)
             except Exception as mark_err:
                 logger.warning("mark_notified failed: %s", mark_err)
         return {"code": 200 if result.get("ok") else 500, "data": result}
@@ -1107,7 +1110,10 @@ def list_active_alerts(**kwargs) -> dict:
     station_code = kwargs.get("station_code", "") or ""
     level = kwargs.get("level", "") or ""
     engine = get_engine()
-    events = engine._tracker.list_active(station_code=station_code or None, level=level or None)
+    events = asyncio.run_coroutine_threadsafe(
+        engine._tracker.list_active(station_code=station_code or None, level=level or None),
+        asyncio.get_event_loop(),
+    ).result(timeout=10)
     return {
         "code": 200,
         "total": len(events),
@@ -1126,7 +1132,10 @@ def acknowledge_alert(**kwargs) -> dict:
     alert_id = kwargs.get("alert_id", "")
     by = kwargs.get("by", "智能体")
     engine = get_engine()
-    event = engine._tracker.acknowledge(alert_id, by=by)
+    event = asyncio.run_coroutine_threadsafe(
+        engine._tracker.acknowledge(alert_id, by=by),
+        asyncio.get_event_loop(),
+    ).result(timeout=10)
     if not event:
         return {"code": 404, "error": "告警不存在或已解除"}
     return {"code": 200, "alert": event.to_dict()}
@@ -1145,7 +1154,10 @@ def resolve_alert(**kwargs) -> dict:
     resolution = kwargs.get("resolution", "已处理")
     by = kwargs.get("by", "智能体")
     engine = get_engine()
-    event = engine._tracker.resolve(alert_id, resolution=resolution, by=by)
+    event = asyncio.run_coroutine_threadsafe(
+        engine._tracker.resolve(alert_id, resolution=resolution, by=by),
+        asyncio.get_event_loop(),
+    ).result(timeout=10)
     if not event:
         return {"code": 404, "error": "告警不存在或已解除"}
     return {"code": 200, "alert": event.to_dict()}

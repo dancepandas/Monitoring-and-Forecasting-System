@@ -9,6 +9,7 @@ import threading
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 
 from ..config import settings
 
@@ -150,7 +151,6 @@ def _run_chronos_predict(
 ) -> dict:
     """在独立线程中运行 Chronos-2 预测。"""
     pipeline = _get_pipeline()
-    import pandas as pd
 
     times = [s.get("Time", "") for s in series]
     target_vals = [float(s.get(target, 0) or 0) for s in series]

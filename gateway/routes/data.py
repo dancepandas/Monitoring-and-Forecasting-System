@@ -82,7 +82,8 @@ async def get_warnings(station_codes: str = settings.station_codes, user: dict =
 
     # 从 AlertTracker 获取活跃告警（已确认的过滤掉）
     tracker = AlertTracker()
-    tracker_alerts = tracker.list_active()
+    await tracker.load()
+    tracker_alerts = await tracker.list_active()
     tracker_ids = set()  # 用于去重
 
     for code in codes:
