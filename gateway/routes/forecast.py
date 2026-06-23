@@ -3,7 +3,7 @@ from datetime import datetime
 
 from ..auth.middleware import get_current_user
 from ..schemas import ForecastRequest
-from ..services import data_cache, chronos_client
+from ..services import data_cache, chronos_client, station_names
 from ..services.agent_utils import interpret_forecast
 
 router = APIRouter(prefix="/api/forecast", tags=["forecast"])
@@ -25,7 +25,7 @@ async def get_forecast_interpret(
     label = "流量" if field == "virtualFlow" else "水位"
     text = await interpret_forecast(
         station_code=station_code,
-        station_name="仙桃站",
+        station_name=station_names.station_name(station_code),
         history=history,
         forecast=forecast,
         field=label,
@@ -33,7 +33,7 @@ async def get_forecast_interpret(
     return {
         "interpretation": text or "Agent 暂时无法生成解读，请稍后重试。",
         "generated": datetime.now().isoformat(),
-    }  # module-level cache with per-entry TTL check in get_result
+    }
 
 
 @router.post("/run")

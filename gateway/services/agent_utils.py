@@ -44,8 +44,10 @@ async def interpret_forecast(station_code: str, station_name: str,
         return "暂无预报数据可供解读。"
 
     unit = "m³/s" if field == "流量" else "m"
-    history_vals = [p["y"] for p in history[-24:]]
-    forecast_vals = [p["y"] for p in forecast[:12]]
+    history_vals = [p["y"] for p in history[-24:] if p.get("y") is not None]
+    forecast_vals = [p["y"] for p in forecast[:12] if p.get("y") is not None]
+    if not forecast_vals:
+        return "暂无有效预报数据可供解读。"
     all_future = forecast_vals
     peak_val = max(all_future) if all_future else 0
     peak_idx = all_future.index(peak_val) if all_future else 0
@@ -53,14 +55,22 @@ async def interpret_forecast(station_code: str, station_name: str,
     latest = history_vals[-1] if history_vals else 0
     trend = "上涨" if len(forecast_vals) >= 2 and forecast_vals[-1] > forecast_vals[0] else "下降" if len(forecast_vals) >= 2 and forecast_vals[-1] < forecast_vals[0] else "平稳"
 
+    # 构建数据上下文，处理无历史数据的情况
+    data_lines = [
+        f"- 站点：{station_name}（{station_code}）",
+        f"- 指标：{field}",
+        f"- 最新实测值：{latest:.1f} {unit}",
+        f"- 未来 12 步预报趋势：{trend}",
+        f"- 预报峰值：{peak_val:.1f} {unit}，出现于 {peak_time}",
+    ]
+    if history_vals:
+        data_lines.append(f"- 历史均值：{sum(history_vals)/len(history_vals):.1f} {unit}（近 {len(history_vals)} 点）")
+    else:
+        data_lines.append("- 历史数据：暂无足够实测数据")
+
     prompt = f"""你是水文监测专家。请用 3-5 句简洁中文解读以下预报数据：
 
-- 站点：{station_name}（{station_code}）
-- 指标：{field}
-- 最新实测值：{latest:.1f} {unit}
-- 未来 12 步预报趋势：{trend}
-- 预报峰值：{peak_val:.1f} {unit}，出现于 {peak_time}
-- 历史均值：{sum(history_vals)/len(history_vals):.1f} {unit}（近 24 点）
+{chr(10).join(data_lines)}
 
 要求：
 1. 第一句概括整体趋势判断（正常/需关注/有风险）
@@ -95,6 +105,7 @@ async def generate_postmortem(event: dict, station_name: str = "") -> str:
 
     prompt = f"""请为以下已解除的告警生成 2-3 句复盘总结：
 
+- 站点：{station_name or '未知'}
 - 事件：{title}
 - 级别：{level}
 - 类型：{alert_type}

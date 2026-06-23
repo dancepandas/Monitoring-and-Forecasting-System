@@ -71,9 +71,11 @@ async def api_resolve_alert(
     # 后台异步生成复盘总结
     import asyncio
     from ..services.agent_utils import generate_postmortem
+    from ..services import station_names
     async def _do_postmortem():
         try:
-            summary = await generate_postmortem(event.to_dict())
+            summary = await generate_postmortem(event.to_dict(),
+                station_name=station_names.station_name(event.station_code))
             if summary:
                 event.postmortem = summary
                 await engine._tracker._save()

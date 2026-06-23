@@ -381,21 +381,10 @@ def _parse_ts(t) -> float:
 
 async def _call_llm(prompt, data_fallback, date):
     """调 LLM 生成报告正文，不可达时返回纯数据版本。"""
-    try:
-        import httpx
-        async with httpx.AsyncClient(timeout=60) as client:
-            r = await client.post(
-                f"{settings.dashscope_base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {settings.dashscope_api_key}"},
-                json={"model": settings.agent_model_name, "messages": [{"role": "user", "content": prompt}],
-                      "temperature": 0.3, "max_tokens": settings.agent_max_tokens},
-            )
-            if r.status_code == 200:
-                return r.json()["choices"][0]["message"]["content"]
-            logger.warning(f"LLM failed: {r.status_code}")
-    except Exception as e:
-        logger.warning(f"LLM error: {e}")
-
+    from .agent_utils import quick_ask
+    text = await quick_ask(prompt, max_tokens=settings.agent_max_tokens)
+    if text:
+        return text
     return f"""{data_fallback}
 
 ---

@@ -60,12 +60,15 @@ async function loadWarnings() {
         const lv = firstWarn.level
         const lvMap = { '蓝色预警': 'blue', '黄色预警': 'yellow', '橙色预警': 'orange', '红色预警': 'red' }
         const code = lvMap[lv] || 'yellow'
-        const wl = firstWarn.value != null ? firstWarn.value : 0
+        const isFlow = firstWarn.name?.includes('流量') || firstWarn.unit === 'm³/s'
+        const metric = isFlow ? 'flow' : 'level'
+        const wl = isFlow ? 0 : (firstWarn.value != null ? firstWarn.value : 0)
+        const vf = isFlow ? (firstWarn.value != null ? firstWarn.value : 0) : 0
         let d
         try {
-          d = await api.getDisposalAgent(firstWarn.station_code, code, 'level', wl, 0)
+          d = await api.getDisposalAgent(firstWarn.station_code, code, metric, wl, vf)
         } catch {
-          d = await api.getDisposal(firstWarn.station_code, code, 'level')
+          d = await api.getDisposal(firstWarn.station_code, code, metric)
         }
         suggestions.value = (d.suggestions || []).map(s => ({
           text: typeof s === 'string' ? s : s.text || s,

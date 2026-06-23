@@ -182,7 +182,6 @@ async def get_disposal_agent(
 ):
     """Agent 动态生成处置建议，基于实时数值而非静态字典。"""
     from ..services.agent_utils import quick_ask
-    from . import station_names
 
     unit = "m" if metric == "level" else "m³/s"
     value = wl_value if metric == "level" else vf_value
