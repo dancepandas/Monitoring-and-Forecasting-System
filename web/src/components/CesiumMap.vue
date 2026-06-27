@@ -38,7 +38,13 @@ onMounted(() => {
 
   const scene = viewer.scene
   scene.globe.enableLighting = true
-  scene.skyAtmosphere.show = false
+  scene.skyAtmosphere.show = true
+  scene.skyAtmosphere.hueShift = 0.0
+  scene.skyAtmosphere.saturationShift = -0.3
+  scene.skyAtmosphere.brightnessShift = -0.1
+
+  scene.globe.baseColor = Cesium.Color.fromCssColorString('#9bb7c4')
+  scene.backgroundColor = Cesium.Color.fromCssColorString('#0B2A3A')
 
   // 定位到仙桃站，使其位于画面中心，保持 45° 俯视
   viewer.camera.lookAt(
@@ -54,7 +60,7 @@ onMounted(() => {
   viewer.entities.add({
     position: Cesium.Cartesian3.fromDegrees(XIANTAO_LON, XIANTAO_LAT, 0),
     billboard: {
-      image: createPin('#e53935'),
+      image: createPinForStatus('danger'),
       verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
       heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
       scale: 0.5,
@@ -63,7 +69,7 @@ onMounted(() => {
       text: '仙桃站 00106',
       font: '14px sans-serif',
       fillColor: Cesium.Color.WHITE,
-      outlineColor: Cesium.Color.fromCssColorString('#1a5f7a'),
+      outlineColor: Cesium.Color.fromCssColorString('#0284C7'),
       outlineWidth: 3,
       style: Cesium.LabelStyle.FILL_AND_OUTLINE,
       verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
@@ -73,6 +79,21 @@ onMounted(() => {
   })
 
 })
+
+function statusColor(status) {
+  const map = {
+    normal: '#10B981',
+    ok: '#10B981',
+    warn: '#EA580C',
+    danger: '#DC2626',
+    offline: '#94A3B8',
+  }
+  return map[status] || '#10B981'
+}
+
+function createPinForStatus(status) {
+  return createPin(statusColor(status))
+}
 
 function createPin(color) {
   const c = document.createElement('canvas')
