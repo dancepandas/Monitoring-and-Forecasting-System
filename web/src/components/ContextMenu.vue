@@ -114,7 +114,7 @@ onUnmounted(() => document.removeEventListener('contextmenu', onContextMenu))
 .ctx-menu-overlay { position: fixed; inset: 0; z-index: 200; }
 .ctx-menu { position: fixed; z-index: 201; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 32px rgba(0,0,0,.12); padding: 4px; min-width: 140px; }
 .ctx-item { display: block; width: 100%; padding: 8px 14px; border: 0; background: none; cursor: pointer; font-size: 13px; text-align: left; border-radius: 6px; font-family: inherit; color: var(--ink); }
-.ctx-item:hover { background: rgba(109,146,159,.1); color: var(--river); }
+.ctx-item:hover { background: rgba(14,165,233,.1); color: var(--water); }
 .agent-modal-card2 {
   width: min(720px, 100%);
   height: min(600px, calc(100vh - 80px));

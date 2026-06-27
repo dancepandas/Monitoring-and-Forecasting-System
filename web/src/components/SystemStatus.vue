@@ -67,17 +67,17 @@ onUnmounted(() => { if (timer) clearInterval(timer) })
   border: 1px solid var(--line);
   background: rgba(255,255,255,.5);
 }
-.sys-status:hover { border-color: var(--river); }
-.sys-status.ok { border-color: var(--moss-soft); color: var(--moss); }
-.sys-status.warn { border-color: var(--amber); color: var(--amber); }
-.sys-status.crit { border-color: var(--clay); color: var(--clay); }
+.sys-status:hover { border-color: var(--water); }
+.sys-status.ok { border-color: var(--ok-soft); color: var(--ok); }
+.sys-status.warn { border-color: var(--warn); color: var(--warn); }
+.sys-status.crit { border-color: var(--danger); color: var(--danger); }
 .ss-dot {
   width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
   background: currentColor;
 }
-.ok .ss-dot { background: var(--moss); animation: none; }
-.warn .ss-dot { background: var(--amber); animation: ssPulse 3s ease-in-out infinite; }
-.crit .ss-dot { background: var(--clay); animation: ssPulse 1.5s ease-in-out infinite; }
+.ok .ss-dot { background: var(--ok); animation: none; }
+.warn .ss-dot { background: var(--warn); animation: ssPulse 3s ease-in-out infinite; }
+.crit .ss-dot { background: var(--danger); animation: ssPulse 1.5s ease-in-out infinite; }
 @keyframes ssPulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 .ss-text { font-weight: 600; white-space: nowrap; }
 .ss-time { color: var(--muted); font-size: 10px; white-space: nowrap; }
