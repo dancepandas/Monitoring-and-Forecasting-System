@@ -72,15 +72,15 @@ async function loadWarnings() {
         }
         suggestions.value = (d.suggestions || []).map(s => ({
           text: typeof s === 'string' ? s : s.text || s,
-          color: 'var(--river)'
+          color: 'var(--sky)'
         }))
       } catch {
         suggestions.value = [{ text: '处置建议加载失败', color: 'var(--muted)' }]
       }
     } else if (alerts.length > 0) {
-      suggestions.value = [{ text: '当前存在系统告警，请检查数据缓存和设备状态。', color: 'var(--amber)' }]
+      suggestions.value = [{ text: '当前存在系统告警，请检查数据缓存和设备状态。', color: 'var(--accent)' }]
     } else {
-      suggestions.value = [{ text: '当前无预警和告警，系统运行正常。', color: 'var(--moss)' }]
+      suggestions.value = [{ text: '当前无预警和告警，系统运行正常。', color: 'var(--ok)' }]
     }
   } catch (e) {
     console.error('Failed to load warnings:', e)
@@ -107,7 +107,7 @@ onUnmounted(() => {
 }
 .suggest-text { color: var(--ink); font-size: 16px; line-height: 1.6; }
 @keyframes pulse-dot {
-  0%, 100% { box-shadow: 0 0 0 5px rgba(200,111,76,.18); }
+  0%, 100% { box-shadow: 0 0 0 5px rgba(0,122,255,.18); }
   50% { box-shadow: 0 0 0 10px transparent; }
 }
 </style>

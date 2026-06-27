@@ -23,6 +23,21 @@
   overflow: hidden;
 }
 
+.tile::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--primary);
+}
+
+.tile.river::before { background: var(--water); }
+.tile.moss::before { background: var(--ok); }
+.tile.amber::before { background: var(--orange); }
+
 .tile::after {
   content: "";
   position: absolute;
@@ -441,6 +456,30 @@
   border-radius: 999px;
   background: rgba(255, 255, 255, .68);
   padding: 0 14px; outline: none; color: var(--ink);
+}
+
+/* ===== Forecast Insight ===== */
+.forecast-insight {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(99, 102, 241, .08);
+  border: 1px solid rgba(99, 102, 241, .18);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.forecast-insight .insight-label {
+  flex-shrink: 0;
+  font-weight: 700;
+  color: var(--indigo);
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+.forecast-insight p {
+  margin: 0;
+  color: var(--ink-2);
 }
 
 /* ===== Zoom cursor ===== */

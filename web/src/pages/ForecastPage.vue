@@ -234,7 +234,7 @@ function buildFallbackHistory() {
   backdrop-filter: blur(8px);
   font-family: var(--mono); font-size: 13px; outline: none;
 }
-.param-item input:focus { border-color: var(--clay); }
+.param-item input:focus { border-color: var(--primary); }
 
 .param-dropdown {
   position: relative;
@@ -247,7 +247,7 @@ function buildFallbackHistory() {
   gap: 8px;
 }
 .param-dropdown .arrow { font-size: 10px; color: var(--muted); }
-.param-dropdown:hover { border-color: var(--clay); }
+.param-dropdown:hover { border-color: var(--primary); }
 
 .dropdown-menu {
   margin: 0; padding: 4px 0; list-style: none; z-index: 9999;
@@ -259,14 +259,14 @@ function buildFallbackHistory() {
   padding: 8px 12px; font-size: 12px; cursor: pointer;
   transition: background .12s ease;
 }
-.dropdown-menu li:hover { background: rgba(200,111,76,.1); }
+.dropdown-menu li:hover { background: rgba(0,122,255,.1); }
 
 .run-btn { margin-top: 12px; font-size: 13px; }
 .run-btn:disabled { opacity: .6; cursor: not-allowed; }
 
 .error-msg {
   margin-top: 10px;
-  color: var(--clay);
+  color: var(--danger);
   font-size: 12px;
 }
 
@@ -288,7 +288,7 @@ function buildFallbackHistory() {
 }
 .forecast-chart-area .combined-chart {
   min-height: 120px;
-  border: 1px solid rgba(37,33,28,.08);
+  border: 1px solid rgba(26,26,46,.08);
   border-radius: 14px;
   background: rgba(255,255,255,.3);
   overflow: hidden;

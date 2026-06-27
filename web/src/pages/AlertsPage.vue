@@ -149,13 +149,13 @@ onMounted(() => {
   margin-top: 10px;
   padding: 8px 12px;
   border-radius: 6px;
-  background: rgba(104,119,100,.05);
-  border-left: 3px solid var(--moss);
+  background: rgba(0,122,255,.05);
+  border-left: 3px solid var(--primary);
 }
 .postmortem-label {
   font-size: 10px;
   font-weight: 700;
-  color: var(--moss);
+  color: var(--primary);
   text-transform: uppercase;
   letter-spacing: .06em;
 }
@@ -186,7 +186,7 @@ onMounted(() => {
   font-size: 12px;
 }
 
-.risk-item.danger { border-left: 4px solid var(--clay); }
-.risk-item.warn { border-left: 4px solid var(--amber); }
+.risk-item.danger { border-left: 4px solid var(--danger); }
+.risk-item.warn { border-left: 4px solid var(--accent); }
 .risk-item.ok { border-left: 4px solid var(--ok); }
 </style>
