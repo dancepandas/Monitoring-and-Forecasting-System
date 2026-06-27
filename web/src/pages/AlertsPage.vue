@@ -187,6 +187,6 @@ onMounted(() => {
 }
 
 .risk-item.danger { border-left: 4px solid var(--danger); }
-.risk-item.warn { border-left: 4px solid var(--accent); }
+.risk-item.warn { border-left: 4px solid var(--warn); }
 .risk-item.ok { border-left: 4px solid var(--ok); }
 </style>

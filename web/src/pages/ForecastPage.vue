@@ -288,7 +288,7 @@ function buildFallbackHistory() {
 }
 .forecast-chart-area .combined-chart {
   min-height: 120px;
-  border: 1px solid rgba(26,26,46,.08);
+  border: 1px solid var(--line);
   border-radius: 14px;
   background: rgba(255,255,255,.3);
   overflow: hidden;
