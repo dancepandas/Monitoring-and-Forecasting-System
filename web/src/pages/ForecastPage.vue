@@ -41,6 +41,10 @@
           <p>配置参数后点击「运行预报」</p>
         </div>
         <div class="forecast-chart-area" v-else>
+          <div v-if="forecastInsight" class="forecast-insight">
+            <span class="insight-label">AI · 预报解读</span>
+            <p>{{ forecastInsight }}</p>
+          </div>
           <div class="combined-chart" ref="chartWrap">
             <TrendChart v-if="chartReady" :history="history" :forecast="forecast" unit="流量(m³/s)" />
           </div>
@@ -97,6 +101,7 @@ const history = ref([])
 const forecast = ref([])
 const chartReady = ref(false)
 const chartWrap = ref(null)
+const forecastInsight = ref('')
 
 const labels = computed(() => {
   const now = new Date()
@@ -189,6 +194,11 @@ async function runForecast() {
     }
 
     chartReady.value = true
+
+    // AI 预报解读
+    api.getForecastInterpret('00106', 'virtualFlow').then(d => {
+      forecastInsight.value = d.interpretation || ''
+    }).catch(() => { forecastInsight.value = '' })
   } catch (e) {
     error.value = e.message || '预报失败'
     ran.value = false
@@ -283,8 +293,36 @@ function buildFallbackHistory() {
 
 .forecast-chart-area {
   flex: 1; min-height: 0;
-  display: grid; grid-template-rows: minmax(0, 1fr) auto;
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 8px;
+}
+.forecast-chart-area .forecast-insight {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  border: 1px solid var(--accent-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: 9px 13px;
+  background: var(--accent-soft);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.forecast-chart-area .forecast-insight .insight-label {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: .08em;
+  white-space: nowrap;
+}
+.forecast-chart-area .forecast-insight p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink);
 }
 .forecast-chart-area .combined-chart {
   min-height: 120px;
