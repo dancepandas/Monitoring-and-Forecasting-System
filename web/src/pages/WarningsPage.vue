@@ -5,6 +5,7 @@
       <div class="panel-head"><h2>当前预警与告警</h2><span>{{ totalCount }} 条</span></div>
       <div class="panel-body">
         <div class="risk-list">
+          <div v-if="allItems.length === 0" class="empty-state">当前无预警和告警 🎉</div>
           <div class="risk-item" v-for="w in allItems" :key="w.id">
             <div class="risk-row"><b>{{ w.name }}</b><span :class="['badge', badgeCls(w)]">{{ w.level }}</span></div>
             <p>{{ w.message }}</p>
@@ -101,11 +102,12 @@ onUnmounted(() => {
 .suggest-list { display: grid; gap: 14px; }
 .suggest-item { display: flex; align-items: flex-start; gap: 12px; }
 .suggest-dot {
-  flex-shrink: 0; width: 10px; height: 10px; margin-top: 7px;
+  flex-shrink: 0; width: 10px; height: 10px; margin-top: 5px;
   border-radius: 50%; opacity: .85;
   animation: pulse-dot 2s ease-in-out infinite;
 }
 .suggest-text { color: var(--ink); font-size: 16px; line-height: 1.6; }
+.empty-state { padding: 40px 0; text-align: center; color: var(--muted); font-size: 13px; }
 @keyframes pulse-dot {
   0%, 100% { box-shadow: 0 0 0 5px rgba(14,165,233,.18); }
   50% { box-shadow: 0 0 0 10px transparent; }

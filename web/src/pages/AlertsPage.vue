@@ -151,6 +151,8 @@ onMounted(() => {
   border-radius: 6px;
   background: rgba(14,165,233,.05);
   border-left: 3px solid var(--primary);
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 .postmortem-label {
   font-size: 10px;
@@ -164,6 +166,7 @@ onMounted(() => {
   font-size: 12px;
   line-height: 1.5;
   color: var(--ink-2);
+  overflow-wrap: break-word;
 }
 .alert-meta {
   display: flex;
@@ -177,7 +180,7 @@ onMounted(() => {
 .alert-actions {
   display: flex;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 .alert-actions .btn {
@@ -189,4 +192,18 @@ onMounted(() => {
 .risk-item.danger { border-left: 4px solid var(--danger); }
 .risk-item.warn { border-left: 4px solid var(--warn); }
 .risk-item.ok { border-left: 4px solid var(--ok); }
+
+.risk-row b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.risk-row .badge {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.risk-item > p {
+  overflow-wrap: break-word;
+}
 </style>

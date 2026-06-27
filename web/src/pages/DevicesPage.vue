@@ -116,13 +116,13 @@ onUnmounted(() => {
   height: 100%;
   min-height: 0;
   overflow-y: auto;
-  padding-bottom: 20px;
+  padding: 0 16px 20px;
   box-sizing: border-box;
 }
 .video-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
   align-content: start;
 }
 .video-card {
@@ -140,8 +140,8 @@ onUnmounted(() => {
   background: #000;
 }
 .video-placeholder {
-  color: var(--muted, #999);
-  font-size: 12px;
+  color: #cbd5e1;
+  font-size: 13px;
   aspect-ratio: 16 / 10;
   display: flex;
   align-items: center;
@@ -150,16 +150,20 @@ onUnmounted(() => {
 }
 .video-label {
   position: absolute;
-  bottom: 4px;
-  left: 6px;
-  font-size: 10px;
+  bottom: 8px;
+  left: 8px;
+  font-size: 11px;
   color: #fff;
-  background: rgba(0, 0, 0, 0.55);
-  padding: 1px 6px;
-  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 2px 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: calc(100% - 16px);
 }
 .empty {
-  padding: 60px 0;
+  padding: 60px 16px;
   text-align: center;
   color: var(--muted, #999);
 }
