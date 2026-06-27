@@ -625,6 +625,4 @@
   .stage-modal { padding: 10px; }
   .stage-head h2 { font-size: 22px; }
   .map-wrap { min-height: 520px; }
-  .map-layers { left: 20px; right: auto; top: auto; bottom: 20px; }
-  .map-card { position: static; margin: 18px; width: auto; }
 }
