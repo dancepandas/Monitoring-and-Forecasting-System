@@ -1,8 +1,9 @@
 <template>
   <Topbar
     title="流域态势"
-    subtitle="融合水位、流量、视频巡检与模型预报。"
+    subtitle="融合水位、流量、视频巡检与模型预报 · 仙桃站 00106"
     action-label="智能研判"
+    section-code="// 01 · OVERVIEW"
     @primary-action="showAgentModal = true"
   />
   <section class="overview">
@@ -61,17 +62,26 @@
       <article class="panel combined-panel">
         <div class="panel-head"><h2>历史数据与模型预报联合展示</h2><span>近 24h → 未来 12h</span></div>
         <div class="panel-body combined-card">
-          <div class="combined-chart">
-            <TrendChart :history="trendHistory" :forecast="trendForecast" unit="流量(m³/s)" />
-          </div>
-          <div class="forecast-summary combined-summary">
-            <div class="mini-stat"><span>最高流量</span><b>{{ historyMaxFlow }}m³/s</b></div>
-            <div class="mini-stat"><span>平均流量</span><b>{{ historyAvgFlow }}m³/s</b></div>
-            <div class="mini-stat"><span>预报峰值</span><b>{{ forecastPeak }}m³/s</b></div>
-            <div class="mini-stat"><span>峰现时间</span><b>{{ forecastPeakTime }}</b></div>
+          <div class="trend-main">
+            <div class="chart-wrap">
+              <div class="combined-chart">
+                <TrendChart :history="trendHistory" :forecast="trendForecast" unit="流量 (m³/s)" />
+              </div>
+              <div class="chart-legend">
+                <span><i class="legend-hist"></i>实测</span>
+                <span><i class="legend-fc"></i>预报</span>
+                <span><i class="legend-now"></i>当前</span>
+              </div>
+            </div>
+            <div class="forecast-summary combined-summary">
+              <div class="mini-stat"><span>最高流量</span><b>{{ historyMaxFlow }}<small> m³/s</small></b></div>
+              <div class="mini-stat"><span>平均流量</span><b>{{ historyAvgFlow }}<small> m³/s</small></b></div>
+              <div class="mini-stat peak"><span>预报峰值</span><b>{{ forecastPeak }}<small> m³/s</small></b></div>
+              <div class="mini-stat"><span>峰现时间</span><b>{{ forecastPeakTime }}</b></div>
+            </div>
           </div>
           <div v-if="forecastInsight" class="forecast-insight">
-            <span class="insight-label">AI 解读</span>
+            <span class="insight-label">AI · 预报解读</span>
             <p>{{ forecastInsight }}</p>
           </div>
         </div>
@@ -415,27 +425,66 @@ function closeStage() {
 
 <style scoped>
 .forecast-insight {
-  margin-top: 12px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  background: rgba(104,119,100,.06);
-  border-left: 3px solid var(--ok);
+  margin-top: 0;
+  border: 1px solid var(--accent-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: 9px 13px;
+  background: var(--accent-soft);
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .insight-label {
-  font-size: 10px;
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 9.5px;
   font-weight: 700;
-  color: var(--ok);
-  text-transform: uppercase;
+  color: var(--accent);
   letter-spacing: .08em;
-  margin-bottom: 4px;
-  display: block;
+  white-space: nowrap;
 }
 .forecast-insight p {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 11.5px;
+  line-height: 1.5;
   color: var(--ink);
 }
+
+.trend-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 176px;
+  gap: 12px;
+  min-height: 0;
+}
+.chart-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+}
+.chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--ink-2);
+}
+.chart-legend i {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+}
+.legend-hist { background: var(--water); }
+.legend-fc { background: var(--accent); background-image: repeating-linear-gradient(90deg, var(--accent) 0 5px, transparent 5px 9px); }
+.legend-now { background: var(--accent); opacity: .5; }
+.mini-stat.peak b { color: var(--accent); }
+
 .agent-modal-card2 {
   width: min(720px, 100%);
   height: min(600px, calc(100vh - 80px));

@@ -21,7 +21,8 @@ import SystemStatus from './SystemStatus.vue'
 defineProps({
   title: String,
   subtitle: String,
-  actionLabel: String
+  actionLabel: String,
+  sectionCode: String
 })
 
 defineEmits(['primary-action'])
