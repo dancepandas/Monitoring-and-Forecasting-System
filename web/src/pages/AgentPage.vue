@@ -138,14 +138,6 @@
             流程 · {{ workflow.title }} {{ workflow.steps?.filter(s=>s.status==='completed').length||0 }}/{{ workflow.steps?.length||0 }}
           </span>
         </div>
-
-        <!-- Context bar inside chat panel -->
-        <div v-if="files.length || workflow" class="ctx-bar">
-          <span v-for="f in files" :key="f.id" class="ctx-file" @click="previewFile(f)">文件 · {{ f.name }}</span>
-          <span v-if="workflow" class="ctx-wf">
-            流程 · {{ workflow.title }} {{ workflow.steps?.filter(s=>s.status==='completed').length||0 }}/{{ workflow.steps?.length||0 }}
-          </span>
-        </div>
       </div>
     </article>
 
@@ -204,6 +196,7 @@
         <select v-if="models.length" id="agent-model-select" name="model" v-model="config.model_key" class="tb-select" aria-label="选择模型" @change="onModelChange">
           <option v-for="m in models" :key="m.key" :value="m.key">{{ m.label }}</option>
         </select>
+        <span v-if="modelError" class="tb-error">{{ modelError }}</span>
       </div>
     </div>
     <div class="input-panel-side"></div>
@@ -259,134 +252,51 @@ const sessions = ref([])
 const workflow = ref(null)
 const files = ref([])
 const models = ref([])
-const config = reactive({ model_key: '', enable_reasoning: true, enable_search: false })
+const modelError = ref('')
+const config = reactive({ model_key: '', enable_reasoning: true })
 const previewImg = ref(null)
 
-// ── 常用任务 ──
+// ── 常用任务（提示语仅描述需求，不硬编码后端工具名） ──
 const quickTasks = [
   {
     id: 'realtime',    label: '最新水情',
     desc: '查询仙桃站最新水位和设备状态',
-    prompt: `查询仙桃站（00106）最新水情。
-
-1. 调用 query_latest(station_codes="00106") 获取最新一条水位数据；
-2. 调用 query_devices(station_code="00106") 获取设备状态。
-
-直接用返回的最新数值展示即可，无需指定时间范围。若数据为空则说明缓存未就绪。
-
-输出格式：
-## 最新水情（仙桃站 00106）
-- 最新水位：{waterLevel} m（上报时间：{measureTime}）
-- 设备状态：在线/离线
-- 判断：与警戒水位 35.1m 比较，给出是否正常的结论。`
+    prompt: `查询仙桃站（00106）最新水情，包括最新水位、上报时间、设备在线状态，并与警戒水位 35.1m 比较给出是否正常。若当前无数据，直接说明无数据。`
   },
   {
     id: 'trend',    label: '趋势分析',
     desc: '分析近期水位与流量变化趋势',
-    prompt: `分析仙桃站（00106）近期水情趋势。
-
-1. 调用 analyze_trend(station_code="00106", metric="level") 分析水位；
-2. 调用 analyze_trend(station_code="00106", metric="flow") 分析流量。
-
-工具会自动拉取缓存中全部可用数据计算趋势，无需手动指定时间范围。
-
-输出格式：
-## 趋势分析
-| 指标 | 数据点数 | 最新值 | 趋势 | 斜率 |
-|------|---------|--------|------|------|
-| 水位 | {count} | {latest} m | {up/down/stable} | {slope} |
-| 流量 | {count} | {latest} m³/s | {up/down/stable} | {slope} |
-- 结论：水位和流量是否同步变化？是否需要关注？`
+    prompt: `分析仙桃站（00106）近期水位与流量变化趋势，给出可用数据点数、最新值、趋势方向（上升/下降/平稳）以及是否需要关注。`
   },
   {
     id: 'forecast',    label: '流量预报',
     desc: '运行模型预测未来 12h 流量',
-    prompt: `对仙桃站（00106）进行未来 12 小时流量预报。
-
-调用 run_forecast(station_code="00106", prediction_length=12, target="Flow")。
-
-工具会从缓存中读取历史流量数据并自动预处理（等间隔对齐、插值空缺），无需手动传 begin/end。
-
-输出格式：
-## 流量预报（未来 12h）
-- 输入数据点数：{input_count}，预处理：{preprocess.gap_info}
-- 预报峰值：{max(predictions)} m³/s，谷值：{min(predictions)} m³/s
-- 趋势：上升/下降/平稳
-- 若返回 error 请说明原因。`
+    prompt: `对仙桃站（00106）进行未来 12 小时流量预报，给出输入数据情况、预报峰值/谷值、整体趋势；若失败说明原因。`
   },
   {
     id: 'warning',    label: '预警研判',
     desc: '检查最新预警状态并给出处置建议',
-    prompt: `对仙桃站（00106）进行预警研判。
-
-1. 调用 query_latest(station_codes="00106") 获取最新水位；
-2. 调用 list_warnings(station_codes="00106") 获取当前预警；
-3. 如有预警，根据等级调用 generate_disposal(station_code="00106", level="{等级}", metric="level")。
-
-输出格式：
-## 当前状态
-- 最新水位：{waterLevel} m
-- 预警：{total} 条，最高等级：{level}
-## 处置建议
-按优先级列出。若无预警，说明当前安全。`
+    prompt: `对仙桃站（00106）进行预警研判：查询当前预警条数与最高等级，并给出相应处置建议；若无预警说明当前安全。`
   },
   {
     id: 'daily',    label: '生成日报',
-    desc: '调用脚本生成昨日水情日报',
-    prompt: `生成仙桃站（00106）昨日水情日报。
-
-1. 调用 generate_report(report_type="daily", station_code="00106")，不传 date 则默认取昨天；
-2. 调用 query_reports() 确认文件已生成。
-
-输出格式：
-## 日报生成结果
-- 文件名：{filename}，路径：{path}，大小：{size} bytes
-- 若失败，说明原因。`
+    desc: '生成昨日水情日报',
+    prompt: `生成仙桃站（00106）昨日水情日报，确认文件已生成并返回文件名、路径与大小；若失败说明原因。`
   },
   {
     id: 'compare',    label: '多站对比',
-    desc: '对比三个站点的最新水情',
-    prompt: `对比仙桃站(00106)最新水情。
-
-1. 调用 compare_stations(station_codes="00106", metric="level")；
-2. 调用 compare_stations(station_codes="00106", metric="flow")。
-
-工具从缓存读取各站最新可用数据做统计，无需指定时间范围。
-
-输出格式：
-## 多站水情对比
-| 站点 | 水位 max/min/avg | 流量 max/min/avg |
-|------|------------------|-------------------|
-- 上下游关系判断，流域整体风险。`
+    desc: '对比指定站点的最新水情',
+    prompt: `对比仙桃站（00106）的水位与流量统计情况，给出最大值/最小值/平均值及流域整体风险判断。`
   },
   {
     id: 'devices',    label: '设备巡检',
     desc: '检查设备在线状态与视频监控',
-    prompt: `检查仙桃站（00106）监测设备和视频状态。
-
-1. 调用 query_devices(station_code="00106")；
-2. 调用 query_video_status(station_code="00106")。
-
-输出格式：
-## 设备状态
-| 设备编码 | 类型 | 状态 |
-## 视频监控
-| 摄像头ID | 状态 |
-- 是否存在离线？给出处理建议。`
+    prompt: `检查仙桃站（00106）监测设备和视频监控状态，列出各设备状态并给出是否存在离线及处理建议。`
   },
   {
     id: 'schedule',    label: '定时日报',
     desc: '每天 0:00 自动生成日报 / 周一生成周报',
-    prompt: `创建自动日报/周报定时任务。
-
-日报：调用 CreateScheduledTask(task_type="agent_daily_report", cron="0 0 * * *")，每天 0:00 采集全站水位/流量/预警数据，LLM 整理为完整日报。
-周报：调用 CreateScheduledTask(task_type="agent_weekly_report", cron="0 0 * * 1")，每周一 0:00 汇总过去 7 天日报为周报。
-最后调用 ListScheduledTasks() 确认。
-
-输出格式：
-## 定时任务
-- 任务ID：{task_id}，类型：{task_type}
-- 周期说明，下次执行：{next_run_time}`
+    prompt: `创建自动日报/周报定时任务：日报每天 0:00、周报每周一 0:00，确认任务创建成功并返回任务 ID、类型、周期与下次执行时间。`
   }
 ]
 
@@ -721,7 +631,7 @@ async function refreshFiles() {
 function previewFile(f) { if (f.path) window.open(f.path, '_blank') }
 
 function onModelChange() {
-  agentApi.updateSessionConfig(sid.value, { model_key: config.model_key, enable_reasoning: config.enable_reasoning, enable_search: config.enable_search }).catch(()=>{})
+  agentApi.updateSessionConfig(sid.value, { model_key: config.model_key, enable_reasoning: config.enable_reasoning }).catch(()=>{})
 }
 
 function onKey(e) {
@@ -795,7 +705,9 @@ onMounted(async () => {
     const m = await agentApi.fetchModels()
     models.value = (m||[]).map(x => ({ key: x.id||x.key, label: x.name||x.label||x.id }))
     if (models.value.length) config.model_key = models.value[0].key
-  } catch { /* offline */ }
+  } catch (e) {
+    modelError.value = '模型列表加载失败，已使用默认模型'
+  }
   try {
     const data = await agentApi.fetchSessionMessages(sid.value)
     if (data?.messages?.length) {
@@ -955,6 +867,7 @@ onUnmounted(() => { document.removeEventListener('visibilitychange', onVisibilit
 .tb-btn:hover { border-color:var(--primary); }
 .tb-btn.on { color:var(--water); border-color:var(--water); background:rgba(14,165,233,.08); }
 .tb-select { max-width:140px; border:1px solid var(--line); border-radius:999px; background:rgba(255,255,255,.5); padding:4px 8px; font-size:11px; outline:none; color:var(--ink); cursor:pointer; }
+.tb-error { color: var(--danger); font-size: 10px; }
 
 /* ── Side panel ── */
 .agent-side { min-height:0; height:100%; display:flex; flex-direction:column; gap:var(--gap,10px); overflow:hidden; }

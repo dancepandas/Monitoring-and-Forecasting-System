@@ -223,7 +223,7 @@ function buildFallbackHistory() {
 .forecast-page {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(45%, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   gap: var(--gap, 10px);
   overflow: hidden;
 }
@@ -231,14 +231,14 @@ function buildFallbackHistory() {
 .param-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: var(--gap, 10px);
 }
 
 .param-item { display: flex; flex-direction: column; gap: 6px; }
 .param-item label { font-size: 12px; color: var(--muted); font-weight: 600; }
 
 .param-item input {
-  height: 34px; padding: 0 10px;
+  min-height: 34px; padding: 0 10px;
   border: 1px solid var(--line); border-radius: 10px;
   background: rgba(255,255,255,.35);
   backdrop-filter: blur(8px);
@@ -248,7 +248,7 @@ function buildFallbackHistory() {
 
 .param-dropdown {
   position: relative;
-  height: 34px; padding: 0 10px;
+  min-height: 34px; padding: 0 10px;
   border: 1px solid var(--line); border-radius: 10px;
   background: rgba(255,255,255,.35);
   backdrop-filter: blur(8px);
@@ -312,7 +312,7 @@ function buildFallbackHistory() {
 .forecast-chart-area .forecast-insight .insight-label {
   flex: 0 0 auto;
   font-family: var(--mono);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--accent);
   letter-spacing: .08em;
@@ -320,8 +320,8 @@ function buildFallbackHistory() {
 }
 .forecast-chart-area .forecast-insight p {
   margin: 0;
-  font-size: 11.5px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.6;
   color: var(--ink);
 }
 .forecast-chart-area .combined-chart {
@@ -332,5 +332,8 @@ function buildFallbackHistory() {
   overflow: hidden;
 }
 .forecast-chart-area .combined-chart svg { display: block; width: 100%; height: 100%; }
-.forecast-chart-area .combined-summary { grid-template-columns: repeat(4, 1fr); }
+.forecast-chart-area .combined-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+}
 </style>
