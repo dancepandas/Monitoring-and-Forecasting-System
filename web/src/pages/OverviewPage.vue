@@ -64,6 +64,10 @@
         <div class="panel-body combined-card">
           <div class="trend-main">
             <div class="chart-wrap">
+              <div v-if="forecastInsight" class="forecast-insight insight-above-chart">
+                <span class="insight-label">AI · 预报解读</span>
+                <p>{{ forecastInsight }}</p>
+              </div>
               <div class="combined-chart">
                 <TrendChart :history="trendHistory" :forecast="trendForecast" unit="流量 (m³/s)" />
               </div>
@@ -79,10 +83,6 @@
               <div class="mini-stat peak"><span>预报峰值</span><b>{{ forecastPeak }}<small> m³/s</small></b></div>
               <div class="mini-stat"><span>峰现时间</span><b>{{ forecastPeakTime }}</b></div>
             </div>
-          </div>
-          <div v-if="forecastInsight" class="forecast-insight">
-            <span class="insight-label">AI · 预报解读</span>
-            <p>{{ forecastInsight }}</p>
           </div>
         </div>
       </article>
@@ -450,6 +450,13 @@ function closeStage() {
   line-height: 1.5;
   color: var(--ink);
 }
+.forecast-insight.insight-above-chart {
+  width: 100%;
+  max-width: 1119px;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
 
 .trend-main {
   display: grid;
@@ -472,20 +479,11 @@ function closeStage() {
   min-height: 0;
 }
 .chart-legend {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 2;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 5px 10px;
-  border: 1px solid var(--edge);
-  border-radius: 10px;
-  background: var(--glass-strong);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: var(--shadow-panel);
+  gap: 14px;
+  min-height: 0;
+  padding-top: 4px;
 }
 .chart-legend span {
   display: inline-flex;
