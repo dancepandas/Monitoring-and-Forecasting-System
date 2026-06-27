@@ -467,7 +467,6 @@ function closeStage() {
 }
 .forecast-insight.insight-above-chart {
   width: 100%;
-  max-width: 1119px;
   margin-bottom: 6px;
   flex-shrink: 0;
   box-sizing: border-box;
