@@ -1,31 +1,60 @@
 :root {
-  --paper: #f5f5f7;
-  --paper-soft: #fbfbfd;
-  --paper-deep: #e8e8ed;
-  --ink: #000;
-  --ink-2: #000;
-  --muted: #000;
-  --line: rgba(29, 29, 31, .10);
-  --line-strong: rgba(29, 29, 31, .18);
-  --clay: #b96b55;
-  --clay-soft: #ead9d3;
-  --clay-deep: #8f4a3c;
-  --moss: #66746b;
-  --moss-soft: #dfe5e1;
-  --river: #6f8f9e;
-  --river-soft: #dde8ec;
-  --amber: #b58b3f;
-  --danger: #a94f43;
-  --ok: #5f7567;
-  --white: #ffffff;
-  --shadow: 0 24px 80px rgba(0, 0, 0, .08);
-  --shadow-soft: 0 14px 38px rgba(0, 0, 0, .055);
+  /* 背景 */
+  --bg: #EEF4F9;
+
+  /* 玻璃面板 */
+  --glass: rgba(255, 255, 255, .40);
+  --glass-strong: rgba(255, 255, 255, .60);
+  --glass-deep: rgba(255, 255, 255, .82);
+
+  /* 文字层级 */
+  --ink: #0F172A;
+  --ink-2: #334155;
+  --muted: #64748B;
+  --faint: #94A3B8;
+
+  /* 线条/描边 */
+  --line: rgba(15, 23, 42, .07);
+  --line-strong: rgba(15, 23, 42, .14);
+  --edge: rgba(255, 255, 255, .65);
+
+  /* 品牌与数据色 */
+  --primary: #0284C7;
+  --primary-600: #0369A1;
+  --primary-soft: rgba(2, 132, 199, .13);
+  --accent: #6366F1;
+  --accent-soft: rgba(99, 102, 241, .12);
+  --water: #0EA5E9;
+  --water-soft: rgba(14, 165, 233, .15);
+
+  /* 状态 / 水利四级预警 */
+  --danger: #DC2626;
+  --danger-soft: rgba(220, 38, 38, .14);
+  --orange: #EA580C;
+  --orange-soft: rgba(234, 88, 12, .14);
+  --warn: #CA8A04;
+  --warn-soft: rgba(202, 138, 4, .14);
+  --info: #0EA5E9;
+  --ok: #10B981;
+  --ok-soft: rgba(16, 185, 129, .13);
+  --offline: #94A3B8;
+
+  /* 阴影（冷色化） */
+  --shadow: 0 18px 50px rgba(30, 64, 124, .08);
+  --shadow-soft: 0 8px 24px rgba(30, 64, 124, .06);
+  --shadow-panel: 0 6px 20px rgba(30, 64, 124, .05);
+  --ring: 0 0 0 3px rgba(2, 132, 199, .20);
+
+  /* 半径 */
   --radius-xl: 28px;
-  --radius-lg: 20px;
+  --radius-lg: 22px;
   --radius-md: 14px;
-  --serif: "Times New Roman", "SimHei", "黑体", sans-serif;
-  --sans: "Times New Roman", "SimHei", "黑体", sans-serif;
-  --mono: "Times New Roman", Consolas, monospace;
+  --radius-sm: 10px;
+
+  /* 字体栈 */
+  --serif: "Cambria", "Times New Roman", "Noto Serif SC", "SimSun", serif;
+  --sans: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --mono: "SF Mono", "JetBrains Mono", "Cascadia Code", Consolas, "Courier New", monospace;
 }
 
 * { box-sizing: border-box; }
@@ -38,9 +67,9 @@ body {
   font-family: var(--sans);
   background:
     radial-gradient(circle at 18% 0%, rgba(255, 255, 255, .96), transparent 24rem),
-    radial-gradient(circle at 82% 12%, rgba(111, 143, 158, .12), transparent 26rem),
-    radial-gradient(circle at 50% 100%, rgba(0, 0, 0, .045), transparent 34rem),
-    linear-gradient(180deg, #fbfbfd 0%, #f5f5f7 46%, #ececf0 100%);
+    radial-gradient(circle at 82% 12%, rgba(14, 165, 233, .10), transparent 26rem),
+    radial-gradient(circle at 50% 100%, rgba(2, 132, 199, .05), transparent 34rem),
+    linear-gradient(180deg, #f5fbff 0%, #eaf4fa 46%, #e0eef7 100%);
 }
 
 body::before {
@@ -49,11 +78,11 @@ body::before {
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(rgba(29,29,31,.024) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(29,29,31,.018) 1px, transparent 1px);
+    linear-gradient(rgba(15, 23, 42, .018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, .014) 1px, transparent 1px);
   background-size: 42px 42px;
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,.42), transparent 72%);
-  mask-image: linear-gradient(to bottom, rgba(0,0,0,.42), transparent 72%);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, .36), transparent 72%);
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, .36), transparent 72%);
   z-index: 0;
 }
 
@@ -62,7 +91,7 @@ body::after {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: .11;
+  opacity: .08;
   mix-blend-mode: multiply;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
   z-index: 0;
