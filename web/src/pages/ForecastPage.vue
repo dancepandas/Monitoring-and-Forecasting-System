@@ -14,15 +14,8 @@
             <input id="forecast-context" name="context" type="number" v-model.number="params.context" min="1" max="168" aria-label="上下文窗口" />
           </div>
           <div class="param-item">
-            <label>置信区间</label>
-            <div class="param-dropdown" @click="toggleDropdown('ci')" ref="ciRef">
-              <span>{{ params.ci }}</span>
-              <i class="arrow">&#9662;</i>
-            </div>
-          </div>
-          <div class="param-item">
             <label>模式</label>
-            <div class="param-dropdown" @click="toggleDropdown('mode')" ref="modeRef">
+            <div class="param-dropdown" @click="toggleDropdown" ref="modeRef">
               <span>{{ params.mode }}</span>
               <i class="arrow">&#9662;</i>
             </div>
@@ -49,10 +42,10 @@
             <TrendChart v-if="chartReady" :history="history" :forecast="forecast" unit="流量(m³/s)" />
           </div>
           <div class="combined-summary">
-            <div class="mini-stat"><span>预报峰值</span><b>{{ resultPeak }}m³/s</b></div>
+            <div class="mini-stat"><span>预报峰值</span><b>{{ resultPeak }}<small> m³/s</small></b></div>
             <div class="mini-stat"><span>峰现时间</span><b>{{ resultTime }}</b></div>
-            <div class="mini-stat"><span>置信下限</span><b>{{ resultLow }}m³/s</b></div>
-            <div class="mini-stat"><span>置信上限</span><b>{{ resultHigh }}m³/s</b></div>
+            <div class="mini-stat"><span>最小流量</span><b>{{ resultLow }}<small> m³/s</small></b></div>
+            <div class="mini-stat"><span>最大流量</span><b>{{ resultHigh }}<small> m³/s</small></b></div>
           </div>
         </div>
       </div>
@@ -60,11 +53,8 @@
   </section>
 
   <Teleport to="body">
-    <ul v-if="openDropdown === 'ci'" class="dropdown-menu" :style="ddStyle">
-      <li v-for="o in ciOptions" :key="o" @click.stop="selectOption('ci', o)">{{ o }}</li>
-    </ul>
     <ul v-if="openDropdown === 'mode'" class="dropdown-menu" :style="ddStyle">
-      <li v-for="o in modeOptions" :key="o" @click.stop="selectOption('mode', o)">{{ o }}</li>
+      <li v-for="o in modeOptions" :key="o" @click.stop="selectOption(o)">{{ o }}</li>
     </ul>
   </Teleport>
 </template>
@@ -78,16 +68,13 @@ import { api } from '../api'
 const params = reactive({
   steps: 72,
   context: 72,
-  ci: '10% / 90%',
   mode: 'univariate'
 })
 
-const ciOptions = ['5% / 95%', '10% / 90%', '20% / 80%', '25% / 75%']
 const modeOptions = ['univariate', 'multivariate', 'hybrid', 'ensemble']
 
 const openDropdown = ref(null)
 const ddStyle = ref({})
-const ciRef = ref(null)
 const modeRef = ref(null)
 const ran = ref(false)
 const loading = ref(false)
@@ -110,25 +97,23 @@ const labels = computed(() => {
   return offsets.map(h => { const d = new Date(now.getTime() + h * 3600000); return fmt(d) })
 })
 
-function toggleDropdown(key) {
-  if (openDropdown.value === key) { openDropdown.value = null; return }
-  openDropdown.value = key
-  const refEl = key === 'ci' ? ciRef.value : modeRef.value
+function toggleDropdown() {
+  openDropdown.value = openDropdown.value ? null : 'mode'
+  const refEl = modeRef.value
   if (refEl) {
     const r = refEl.getBoundingClientRect()
     ddStyle.value = { position: 'fixed', top: r.bottom + 4 + 'px', left: r.left + 'px', minWidth: r.width + 'px' }
   }
 }
 
-function selectOption(key, val) {
-  if (key === 'ci') params.ci = val
-  else params.mode = val
+function selectOption(val) {
+  params.mode = val
   openDropdown.value = null
 }
 
 function closeDropdown(e) {
   if (openDropdown.value) {
-    const refEl = openDropdown.value === 'ci' ? ciRef.value : modeRef.value
+    const refEl = modeRef.value
     if (refEl && !refEl.contains(e.target)) openDropdown.value = null
   }
 }
@@ -294,7 +279,7 @@ function buildFallbackHistory() {
 .forecast-chart-area {
   flex: 1; min-height: 0;
   display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 8px;
+  gap: 12px;
 }
 .forecast-chart-area .forecast-insight {
   width: 100%;
@@ -335,5 +320,9 @@ function buildFallbackHistory() {
 .forecast-chart-area .combined-summary {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
 }
+.forecast-chart-area .combined-summary .mini-stat { padding: 8px 10px; }
+.forecast-chart-area .combined-summary .mini-stat b { font-size: 16px; }
+.forecast-chart-area .combined-summary .mini-stat b small { font-size: 10px; color: var(--muted); }
 </style>

@@ -248,7 +248,7 @@ onMounted(() => { loadStats() })
 <style scoped>
 .command-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--gap, 10px);
 }
 
@@ -259,6 +259,7 @@ onMounted(() => { loadStats() })
   font-family: var(--mono);
   font-size: 11px;
   color: var(--muted);
+  flex-shrink: 0;
 }
 
 /* Modal overlay */
@@ -271,9 +272,9 @@ onMounted(() => { loadStats() })
 }
 
 .report-modal {
-  width: min(720px, 100%);
+  width: min(720px, calc(100% - 80px));
   max-height: 80vh;
-  background: rgba(255,255,255,.35);
+  background: var(--glass-deep);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   border-radius: 18px;
   box-shadow: 0 16px 48px rgba(0,0,0,.15);
@@ -294,6 +295,10 @@ onMounted(() => { loadStats() })
   font-family: var(--serif);
   font-size: 18px;
   font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .rm-head-actions {
@@ -341,10 +346,12 @@ onMounted(() => { loadStats() })
 
 .ar-info b {
   font-size: 13px; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .ar-info span {
-  font-size: 10px; color: var(--muted);
+  font-size: 11px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .ar-actions { flex-shrink: 0; }
