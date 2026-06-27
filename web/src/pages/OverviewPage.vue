@@ -453,10 +453,13 @@ function closeStage() {
 
 .trend-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 176px;
+  grid-template-columns: minmax(0, 1fr) 128px;
   gap: 12px;
   min-height: 0;
 }
+.trend-main .forecast-summary { grid-template-columns: 1fr; }
+.trend-main .mini-stat { padding: 6px 8px; }
+.trend-main .mini-stat b { font-size: 15px; }
 .chart-wrap {
   display: flex;
   flex-direction: column;

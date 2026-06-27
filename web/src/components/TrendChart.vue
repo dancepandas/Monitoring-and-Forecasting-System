@@ -79,7 +79,7 @@ function axisTicks(tMin, tMax, pw) {
   const spanH = (tMax - tMin) / HOUR
   let fmt, steps
   if (spanH <= 12) { fmt = 'hm'; steps = [1, 2, 3] }
-  else if (spanH <= 48) { fmt = 'dhm'; steps = [4, 6, 8, 12] }
+  else if (spanH <= 120) { fmt = 'dhm'; steps = [6, 12, 24] }
   else if (spanH <= 24 * 7) { fmt = 'd'; steps = [24] }
   else { fmt = 'd'; steps = [48, 72] }
 

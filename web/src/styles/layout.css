@@ -92,7 +92,17 @@
   border-radius: 3px;
   background: var(--primary);
 }
-.nav small { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+.nav small {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  min-width: 20px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  text-align: center;
+  background: rgba(15, 23, 42, .06);
+}
+.nav a.active small { color: var(--primary); background: rgba(2, 132, 199, .12); }
 
 .sidebar-foot {
   padding: 10px;

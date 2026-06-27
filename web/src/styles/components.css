@@ -209,7 +209,7 @@
 .station {
   position: absolute; width: 16px; height: 16px;
   margin: -8px 0 0 -8px;
-  border: 2px solid var(--white);
+  border: 2px solid #fff;
   border-radius: 50%;
   background: var(--ok);
   box-shadow: 0 0 0 5px var(--ok-soft), 0 6px 12px rgba(0, 0, 0, .14);
@@ -274,7 +274,7 @@
   text-align: left; font-size: 13px;
 }
 
-.layer-btn.active, .layer-btn:hover { color: var(--white); background: var(--primary); border-color: transparent; }
+.layer-btn.active, .layer-btn:hover { color: #fff; background: var(--primary); border-color: transparent; }
 
 .map-card {
   position: absolute; right: 22px; bottom: 22px;
@@ -347,17 +347,23 @@
 .combined-summary { grid-template-columns: repeat(4, 1fr); }
 
 .mini-stat {
-  border: 1px solid var(--line);
-  border-radius: 14px; padding: 8px 10px;
-  background: rgba(255, 255, 255, .66);
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  padding: 7px 9px;
+  background: var(--glass-strong);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45);
 }
 
-.mini-stat span { display: block; color: var(--muted); font-size: 10px; }
+.mini-stat span { display: block; color: var(--ink-2); font-size: 10px; font-weight: 500; }
 .mini-stat b {
   display: block; margin-top: 4px;
-  font-family: var(--serif); font-size: 18px;
-  letter-spacing: -.04em; font-weight: 500;
+  font-family: var(--serif); font-size: 17px;
+  letter-spacing: -.03em; font-weight: 500;
+  color: var(--ink);
 }
+.mini-stat b small { color: var(--muted); font-size: 10px; font-weight: 500; }
 
 /* ===== Bottom Grid ===== */
 .bottom-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
