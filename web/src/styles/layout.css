@@ -161,6 +161,15 @@
   font-weight: 500;
 }
 
+.section-code {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--primary);
+  letter-spacing: .08em;
+  margin-bottom: 2px;
+}
+
 .page-title p {
   margin: 2px 0 0;
   color: var(--muted);

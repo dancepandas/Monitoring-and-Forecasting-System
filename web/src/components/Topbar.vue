@@ -1,6 +1,7 @@
 <template>
   <header class="topbar">
     <div class="page-title">
+      <span v-if="sectionCode" class="section-code">{{ sectionCode }}</span>
       <h1>{{ title }}</h1>
       <p>{{ subtitle }}</p>
     </div>
