@@ -20,10 +20,12 @@
               <i class="arrow">&#9662;</i>
             </div>
           </div>
+          <div class="param-action">
+            <button class="btn primary run-btn" :disabled="loading" @click="runForecast">
+              {{ loading ? '预报运行中...' : '运行预报' }}
+            </button>
+          </div>
         </div>
-        <button class="btn primary run-btn" :disabled="loading" @click="runForecast">
-          {{ loading ? '预报运行中...' : '运行预报' }}
-        </button>
         <p v-if="error" class="error-msg">{{ error }}</p>
       </div>
     </article>
@@ -40,6 +42,11 @@
           </div>
           <div class="combined-chart" ref="chartWrap">
             <TrendChart v-if="chartReady" :history="history" :forecast="forecast" unit="流量(m³/s)" />
+          </div>
+          <div class="chart-legend">
+            <span><i class="legend-hist"></i>实测</span>
+            <span><i class="legend-fc"></i>预报</span>
+            <span><i class="legend-now"></i>当前</span>
           </div>
           <div class="combined-summary">
             <div class="mini-stat"><span>预报峰值</span><b>{{ resultPeak }}<small> m³/s</small></b></div>
@@ -162,15 +169,16 @@ async function runForecast() {
       forecast.value = []
     }
 
-    // 峰值与置信区间
-    const vals = forecast.value.map(d => d.y).filter(v => typeof v === 'number')
+    // 峰值与区间统计（基于真实预报序列，不做人为缩放）
+    const vals = forecast.value.map(d => d.y).filter(v => typeof v === 'number' && !isNaN(v))
     if (vals.length) {
       const peak = Math.max(...vals)
-      const peakIdx = vals.indexOf(peak)
+      const low = Math.min(...vals)
+      const peakIdx = forecast.value.findIndex(d => d.y === peak)
       resultPeak.value = peak.toFixed(2)
       resultTime.value = forecast.value[peakIdx]?.t || '—'
-      resultLow.value = (Math.min(...vals) * 0.95).toFixed(2)
-      resultHigh.value = (peak * 1.05).toFixed(2)
+      resultLow.value = low.toFixed(2)
+      resultHigh.value = peak.toFixed(2)
     } else {
       resultPeak.value = '—'
       resultTime.value = '—'
@@ -215,48 +223,53 @@ function buildFallbackHistory() {
 
 .param-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--gap, 10px);
+  align-items: end;
 }
 
 .param-item { display: flex; flex-direction: column; gap: 6px; }
 .param-item label { font-size: 12px; color: var(--muted); font-weight: 600; }
 
 .param-item input {
-  min-height: 34px; padding: 0 10px;
+  min-height: 36px; padding: 0 12px;
   border: 1px solid var(--line); border-radius: 10px;
-  background: rgba(255,255,255,.35);
+  background: rgba(255,255,255,.42);
   backdrop-filter: blur(8px);
   font-family: var(--mono); font-size: 13px; outline: none;
+  transition: border-color .15s ease, background .15s ease;
 }
-.param-item input:focus { border-color: var(--primary); }
+.param-item input:focus { border-color: var(--primary); background: rgba(255,255,255,.55); }
 
 .param-dropdown {
   position: relative;
-  min-height: 34px; padding: 0 10px;
+  min-height: 36px; padding: 0 12px;
   border: 1px solid var(--line); border-radius: 10px;
-  background: rgba(255,255,255,.35);
+  background: rgba(255,255,255,.42);
   backdrop-filter: blur(8px);
   display: flex; align-items: center; justify-content: space-between;
   cursor: pointer; font-size: 13px; user-select: none;
   gap: 8px;
+  transition: border-color .15s ease, background .15s ease;
 }
 .param-dropdown .arrow { font-size: 10px; color: var(--muted); }
-.param-dropdown:hover { border-color: var(--primary); }
+.param-dropdown:hover { border-color: var(--primary); background: rgba(255,255,255,.55); }
+
+.param-action { display: flex; justify-content: flex-end; }
 
 .dropdown-menu {
   margin: 0; padding: 4px 0; list-style: none; z-index: 9999;
   border: 1px solid var(--line); border-radius: 10px;
-  background: rgba(255,255,255,.4); box-shadow: 0 12px 32px rgba(0,0,0,.1);
+  background: rgba(255,255,255,.72); box-shadow: 0 12px 32px rgba(0,0,0,.1);
   backdrop-filter: blur(12px);
 }
 .dropdown-menu li {
   padding: 8px 12px; font-size: 12px; cursor: pointer;
   transition: background .12s ease;
 }
-.dropdown-menu li:hover { background: rgba(14,165,233,.1); }
+.dropdown-menu li:hover { background: rgba(14,165,233,.12); }
 
-.run-btn { margin-top: 12px; font-size: 13px; }
+.run-btn { font-size: 13px; min-height: 36px; padding: 0 18px; }
 .run-btn:disabled { opacity: .6; cursor: not-allowed; }
 
 .error-msg {
@@ -278,8 +291,9 @@ function buildFallbackHistory() {
 
 .forecast-chart-area {
   flex: 1; min-height: 0;
-  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 12px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 10px;
 }
 .forecast-chart-area .forecast-insight {
   width: 100%;
@@ -310,19 +324,63 @@ function buildFallbackHistory() {
   color: var(--ink);
 }
 .forecast-chart-area .combined-chart {
-  min-height: 120px;
+  min-height: 160px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(255,255,255,.3);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.45), rgba(255,255,255,.22)),
+    rgba(14,165,233,.04);
   overflow: hidden;
 }
 .forecast-chart-area .combined-chart svg { display: block; width: 100%; height: 100%; }
+
+.chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 4px;
+}
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.chart-legend i {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+}
+.legend-hist { background: var(--water); }
+.legend-fc { background: var(--accent); background-image: repeating-linear-gradient(90deg, var(--accent) 0 5px, transparent 5px 9px); }
+.legend-now { background: var(--accent); opacity: .5; }
+
 .forecast-chart-area .combined-summary {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 10px;
+  align-items: start;
 }
-.forecast-chart-area .combined-summary .mini-stat { padding: 8px 10px; }
-.forecast-chart-area .combined-summary .mini-stat b { font-size: 16px; }
+.forecast-chart-area .combined-summary .mini-stat {
+  padding: 10px 12px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.forecast-chart-area .combined-summary .mini-stat span { font-size: 10px; }
+.forecast-chart-area .combined-summary .mini-stat b { font-size: 17px; }
 .forecast-chart-area .combined-summary .mini-stat b small { font-size: 10px; color: var(--muted); }
+
+@media (max-width: 900px) {
+  .param-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .forecast-chart-area .combined-summary { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 540px) {
+  .param-grid { grid-template-columns: 1fr; }
+  .param-action { justify-content: stretch; }
+  .run-btn { width: 100%; }
+  .forecast-chart-area .combined-summary { grid-template-columns: 1fr 1fr; }
+}
 </style>

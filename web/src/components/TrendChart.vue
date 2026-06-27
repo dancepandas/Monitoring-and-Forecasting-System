@@ -52,12 +52,14 @@ const timeDomain = computed(() => {
 })
 
 const yDomain = computed(() => {
-  const vals = allPoints.value.map(d => d.y)
+  const vals = allPoints.value.map(d => d.y).filter(v => typeof v === 'number' && !isNaN(v))
   if (!vals.length) return [0, 1]
   const min = Math.min(...vals)
   const max = Math.max(...vals)
-  const pad = (max - min) * 0.15 || Math.abs(max) * 0.1 || 1
-  return [min - pad, max + pad]
+  const range = max - min
+  // Tighter padding so meaningful variation isn't visually flattened
+  const pad = range > 0 ? range * 0.06 : Math.abs(max) * 0.05 || 1
+  return [Math.max(0, min - pad), max + pad]
 })
 
 const nowPoint = computed(() => {
@@ -137,16 +139,16 @@ function render() {
   for (let i = 0; i <= 4; i++) {
     const v = vMin + (vMax - vMin) * (i / 4)
     const y = Y(v)
-    g += `<line x1="${margin.left}" y1="${y.toFixed(1)}" x2="${(margin.left + pw).toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(15,23,42,.08)" stroke-dasharray="4 7"/>`
-    g += `<text x="${margin.left - 8}" y="${(y + 3).toFixed(1)}" font-family="var(--mono)" font-size="10" fill="#64748B" text-anchor="end">${Math.round(v)}</text>`
+    g += `<line x1="${margin.left}" y1="${y.toFixed(1)}" x2="${(margin.left + pw).toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(15,23,42,.10)" stroke-dasharray="4 7"/>`
+    g += `<text x="${margin.left - 8}" y="${(y + 3).toFixed(1)}" font-family="var(--mono)" font-size="10" fill="#475569" text-anchor="end">${Math.round(v)}</text>`
   }
 
   // X ticks
   const { fmt, ticks } = axisTicks(tMin, tMax, pw)
   for (const tt of ticks) {
     const x = X(tt)
-    g += `<line x1="${x.toFixed(1)}" y1="${margin.top}" x2="${x.toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(15,23,42,.04)"/>`
-    g += `<text x="${x.toFixed(1)}" y="${(margin.top + ph + 15).toFixed(1)}" font-family="var(--mono)" font-size="10" fill="#64748B" text-anchor="middle">${fmtLabel(tt, fmt)}</text>`
+    g += `<line x1="${x.toFixed(1)}" y1="${margin.top}" x2="${x.toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(15,23,42,.06)"/>`
+    g += `<text x="${x.toFixed(1)}" y="${(margin.top + ph + 15).toFixed(1)}" font-family="var(--mono)" font-size="10" fill="#475569" text-anchor="middle">${fmtLabel(tt, fmt)}</text>`
   }
 
   const hPts = historyPoints.value
@@ -165,11 +167,11 @@ function render() {
   svg.value.innerHTML = `
     <defs>
       <linearGradient id="hA" x1="0" x2="0" y1="0" y2="1">
-        <stop offset="0" stop-color="${historyColor}" stop-opacity=".28"/>
+        <stop offset="0" stop-color="${historyColor}" stop-opacity=".32"/>
         <stop offset="1" stop-color="${historyColor}" stop-opacity="0"/>
       </linearGradient>
       <linearGradient id="fA" x1="0" x2="0" y1="0" y2="1">
-        <stop offset="0" stop-color="${forecastColor}" stop-opacity=".20"/>
+        <stop offset="0" stop-color="${forecastColor}" stop-opacity=".28"/>
         <stop offset="1" stop-color="${forecastColor}" stop-opacity="0"/>
       </linearGradient>
     </defs>
@@ -181,7 +183,7 @@ function render() {
     ${hArea ? `<path d="${hArea}" fill="url(#hA)"/>` : ''}
     ${hPath ? `<path d="${hPath}" fill="none" stroke="${historyColor}" stroke-width="2.5"/>` : ''}
     ${fArea ? `<path d="${fArea}" fill="url(#fA)"/>` : ''}
-    ${fPath ? `<path d="${fPath}" fill="none" stroke="${forecastColor}" stroke-width="2.5" stroke-dasharray="6 5"/>` : ''}
+    ${fPath ? `<path d="${fPath}" fill="none" stroke="${forecastColor}" stroke-width="3" stroke-dasharray="8 6"/>` : ''}
     ${nowDot}
   `
 }
