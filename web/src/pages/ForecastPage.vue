@@ -41,7 +41,7 @@
             <p>{{ forecastInsight }}</p>
           </div>
           <div class="combined-chart" ref="chartWrap">
-            <TrendChart v-if="chartReady" :history="history" :forecast="forecast" unit="流量(m³/s)" />
+            <TrendChart v-show="ran" :history="history" :forecast="forecast" unit="流量(m³/s)" />
           </div>
           <div class="chart-legend">
             <span><i class="legend-hist"></i>实测</span>
@@ -52,7 +52,7 @@
             <div class="mini-stat"><span>预报峰值</span><b>{{ resultPeak }}<small> m³/s</small></b></div>
             <div class="mini-stat"><span>峰现时间</span><b>{{ resultTime }}</b></div>
             <div class="mini-stat"><span>最小流量</span><b>{{ resultLow }}<small> m³/s</small></b></div>
-            <div class="mini-stat"><span>最大流量</span><b>{{ resultHigh }}<small> m³/s</small></b></div>
+            <div class="mini-stat"><span>平均流量</span><b>{{ resultAvg }}<small> m³/s</small></b></div>
           </div>
         </div>
       </div>
@@ -67,7 +67,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import Topbar from '../components/Topbar.vue'
 import TrendChart from '../components/TrendChart.vue'
 import { api } from '../api'
@@ -90,19 +90,11 @@ const resultLabel = ref('未来 72h')
 const resultPeak = ref('—')
 const resultTime = ref('—')
 const resultLow = ref('—')
-const resultHigh = ref('—')
+const resultAvg = ref('—')
 const history = ref([])
 const forecast = ref([])
-const chartReady = ref(false)
 const chartWrap = ref(null)
 const forecastInsight = ref('')
-
-const labels = computed(() => {
-  const now = new Date()
-  const fmt = (d) => `${String(d.getDate()).padStart(2, '0')}日${String(d.getHours()).padStart(2, '0')}时`
-  const offsets = [-24, -16, -8, 0, 24, 48, 72]
-  return offsets.map(h => { const d = new Date(now.getTime() + h * 3600000); return fmt(d) })
-})
 
 function toggleDropdown() {
   openDropdown.value = openDropdown.value ? null : 'mode'
@@ -129,10 +121,8 @@ onMounted(() => document.addEventListener('click', closeDropdown))
 onUnmounted(() => document.removeEventListener('click', closeDropdown))
 
 async function runForecast() {
-  ran.value = false
   loading.value = true
   error.value = ''
-  chartReady.value = false
   try {
     const data = await api.runForecast('00106', params.steps, params.mode, params.context)
     ran.value = true
@@ -178,15 +168,13 @@ async function runForecast() {
       resultPeak.value = peak.toFixed(2)
       resultTime.value = forecast.value[peakIdx]?.t || '—'
       resultLow.value = low.toFixed(2)
-      resultHigh.value = peak.toFixed(2)
+      resultAvg.value = (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2)
     } else {
       resultPeak.value = '—'
       resultTime.value = '—'
       resultLow.value = '—'
-      resultHigh.value = '—'
+      resultAvg.value = '—'
     }
-
-    chartReady.value = true
 
     // AI 预报解读
     api.getForecastInterpret('00106', 'virtualFlow').then(d => {
@@ -204,9 +192,10 @@ async function runForecast() {
 function buildFallbackHistory() {
   // 当后端未返回历史序列时，给出占位点保证图表能渲染
   const now = Date.now()
+  const fmt = (d) => `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:00`
   return [0, 1, 2, 3].map((i) => ({
     time: now - (3 - i) * 3600000,
-    t: labels.value[i] || '',
+    t: fmt(new Date(now - (3 - i) * 3600000)),
     y: 200 + i * 50
   }))
 }
@@ -258,7 +247,7 @@ function buildFallbackHistory() {
 .param-action { display: flex; justify-content: flex-end; }
 
 .dropdown-menu {
-  margin: 0; padding: 4px 0; list-style: none; z-index: 9999;
+  margin: 0; padding: 4px 0; list-style: none; z-index: 2000;
   border: 1px solid var(--line); border-radius: 10px;
   background: rgba(255,255,255,.72); box-shadow: 0 12px 32px rgba(0,0,0,.1);
   backdrop-filter: blur(12px);
@@ -332,12 +321,11 @@ function buildFallbackHistory() {
     rgba(14,165,233,.04);
   overflow: hidden;
 }
-.forecast-chart-area .combined-chart svg { display: block; width: 100%; height: 100%; }
 
 .chart-legend {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 14px;
   padding: 0 4px;
 }
 .chart-legend span {
@@ -352,9 +340,9 @@ function buildFallbackHistory() {
   height: 3px;
   border-radius: 2px;
 }
-.legend-hist { background: var(--water); }
-.legend-fc { background: var(--accent); background-image: repeating-linear-gradient(90deg, var(--accent) 0 5px, transparent 5px 9px); }
-.legend-now { background: var(--accent); opacity: .5; }
+.legend-hist { background: var(--water, #0EA5E9); }
+.legend-fc { background: var(--accent, #6366F1); background-image: repeating-linear-gradient(90deg, var(--accent, #6366F1) 0 5px, transparent 5px 9px); }
+.legend-now { background: var(--accent, #6366F1); opacity: .5; }
 
 .forecast-chart-area .combined-summary {
   display: grid;
