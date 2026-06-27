@@ -466,17 +466,23 @@ function closeStage() {
   gap: 4px;
   min-height: 0;
 }
+.chart-wrap .combined-chart {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
 .chart-legend {
   display: flex;
   align-items: center;
   gap: 14px;
+  min-height: 0;
 }
 .chart-legend span {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
-  color: var(--ink-2);
+  font-size: 11px;
+  color: var(--ink);
 }
 .chart-legend i {
   width: 14px;
