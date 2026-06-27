@@ -48,6 +48,10 @@
       <article class="panel">
         <div class="panel-head"><h2>预警与告警</h2><span>共 {{ displayWarnings.length }} 条</span></div>
         <div class="panel-body">
+          <div v-if="warningInsight" class="forecast-insight warning-insight">
+            <span class="insight-label">AI · 预警解读</span>
+            <p>{{ warningInsight }}</p>
+          </div>
           <div class="risk-list">
             <div class="risk-item" v-for="w in displayWarnings" :key="w.id" @click="openStage(w.name, 'warning')">
               <div class="risk-row"><b>{{ w.name }}</b><span :class="['badge', badgeClass(w)]">{{ w.level }}</span></div>
@@ -208,6 +212,17 @@ const displayWarnings = computed(() => {
     return (order[a.level] ?? 5) - (order[b.level] ?? 5)
   })
   return all
+})
+
+const warningInsight = computed(() => {
+  const items = displayWarnings.value
+  if (!items.length) return ''
+  const real = items.filter(w => w.id !== 'loading' && w.id !== 'ok')
+  if (!real.length) return '当前无 active 预警，各站点运行状态正常，可继续按现有巡检周期执行。'
+  const names = [...new Set(real.map(w => w.name))].slice(0, 2).join('、')
+  const levels = [...new Set(real.map(w => w.level))].filter(Boolean)
+  const levelText = levels.slice(0, 2).join('、')
+  return `当前共有 ${real.length} 条预警，涉及 ${names}${levelText ? '，级别为 ' + levelText : ''}。建议优先复核最近一条并采取预置处置流程。`
 })
 
 function badgeClass(w) {
@@ -457,6 +472,13 @@ function closeStage() {
   flex-shrink: 0;
   box-sizing: border-box;
 }
+.forecast-insight.warning-insight {
+  margin-bottom: 8px;
+  background: var(--primary-soft);
+  border-color: var(--primary-soft);
+  border-left-color: var(--primary);
+}
+.forecast-insight.warning-insight .insight-label { color: var(--primary); }
 
 .trend-main {
   display: grid;
