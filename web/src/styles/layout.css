@@ -58,6 +58,7 @@
 }
 
 .nav a {
+  position: relative;
   width: 100%;
   border: 0;
   border-radius: 12px;
