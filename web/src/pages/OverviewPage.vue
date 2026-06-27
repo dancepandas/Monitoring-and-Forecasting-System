@@ -461,9 +461,9 @@ function closeStage() {
 .trend-main .mini-stat { padding: 6px 8px; }
 .trend-main .mini-stat b { font-size: 15px; }
 .chart-wrap {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
   min-height: 0;
 }
 .chart-wrap .combined-chart {
@@ -472,10 +472,20 @@ function closeStage() {
   min-height: 0;
 }
 .chart-legend {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-height: 0;
+  gap: 12px;
+  padding: 5px 10px;
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  background: var(--glass-strong);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-panel);
 }
 .chart-legend span {
   display: inline-flex;
