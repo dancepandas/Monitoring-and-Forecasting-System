@@ -17,13 +17,13 @@ import ContextMenu from '../components/ContextMenu.vue'
 
 onMounted(() => {
   const root = document.documentElement
-  root.style.setProperty('--topbar-h', '7.9fr')
-  root.style.setProperty('--overview-h', '10.5fr')
+  root.style.setProperty('--topbar-h', '8.5fr')
+  root.style.setProperty('--overview-h', '9.0fr')
   root.style.setProperty('--middle-h', '50.0fr')
-  root.style.setProperty('--bottom-h', '31.6fr')
-  root.style.setProperty('--video-w', '21.6fr')
-  root.style.setProperty('--map-w', '51.0fr')
-  root.style.setProperty('--warning-w', '27.5fr')
+  root.style.setProperty('--bottom-h', '32.5fr')
+  root.style.setProperty('--video-w', '21fr')
+  root.style.setProperty('--map-w', '51fr')
+  root.style.setProperty('--warning-w', '28fr')
   root.style.setProperty('--gap', '10px')
   root.style.setProperty('--pad', '10px')
   root.style.setProperty('--sidebar-w', '220px')
