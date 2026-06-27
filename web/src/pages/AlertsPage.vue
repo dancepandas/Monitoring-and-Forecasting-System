@@ -149,7 +149,7 @@ onMounted(() => {
   margin-top: 10px;
   padding: 8px 12px;
   border-radius: 6px;
-  background: rgba(0,122,255,.05);
+  background: rgba(14,165,233,.05);
   border-left: 3px solid var(--primary);
 }
 .postmortem-label {

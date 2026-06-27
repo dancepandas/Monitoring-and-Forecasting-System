@@ -259,7 +259,7 @@ function buildFallbackHistory() {
   padding: 8px 12px; font-size: 12px; cursor: pointer;
   transition: background .12s ease;
 }
-.dropdown-menu li:hover { background: rgba(0,122,255,.1); }
+.dropdown-menu li:hover { background: rgba(14,165,233,.1); }
 
 .run-btn { margin-top: 12px; font-size: 13px; }
 .run-btn:disabled { opacity: .6; cursor: not-allowed; }

@@ -72,7 +72,7 @@ async function loadWarnings() {
         }
         suggestions.value = (d.suggestions || []).map(s => ({
           text: typeof s === 'string' ? s : s.text || s,
-          color: 'var(--sky)'
+          color: 'var(--water)'
         }))
       } catch {
         suggestions.value = [{ text: '处置建议加载失败', color: 'var(--muted)' }]
@@ -107,7 +107,7 @@ onUnmounted(() => {
 }
 .suggest-text { color: var(--ink); font-size: 16px; line-height: 1.6; }
 @keyframes pulse-dot {
-  0%, 100% { box-shadow: 0 0 0 5px rgba(0,122,255,.18); }
+  0%, 100% { box-shadow: 0 0 0 5px rgba(14,165,233,.18); }
   50% { box-shadow: 0 0 0 10px transparent; }
 }
 </style>

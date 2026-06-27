@@ -465,15 +465,15 @@
   gap: 10px;
   padding: 10px 14px;
   border-radius: 12px;
-  background: rgba(99, 102, 241, .08);
-  border: 1px solid rgba(99, 102, 241, .18);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-soft);
   font-size: 12px;
   line-height: 1.55;
 }
 .forecast-insight .insight-label {
   flex-shrink: 0;
   font-weight: 700;
-  color: var(--indigo);
+  color: var(--accent);
   font-size: 11px;
   letter-spacing: .04em;
 }
