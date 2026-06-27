@@ -201,7 +201,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   cancelAnimationFrame(raf)
-  if (ro && canvas.value) ro.unobserve(canvas.value)
+  if (ro) { ro.disconnect(); ro = null }
 })
 
 watch(() => [props.history, props.forecast, props.unit], schedule, { deep: true })

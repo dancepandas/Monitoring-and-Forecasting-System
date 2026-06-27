@@ -125,7 +125,6 @@ async function runForecast() {
   error.value = ''
   try {
     const data = await api.runForecast('00106', params.steps, params.mode, params.context)
-    ran.value = true
     resultLabel.value = `步长 ${params.steps}h · ${params.mode}`
     error.value = ''
 
@@ -158,6 +157,8 @@ async function runForecast() {
     } else {
       forecast.value = []
     }
+
+    ran.value = true
 
     // 峰值与区间统计（基于真实预报序列，不做人为缩放）
     const vals = forecast.value.map(d => d.y).filter(v => typeof v === 'number' && !isNaN(v))
