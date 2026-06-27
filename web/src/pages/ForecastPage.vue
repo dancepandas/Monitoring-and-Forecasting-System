@@ -183,7 +183,7 @@ async function runForecast() {
     // AI 预报解读
     api.getForecastInterpret('00106', 'virtualFlow').then(d => {
       forecastInsight.value = d.interpretation || ''
-    }).catch(() => { forecastInsight.value = '' })
+    }).catch(() => { forecastInsight.value = '预报解读暂不可用' })
   } catch (e) {
     error.value = e.message || '预报失败'
     ran.value = false

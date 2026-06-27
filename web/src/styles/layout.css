@@ -178,6 +178,10 @@
   color: var(--primary);
   letter-spacing: .08em;
   margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
 }
 
 .page-title p {

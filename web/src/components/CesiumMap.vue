@@ -88,7 +88,7 @@ function statusColor(status) {
     danger: '#DC2626',
     offline: '#94A3B8',
   }
-  return map[status] || '#10B981'
+  return map[status] || '#94A3B8'
 }
 
 function createPinForStatus(status) {

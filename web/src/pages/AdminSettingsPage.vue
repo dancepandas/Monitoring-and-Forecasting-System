@@ -29,7 +29,7 @@
         <div class="panel-body">
           <div class="risk-list">
             <div class="risk-item">
-              <div class="risk-row"><b>水位预警阈值</b></div>
+              <div class="risk-row"><b>水位预警阈值（示例）</b></div>
               <div class="thresholds">
                 <span class="threshold-tag">蓝 34.0m</span>
                 <span class="threshold-tag">黄 35.0m</span>
@@ -38,7 +38,7 @@
               </div>
             </div>
             <div class="risk-item">
-              <div class="risk-row"><b>流量预警阈值</b></div>
+              <div class="risk-row"><b>流量预警阈值（示例）</b></div>
               <div class="thresholds">
                 <span class="threshold-tag">蓝 5000</span>
                 <span class="threshold-tag">黄 8000</span>

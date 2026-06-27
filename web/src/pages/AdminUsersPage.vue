@@ -26,7 +26,7 @@ import { api } from '../api'
 const users = ref([])
 
 function badgeClass(role) {
-  if (role === 'super_admin') return 'danger'
+  if (role === 'super_admin') return 'primary'
   if (role === 'admin') return 'warn'
   return 'ok'
 }

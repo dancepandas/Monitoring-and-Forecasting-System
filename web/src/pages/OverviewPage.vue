@@ -447,7 +447,7 @@ function closeStage() {
   padding: 9px 13px;
   background: var(--accent-soft);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
 }
 .insight-label {
@@ -458,12 +458,15 @@ function closeStage() {
   color: var(--accent);
   letter-spacing: .08em;
   white-space: nowrap;
+  margin-top: 2px;
 }
 .forecast-insight p {
   margin: 0;
   font-size: 11.5px;
   line-height: 1.5;
   color: var(--ink);
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 .forecast-insight.insight-above-chart {
   width: 100%;

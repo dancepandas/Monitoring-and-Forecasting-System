@@ -11,7 +11,7 @@
               <b>{{ s.name }}</b>
               <span :class="['badge', s.badgeClass]">{{ s.status }}</span>
             </div>
-            <p>水位 {{ s.level }}m · 流量 {{ s.flow || '—' }}m³/s · {{ s.detail }}</p>
+            <p>水位 {{ s.level ?? '—' }}m · 流量 {{ s.flow || '—' }}m³/s · {{ s.detail }}</p>
           </div>
         </div>
       </div>

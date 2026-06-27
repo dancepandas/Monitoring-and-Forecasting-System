@@ -68,6 +68,15 @@ const nowPoint = computed(() => {
 
 function pad2(n) { return String(n).padStart(2, '0') }
 
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function fmtLabel(ms, fmt) {
   const d = new Date(ms)
   if (fmt === 'hm') return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
@@ -164,7 +173,7 @@ function render() {
       </linearGradient>
     </defs>
     ${g}
-    <text transform="translate(16 ${cy.toFixed(1)}) rotate(-90)" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#64748B">${props.unit}</text>
+    <text transform="translate(16 ${cy.toFixed(1)}) rotate(-90)" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#64748B">${escHtml(props.unit)}</text>
     <line x1="${margin.left}" y1="${(margin.top + ph).toFixed(1)}" x2="${(margin.left + pw).toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(15,23,42,.18)"/>
     <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(15,23,42,.18)"/>
     ${nowX != null ? `<line x1="${nowX.toFixed(1)}" y1="${margin.top}" x2="${nowX.toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="${forecastColor}" stroke-width="1" stroke-dasharray="5 5" opacity=".55"/>` : ''}

@@ -249,56 +249,6 @@
   box-shadow: 0 8px 22px rgba(30, 64, 124, .08);
 }
 
-.map-note {
-  position: absolute; left: 22px; top: 22px;
-  width: min(360px, calc(100% - 44px));
-  border: 1px solid var(--line);
-  border-radius: 20px; padding: 16px;
-  background: rgba(255, 255, 255, .82);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 16px 42px rgba(0, 0, 0, .07);
-}
-
-.map-note b { display: block; margin-bottom: 7px; }
-.map-note p { margin: 0; color: var(--ink-2); line-height: 1.55; font-size: 13px; }
-
-.map-layers { position: absolute; right: 20px; top: 20px; display: grid; gap: 8px; }
-
-.layer-btn {
-  border: 1px solid var(--line);
-  border-radius: 999px; padding: 9px 12px;
-  color: var(--ink-2);
-  background: rgba(255, 255, 255, .76);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
-  cursor: pointer;
-  transition: .18s ease;
-  text-align: left; font-size: 13px;
-}
-
-.layer-btn.active, .layer-btn:hover { color: #fff; background: var(--primary); border-color: transparent; }
-
-.map-card {
-  position: absolute; right: 22px; bottom: 22px;
-  width: min(330px, calc(100% - 44px));
-  border: 1px solid var(--line);
-  border-radius: 22px; padding: 16px;
-  background: rgba(255, 255, 255, .82);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 18px 48px rgba(30, 64, 124, .12);
-}
-
-.map-card h3 {
-  margin: 0 0 8px;
-  font-family: var(--serif);
-  font-size: 28px; line-height: 1;
-  letter-spacing: -.055em; font-weight: 500;
-}
-
-.map-card p { margin: 0; color: var(--ink-2); line-height: 1.55; font-size: 13px; }
-
 /* ===== Warning / Risk List ===== */
 .risk-list { display: grid; gap: 6px; align-content: start; }
 .risk-item { border: 1px solid var(--edge); border-radius: var(--radius-md); padding: 9px 11px; background: var(--glass-strong); min-width: 0; }
@@ -309,6 +259,7 @@
 .badge.warn { color: var(--orange); background: var(--orange-soft); }
 .badge.yellow { color: var(--warn); background: var(--warn-soft); }
 .badge.ok { color: var(--ok); background: var(--ok-soft); }
+.badge.primary { color: var(--primary); background: var(--primary-soft); }
 .risk-item p { margin: 0; color: var(--ink-2); font-size: 11px; line-height: 1.5; overflow-wrap: break-word; }
 .progress { height: 3px; margin-top: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
 
