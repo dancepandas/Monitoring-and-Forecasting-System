@@ -480,7 +480,7 @@ function closeStage() {
   border-color: var(--line);
   border-left-color: var(--primary);
 }
-.forecast-insight.warning-insight .insight-label { color: var(--primary); }
+.forecast-insight.warning-insight .insight-label { color: #0369A1; }
 
 .trend-main {
   display: grid;

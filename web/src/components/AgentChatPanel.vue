@@ -238,7 +238,7 @@ onMounted(() => scroll())
 /* Banners */
 .perm-banner { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 14px; border:1px solid var(--warn); border-radius:12px; background:rgba(245,158,11,.08); font-size:12px; flex-shrink:0; }
 .perm-btns { display:flex; gap:6px; flex-shrink:0; }
-.recon-banner { display:flex; align-items:center; gap:8px; padding:8px 14px; border-radius:12px; background:rgba(14,165,233,.1); font-size:12px; color:var(--water); flex-shrink:0; }
+.recon-banner { display:flex; align-items:center; gap:8px; padding:8px 14px; border-radius:12px; background:rgba(14,165,233,.1); font-size:12px; color:#0369A1; flex-shrink:0; }
 .spin { display:inline-block; animation:spin 1s linear infinite; }
 @keyframes spin { to{transform:rotate(360deg)} }
 @keyframes msgIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
@@ -249,7 +249,7 @@ onMounted(() => scroll())
 .cot-hd { display:flex; align-items:center; gap:8px; padding:8px 12px; cursor:pointer; user-select:none; font-size:12px; }
 .cot-hd:hover { background:rgba(14,165,233,.05); }
 .cot-arrow { font-size:8px; width:12px; color:var(--muted); flex-shrink:0; }
-.cot-label { display:flex; align-items:center; gap:6px; font-weight:600; color:var(--water); }
+.cot-label { display:flex; align-items:center; gap:6px; font-weight:600; color:#0369A1; }
 .cot-meta { margin-left:auto; font-size:10px; color:var(--muted); font-weight:400; }
 .cot-dot { width:7px; height:7px; border-radius:50%; background:var(--water); flex-shrink:0; }
 .cot-dot.pulse { animation:cotPulse 1.5s ease-in-out infinite; }

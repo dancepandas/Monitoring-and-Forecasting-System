@@ -157,7 +157,7 @@ onMounted(() => {
 .postmortem-label {
   font-size: 10px;
   font-weight: 700;
-  color: var(--primary);
+  color: #0369A1;
   text-transform: uppercase;
   letter-spacing: .06em;
 }
