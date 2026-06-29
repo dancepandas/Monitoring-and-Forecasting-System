@@ -280,7 +280,7 @@
   height: 100%; min-height: 0;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: transparent;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .66), rgba(255, 255, 255, .40));
   overflow: hidden;
 }
 
@@ -425,8 +425,9 @@
   gap: 10px;
   padding: 10px 14px;
   border-radius: 12px;
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-soft);
+  background: rgba(255, 255, 255, .62);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
   font-size: 12px;
   line-height: 1.55;
 }

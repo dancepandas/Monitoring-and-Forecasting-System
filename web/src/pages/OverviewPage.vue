@@ -441,11 +441,11 @@ function closeStage() {
 <style scoped>
 .forecast-insight {
   margin-top: 0;
-  border: 1px solid var(--accent-soft);
+  border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
   border-radius: var(--radius-md);
   padding: 9px 13px;
-  background: var(--accent-soft);
+  background: rgba(255, 255, 255, .62);
   display: flex;
   align-items: flex-start;
   gap: 12px;
@@ -476,8 +476,8 @@ function closeStage() {
 }
 .forecast-insight.warning-insight {
   margin-bottom: 8px;
-  background: var(--primary-soft);
-  border-color: var(--primary-soft);
+  background: rgba(255, 255, 255, .62);
+  border-color: var(--line);
   border-left-color: var(--primary);
 }
 .forecast-insight.warning-insight .insight-label { color: var(--primary); }
