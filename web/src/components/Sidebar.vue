@@ -11,7 +11,6 @@
       <router-link to="/stations"><span>监测站点</span><small>{{ stationCount }}</small></router-link>
       <router-link to="/warnings"><span>预警处置</span><small>{{ warningCount }}</small></router-link>
       <router-link to="/alerts"><span>告警中心</span><small>{{ alertCount }}</small></router-link>
-      <router-link to="/forecast"><span>模型预报</span><small>AI</small></router-link>
       <router-link to="/devices"><span>视频巡检</span><small>{{ videoCount }}</small></router-link>
       <router-link to="/reports"><span>日报归档</span><small>{{ reportCount }}</small></router-link>
       <router-link to="/agent"><span>智能体对话</span><small>AI</small></router-link>
