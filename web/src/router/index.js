@@ -16,7 +16,10 @@ const routes = [
       { path: 'admin/users', name: 'AdminUsers', component: () => import('../pages/AdminUsersPage.vue'), meta: { role: 'super_admin' } },
       { path: 'admin/settings', name: 'AdminSettings', component: () => import('../pages/AdminSettingsPage.vue'), meta: { role: 'admin' } },
     ]
-  }
+  },
+  // Catch-all: redirect any unmatched path (e.g. stale /forecast bookmarks)
+  // to the overview so a removed/renamed route never renders a blank page.
+  { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 
 const router = createRouter({
