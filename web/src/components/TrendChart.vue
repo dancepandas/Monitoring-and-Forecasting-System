@@ -139,16 +139,16 @@ function render() {
   for (let i = 0; i <= 4; i++) {
     const v = vMin + (vMax - vMin) * (i / 4)
     const y = Y(v)
-    g += `<line x1="${margin.left}" y1="${y.toFixed(1)}" x2="${(margin.left + pw).toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(15,23,42,.10)" stroke-dasharray="4 7"/>`
-    g += `<text x="${margin.left - 8}" y="${(y + 3).toFixed(1)}" font-family="var(--mono)" font-size="10" fill="#475569" text-anchor="end">${Math.round(v)}</text>`
+    g += `<line x1="${margin.left}" y1="${y.toFixed(1)}" x2="${(margin.left + pw).toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(15,23,42,.14)" stroke-dasharray="4 7"/>`
+    g += `<text x="${margin.left - 8}" y="${(y + 3).toFixed(1)}" font-family="var(--mono)" font-size="10" fill="#334155" text-anchor="end">${Math.round(v)}</text>`
   }
 
   // X ticks
   const { fmt, ticks } = axisTicks(tMin, tMax, pw)
   for (const tt of ticks) {
     const x = X(tt)
-    g += `<line x1="${x.toFixed(1)}" y1="${margin.top}" x2="${x.toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(15,23,42,.06)"/>`
-    g += `<text x="${x.toFixed(1)}" y="${(margin.top + ph + 15).toFixed(1)}" font-family="var(--mono)" font-size="10" fill="#475569" text-anchor="middle">${fmtLabel(tt, fmt)}</text>`
+    g += `<line x1="${x.toFixed(1)}" y1="${margin.top}" x2="${x.toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(15,23,42,.10)"/>`
+    g += `<text x="${x.toFixed(1)}" y="${(margin.top + ph + 15).toFixed(1)}" font-family="var(--mono)" font-size="10" fill="#334155" text-anchor="middle">${fmtLabel(tt, fmt)}</text>`
   }
 
   const hPts = historyPoints.value
@@ -176,9 +176,9 @@ function render() {
       </linearGradient>
     </defs>
     ${g}
-    <text transform="translate(16 ${cy.toFixed(1)}) rotate(-90)" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#64748B">${escHtml(props.unit)}</text>
-    <line x1="${margin.left}" y1="${(margin.top + ph).toFixed(1)}" x2="${(margin.left + pw).toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(15,23,42,.18)"/>
-    <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(15,23,42,.18)"/>
+    <text transform="translate(16 ${cy.toFixed(1)}) rotate(-90)" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#475569">${escHtml(props.unit)}</text>
+    <line x1="${margin.left}" y1="${(margin.top + ph).toFixed(1)}" x2="${(margin.left + pw).toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(15,23,42,.24)"/>
+    <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(15,23,42,.24)"/>
     ${nowX != null ? `<line x1="${nowX.toFixed(1)}" y1="${margin.top}" x2="${nowX.toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="${forecastColor}" stroke-width="1" stroke-dasharray="5 5" opacity=".55"/>` : ''}
     ${hArea ? `<path d="${hArea}" fill="url(#hA)"/>` : ''}
     ${hPath ? `<path d="${hPath}" fill="none" stroke="${historyColor}" stroke-width="2.5"/>` : ''}
