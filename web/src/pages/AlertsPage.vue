@@ -18,10 +18,10 @@
           <p>当前无活动告警 🎉</p>
         </div>
         <div v-else class="risk-list">
-          <div v-for="a in activeAlerts" :key="a.id" :class="['risk-item', levelClass(a.level)]">
+          <div v-for="a in activeAlerts" :key="a.id" :class="['risk-item', levelBadgeClass(a.level)]">
             <div class="risk-row">
               <b>{{ a.title }}</b>
-              <span :class="['badge', badgeClass(a.level)]">{{ a.level }}</span>
+              <span :class="['badge', levelBadgeClass(a.level)]">{{ levelLabel(a.level) }}</span>
             </div>
             <p>{{ a.message }}</p>
             <div class="alert-meta">
@@ -53,7 +53,7 @@
           <div v-for="a in historyAlerts" :key="a.id" class="risk-item">
             <div class="risk-row">
               <b>{{ a.title }}</b>
-              <span :class="['badge', badgeClass(a.level)]">{{ a.level }}</span>
+              <span :class="['badge', levelBadgeClass(a.level)]">{{ levelLabel(a.level) }}</span>
             </div>
             <p>{{ a.message }}</p>
             <div class="alert-meta">
@@ -76,6 +76,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import Topbar from '../components/Topbar.vue'
 import { api } from '../api'
+import { levelLabel, levelBadgeClass } from '../utils/warningLevel'
 
 const loading = ref(false)
 const activeAlerts = ref([])
@@ -127,16 +128,6 @@ function fmtTime(ts) {
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-function levelClass(lv) {
-  const m = { '红色': 'danger', '橙色': 'warn', '黄色': 'warn', '蓝色预警': 'ok', '蓝色': 'ok', '预报蓝色预警': 'ok', '预报黄色预警': 'warn', '预报橙色预警': 'warn', '预报红色预警': 'danger', '提示': '' }
-  return m[lv] || ''
-}
-
-function badgeClass(lv) {
-  const m = { '红色': 'danger', '橙色': 'warn', '黄色': 'warn', '蓝色预警': 'ok', '蓝色': 'ok', '预报蓝色预警': 'ok', '预报黄色预警': 'warn', '预报橙色预警': 'warn', '预报红色预警': 'danger', '提示': 'ok' }
-  return m[lv] || ''
-}
-
 onMounted(() => {
   load()
   const timer = setInterval(load, 30000)
@@ -149,7 +140,7 @@ onMounted(() => {
   margin-top: 10px;
   padding: 8px 12px;
   border-radius: 6px;
-  background: rgba(14,165,233,.05);
+  background: var(--chip);
   border-left: 3px solid var(--primary);
   min-width: 0;
   overflow-wrap: break-word;
@@ -157,7 +148,7 @@ onMounted(() => {
 .postmortem-label {
   font-size: 10px;
   font-weight: 700;
-  color: #0369A1;
+  color: #fff;
   text-transform: uppercase;
   letter-spacing: .06em;
 }

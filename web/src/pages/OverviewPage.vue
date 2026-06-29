@@ -3,7 +3,6 @@
     title="流域态势"
     subtitle="融合水位、流量、视频巡检与模型预报 · 仙桃站 00106"
     action-label="智能研判"
-    section-code="// 01 · OVERVIEW"
     @primary-action="showAgentModal = true"
   />
   <section class="overview">
@@ -54,7 +53,7 @@
           </div>
           <div class="risk-list">
             <div class="risk-item" v-for="w in displayWarnings" :key="w.id" @click="openStage(w.name, 'warning')">
-              <div class="risk-row"><b>{{ w.name }}</b><span :class="['badge', badgeClass(w)]">{{ w.level }}</span></div>
+              <div class="risk-row"><b>{{ w.name }}</b><span :class="['badge', levelBadgeClass(w.level)]">{{ levelLabel(w.level) }}</span></div>
               <p>{{ w.message }}</p>
             </div>
           </div>
@@ -123,6 +122,7 @@ import Topbar from '../components/Topbar.vue'
 import TrendChart from '../components/TrendChart.vue'
 import AgentChatPanel from '../components/AgentChatPanel.vue'
 import { api } from '../api'
+import { levelLabel, levelBadgeClass, levelSeverity } from '../utils/warningLevel'
 
 const overviewAgentSid = 'overview-agent-modal'
 
@@ -207,10 +207,7 @@ const warnings = ref([
 
 const displayWarnings = computed(() => {
   const all = [...warnings.value]
-  all.sort((a, b) => {
-    const order = { '红色': 0, '橙色': 1, '黄色': 2, '蓝色预警': 3, '提示': 4 }
-    return (order[a.level] ?? 5) - (order[b.level] ?? 5)
-  })
+  all.sort((a, b) => levelSeverity(a.level) - levelSeverity(b.level))
   return all
 })
 
@@ -220,15 +217,10 @@ const warningInsight = computed(() => {
   const real = items.filter(w => w.id !== 'loading' && w.id !== 'ok')
   if (!real.length) return '当前无 active 预警，各站点运行状态正常，可继续按现有巡检周期执行。'
   const names = [...new Set(real.map(w => w.name))].slice(0, 2).join('、')
-  const levels = [...new Set(real.map(w => w.level))].filter(Boolean)
+  const levels = [...new Set(real.map(w => levelLabel(w.level)))].filter(Boolean)
   const levelText = levels.slice(0, 2).join('、')
   return `当前共有 ${real.length} 条预警，涉及 ${names}${levelText ? '，级别为 ' + levelText : ''}。建议优先复核最近一条并采取预置处置流程。`
 })
-
-function badgeClass(w) {
-  const m = { '红色': 'danger', '橙色': 'warn', '黄色': 'warn', '蓝色预警': 'ok', '提示': 'ok', '正常': 'ok' }
-  return m[w.level] || ''
-}
 
 
 const WARNING_LEVEL = 35.1
@@ -441,31 +433,27 @@ function closeStage() {
 <style scoped>
 .forecast-insight {
   margin-top: 0;
-  border: 1px solid var(--line);
+  border: 0;
   border-left: 3px solid var(--accent);
   border-radius: var(--radius-md);
-  padding: 9px 13px;
-  background: rgba(255, 255, 255, .62);
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  padding: 10px 14px;
+  background: var(--chip);
+  display: block;
 }
 .insight-label {
-  flex: 0 0 auto;
+  display: block;
   font-family: var(--mono);
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 700;
-  color: var(--accent);
+  color: #fff;
   letter-spacing: .08em;
-  white-space: nowrap;
-  margin-top: 2px;
+  margin-bottom: 5px;
 }
 .forecast-insight p {
   margin: 0;
   font-size: 11.5px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--ink);
-  min-width: 0;
   overflow-wrap: break-word;
 }
 .forecast-insight.insight-above-chart {
@@ -476,11 +464,11 @@ function closeStage() {
 }
 .forecast-insight.warning-insight {
   margin-bottom: 8px;
-  background: rgba(255, 255, 255, .62);
-  border-color: var(--line);
+  background: var(--chip);
+  border-color: transparent;
   border-left-color: var(--primary);
 }
-.forecast-insight.warning-insight .insight-label { color: #0369A1; }
+.forecast-insight.warning-insight .insight-label { color: #fff; }
 
 .trend-main {
   display: grid;
@@ -524,7 +512,7 @@ function closeStage() {
 .legend-hist { background: var(--water); }
 .legend-fc { background: var(--accent); background-image: repeating-linear-gradient(90deg, var(--accent) 0 5px, transparent 5px 9px); }
 .legend-now { background: var(--accent); opacity: .5; }
-.mini-stat.peak b { color: var(--accent); }
+.mini-stat.peak b { color: #fff; }
 
 .agent-modal-card2 {
   width: min(720px, 100%);

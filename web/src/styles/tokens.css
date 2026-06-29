@@ -1,57 +1,90 @@
 :root {
-  /* 背景 */
-  --bg: #EEF4F9;
+  /* ── 背景：深海夜航，让全球 Cesium 地图成为舞台 ── */
+  --bg: #050E1F;
+  --bg-2: #081626;
 
-  /* 玻璃面板 — 浓郁天蓝磨砂玻璃 */
-  --glass: rgba(126, 186, 231, .54);
-  --glass-strong: rgba(152, 203, 236, .70);
-  --glass-deep: rgba(190, 222, 243, .90);
+  /* ── 主蓝：道奇蓝 #1E90FF 贯穿玻璃 / 边线 / 辉光 ── */
+  --primary: #1E90FF;
+  --primary-600: #1577D8;
+  --primary-soft: rgba(30, 144, 255, .16);
 
-  /* 文字层级 */
-  --ink: #0F172A;
-  --ink-2: #334155;
-  --muted: #475468;
-  --faint: #94A3B8;
+  /* ── 玻璃面板：径向蓝玻璃 —— 中心实、四边渐淡（不到 0，配合亮边保留清晰轮廓） ── */
+  /* 页面级径向透明 —— 以"整个页面中心"为原点：
+     面板越靠近页面中心越透(露出地图)、越远离越实。靠 background-attachment:fixed
+     让每块面板只切出自己所在视口位置的渐变片，从而形成跨越全页的径向透明(非单面板内部方向)。 */
+  --glass:
+    radial-gradient(circle at 50% 52%,
+      rgba(14, 42, 78, .12) 0%,
+      rgba(14, 42, 78, .22) 24%,
+      rgba(14, 42, 78, .42) 52%,
+      rgba(14, 42, 78, .74) 82%,
+      rgba(16, 46, 86, .86) 100%);
+  --glass-strong:
+    radial-gradient(circle at 50% 52%,
+      rgba(14, 42, 78, .12) 0%,
+      rgba(14, 42, 78, .22) 24%,
+      rgba(14, 42, 78, .42) 52%,
+      rgba(14, 42, 78, .74) 82%,
+      rgba(16, 46, 86, .86) 100%);
+  /* 弹窗 / 登录 / 全屏详情：实底，不参与页面径向 */
+  --glass-deep:
+    rgba(12, 36, 68, .86);
 
-  /* 线条/描边 */
-  --line: rgba(15, 23, 42, .12);
-  --line-strong: rgba(15, 23, 42, .18);
-  --edge: rgba(255, 255, 255, .72);
+  /* ── 嵌套卡片 / 芯片 ── */
+  --chip: rgba(80, 160, 240, .10);
+  --chip-strong: rgba(80, 160, 240, .18);
 
-  /* 品牌与数据色 */
-  --primary: #0284C7;
-  --primary-600: #0369A1;
-  --primary-soft: rgba(2, 132, 199, .13);
-  --accent: #6366F1;
-  --accent-soft: rgba(99, 102, 241, .12);
-  --water: #0EA5E9;
-  --water-soft: rgba(14, 165, 233, .15);
+  /* ── 文字层级（面板内一律白）── */
+  --ink: #ffffff;
+  --ink-2: rgba(222, 238, 255, .88);
+  --muted: rgba(170, 205, 240, .66);
+  --faint: rgba(140, 180, 222, .42);
 
-  /* 状态 / 水利四级预警 */
-  --danger: #DC2626;
-  --danger-soft: rgba(220, 38, 38, .14);
-  --orange: #EA580C;
-  --orange-soft: rgba(234, 88, 12, .14);
-  --warn: #CA8A04;
-  --warn-soft: rgba(202, 138, 4, .14);
-  --info: #0EA5E9;
-  --ok: #10B981;
-  --ok-soft: rgba(16, 185, 129, .13);
-  --offline: #94A3B8;
+  /* 浅色纸面专用文字（聊天气泡 / 输入框 / 图表画布等白底场景） */
+  --ink-dark: #0B1A2C;
+  --ink-2-dark: #2B4060;
+  --muted-dark: #5A7390;
 
-  /* 阴影（冷色化）+ 玻璃顶部高光 */
-  --shadow: 0 18px 50px rgba(30, 64, 124, .08);
-  --shadow-soft: 0 8px 24px rgba(30, 64, 124, .06);
-  --shadow-panel: 0 6px 20px rgba(30, 64, 124, .05), inset 0 1px 0 rgba(255, 255, 255, .55);
-  --ring: 0 0 0 3px rgba(2, 132, 199, .20);
+  /* ── 线条 / 描边 —— 冷光化；--edge 不再透明，给面板一道亮边 ── */
+  --line: rgba(80, 160, 240, .16);
+  --line-strong: rgba(80, 160, 240, .28);
+  --edge: rgba(30, 144, 255, .34);
+  --edge-glow: rgba(30, 144, 255, .42);
 
-  /* 半径 */
-  --radius-xl: 28px;
-  --radius-lg: 22px;
-  --radius-md: 14px;
-  --radius-sm: 10px;
+  /* ── 斜切角（科技大屏八角形）── */
+  --clip: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px);
 
-  /* 字体栈 */
+  /* ── 数据色 ── */
+  --accent: #4FC3F7;
+  --accent-soft: rgba(79, 195, 247, .14);
+  --water: #1E90FF;
+  --water-soft: rgba(30, 144, 255, .16);
+
+  /* ── 状态 / 水利四级预警（深底提亮）── */
+  --danger: #FB7185;
+  --danger-soft: rgba(251, 113, 133, .16);
+  --orange: #FB923C;
+  --orange-soft: rgba(251, 146, 60, .16);
+  --warn: #FBBF24;
+  --warn-soft: rgba(251, 191, 36, .15);
+  --info: #1E90FF;
+  --ok: #34D399;
+  --ok-soft: rgba(52, 211, 153, .15);
+  --offline: #7C93AC;
+
+  /* ── 阴影（深底：冷色辉光 + 顶部高光）── */
+  --shadow: 0 28px 70px rgba(0, 0, 0, .50);
+  --shadow-soft: 0 12px 34px rgba(0, 0, 0, .42);
+  --shadow-panel: 0 14px 40px rgba(0, 8, 20, .50), inset 0 1px 0 rgba(130, 200, 255, .24);
+  --ring: 0 0 0 3px rgba(30, 144, 255, .32);
+
+  /* ── 半径（收紧：大屏工业感）── */
+  --radius-xl: 8px;
+  --radius-lg: 6px;
+  --radius-md: 5px;
+  --radius-sm: 4px;
+
+  /* ── 字体栈 ── */
   --serif: "Cambria", "Times New Roman", "Noto Serif SC", "SimSun", serif;
   --sans: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
   --mono: "SF Mono", "JetBrains Mono", "Cascadia Code", Consolas, "Courier New", monospace;
@@ -66,33 +99,34 @@ body {
   color: var(--ink);
   font-family: var(--sans);
   background:
-    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, .96), transparent 24rem),
-    radial-gradient(circle at 82% 12%, rgba(14, 165, 233, .10), transparent 26rem),
-    radial-gradient(circle at 50% 100%, rgba(2, 132, 199, .05), transparent 34rem),
-    linear-gradient(180deg, #f5fbff 0%, #eaf4fa 46%, #e0eef7 100%);
+    radial-gradient(110% 80% at 50% 6%, rgba(30, 100, 180, .38), transparent 60%),
+    radial-gradient(80% 60% at 88% 94%, rgba(20, 90, 160, .26), transparent 62%),
+    linear-gradient(180deg, #061229 0%, #050E1F 60%, #03080F 100%);
 }
 
+/* 深海坐标网格 —— 极淡蓝色 */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(rgba(15, 23, 42, .018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 23, 42, .014) 1px, transparent 1px);
-  background-size: 42px 42px;
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, .36), transparent 72%);
-  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, .36), transparent 72%);
+    linear-gradient(rgba(80, 160, 240, .05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(80, 160, 240, .04) 1px, transparent 1px);
+  background-size: 46px 46px;
+  -webkit-mask-image: radial-gradient(circle at 50% 36%, rgba(0, 0, 0, .55), transparent 70%);
+  mask-image: radial-gradient(circle at 50% 36%, rgba(0, 0, 0, .55), transparent 70%);
   z-index: 0;
 }
 
+/* 极淡噪点，赋予胶片质感 */
 body::after {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: .08;
-  mix-blend-mode: multiply;
+  opacity: .05;
+  mix-blend-mode: screen;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
   z-index: 0;
 }

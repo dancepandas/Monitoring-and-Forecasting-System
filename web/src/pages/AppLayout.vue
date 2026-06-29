@@ -1,11 +1,17 @@
 <template>
   <div class="app-layout">
     <CesiumMap />
+    <header class="app-banner">
+      <span class="banner-side left"></span>
+      <h1 class="banner-title">水文监测预报指挥中心</h1>
+      <span class="banner-side right"></span>
+    </header>
     <Sidebar />
     <main class="workspace" :data-page="$route.name">
       <router-view />
       <ContextMenu v-if="$route.name !== 'agent'" />
     </main>
+    <VoiceAssistant />
   </div>
 </template>
 
@@ -14,6 +20,7 @@ import { onMounted } from 'vue'
 import CesiumMap from '../components/CesiumMap.vue'
 import Sidebar from '../components/Sidebar.vue'
 import ContextMenu from '../components/ContextMenu.vue'
+import VoiceAssistant from '../components/VoiceAssistant.vue'
 
 onMounted(() => {
   const root = document.documentElement
