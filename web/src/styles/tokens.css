@@ -2,21 +2,21 @@
   /* 背景 */
   --bg: #EEF4F9;
 
-  /* 玻璃面板 */
-  --glass: rgba(255, 255, 255, .54);
-  --glass-strong: rgba(255, 255, 255, .74);
-  --glass-deep: rgba(255, 255, 255, .90);
+  /* 玻璃面板 — 明亮天蓝磨砂玻璃 */
+  --glass: rgba(184, 218, 244, .50);
+  --glass-strong: rgba(203, 228, 248, .68);
+  --glass-deep: rgba(226, 241, 251, .90);
 
   /* 文字层级 */
   --ink: #0F172A;
   --ink-2: #334155;
-  --muted: #64748B;
+  --muted: #536273;
   --faint: #94A3B8;
 
   /* 线条/描边 */
   --line: rgba(15, 23, 42, .07);
   --line-strong: rgba(15, 23, 42, .14);
-  --edge: rgba(255, 255, 255, .65);
+  --edge: rgba(255, 255, 255, .72);
 
   /* 品牌与数据色 */
   --primary: #0284C7;
@@ -39,10 +39,10 @@
   --ok-soft: rgba(16, 185, 129, .13);
   --offline: #94A3B8;
 
-  /* 阴影（冷色化） */
+  /* 阴影（冷色化）+ 玻璃顶部高光 */
   --shadow: 0 18px 50px rgba(30, 64, 124, .08);
   --shadow-soft: 0 8px 24px rgba(30, 64, 124, .06);
-  --shadow-panel: 0 6px 20px rgba(30, 64, 124, .05);
+  --shadow-panel: 0 6px 20px rgba(30, 64, 124, .05), inset 0 1px 0 rgba(255, 255, 255, .55);
   --ring: 0 0 0 3px rgba(2, 132, 199, .20);
 
   /* 半径 */
