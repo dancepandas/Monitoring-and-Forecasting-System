@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     agent_temperature: float = 0.3
     agent_max_tokens: int = 4096
 
+    # 百炼语音（CosyVoice TTS + Paraformer ASR），复用 dashscope_api_key，不新增密钥
+    dashscope_workspace_id: str = "llm-3kqn1siocgzbz9sp"   # TTS WebSocket 业务空间专属域名
+    tts_model: str = "cosyvoice-v3-flash"
+    tts_voice: str = "longanyang"                           # v3-flash 系统音色（v2 不接受公共音色，已弃用）
+    asr_model: str = "paraformer-realtime-v2"
+    ffmpeg_path: str = "ffmpeg"                              # conda 自带，PATH 可用
+
     # Agent paths
     reports_dir: str = "./reports"
     scheduled_tasks_db: str = "./data/scheduled_tasks.db"
