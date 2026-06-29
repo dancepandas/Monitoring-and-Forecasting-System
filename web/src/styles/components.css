@@ -460,7 +460,7 @@
   width: min(660px, 100%);
   border: 1px solid var(--line-strong);
   border-radius: 28px; padding: 28px;
-  background: rgba(228, 242, 252, .95);
+  background: rgba(206, 230, 248, .95);
   box-shadow: 0 34px 90px rgba(30, 64, 124, .22);
 }
 
@@ -524,7 +524,7 @@
   display: grid; grid-template-rows: auto 1fr;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-xl);
-  background: rgba(230, 243, 252, .96);
+  background: rgba(208, 232, 249, .96);
   box-shadow: 0 34px 90px rgba(30, 64, 124, .22);
   overflow: hidden;
 }
@@ -576,7 +576,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-xl);
   padding: 40px 32px;
-  background: rgba(220, 238, 250, .82);
+  background: rgba(188, 220, 243, .85);
   box-shadow: var(--shadow);
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
