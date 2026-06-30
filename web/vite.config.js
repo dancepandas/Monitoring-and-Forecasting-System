@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import cesium from 'vite-plugin-cesium'
+import basicSsl from '@vitejs/plugin-basic-ssl'
 
 export default defineConfig({
-  plugins: [vue(), cesium()],
+  plugins: [vue(), cesium(), basicSsl()],
   server: {
     host: true,
     proxy: {

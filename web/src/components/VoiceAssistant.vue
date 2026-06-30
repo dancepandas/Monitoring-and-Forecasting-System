@@ -5,18 +5,19 @@
       <transition name="va-pop">
         <div v-if="showBubble" class="va-bubble" @click="onBubbleClick">
           <span v-if="mode === 'listening'" class="va-status-line">
-            <i class="va-dot"></i>{{ voice.status.value === 'transcribing' ? '识别中…' : '正在听…（再点结束）' }}
+            <i class="va-dot"></i>{{ voice.status.value === 'transcribing' ? '识别中…' : (voice.hearing.value ? '正在听…（说完自动结束）' : '请说话…（说完自动结束）') }}
           </span>
           <span v-else-if="mode === 'thinking'" class="va-status-line">
             <i class="va-dot"></i>思考中…
           </span>
           <span v-else-if="mode === 'error'" class="va-err">{{ errMsg }}</span>
-          <span v-else class="va-answer">{{ bubbleText }}</span>
+          <span v-else class="va-answer" v-html="answerHtml"></span>
         </div>
       </transition>
 
       <!-- 机器人主体 -->
       <button class="va-robot" :class="mode" @click="onRobotClick" :title="robotTitle" :aria-label="robotTitle">
+        <span class="va-ripples" aria-hidden="true"><i></i><i></i><i></i></span>
         <svg viewBox="0 0 100 100" class="robot-svg" aria-hidden="true">
           <!-- 天线 -->
           <line class="r-ant" x1="50" y1="14" x2="50" y2="26" />
@@ -53,6 +54,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { marked } from 'marked'
 import { useVoice } from '../composables/useVoice.js'
 import { agentApi } from '../api/agent.js'
 import { voiceApi } from '../api/voice.js'
@@ -65,18 +67,23 @@ const answer = ref('')
 const errMsg = ref('')
 const muted = ref(false)
 
-const voice = useVoice({ onResult: handleQuestion })
+const voice = useVoice({ onResult: handleQuestion, onEmpty: handleEmpty })
 
 const robotTitle = computed(() => {
   if (errMsg.value) return errMsg.value
   if (mode.value === 'greeting') return '打招呼中…（点机器人跳过，直接说）'
-  if (mode.value === 'listening') return '正在听，点击结束'
+  if (mode.value === 'listening') return '正在听…说完自动结束（也可点机器人手动结束）'
   if (mode.value === 'thinking') return '思考中…（点机器人打断）'
   if (mode.value === 'speaking') return '回答中…（点机器人停止）'
   return '点我，语音提问'
 })
 
 const bubbleText = computed(() => answer.value)
+const answerHtml = computed(() => {
+  const t = answer.value
+  if (!t) return ''
+  try { return marked.parse(t, { breaks: true }) } catch { return t }
+})
 const showBubble = computed(() =>
   ['greeting', 'listening', 'thinking', 'speaking', 'error'].includes(mode.value)
 )
@@ -100,7 +107,9 @@ function onRobotClick() {
   if (mode.value === 'thinking' || mode.value === 'speaking') {
     voice.stopSpeak(); mode.value = 'idle'; return                    // 打断
   }
-  if (mode.value === 'idle') { greetAndListen() }                     // 打招呼再听
+  // idle / error（含麦克风不可用）→ 点一下重新开始
+  mode.value = 'idle'
+  greetAndListen()
 }
 function onBubbleClick() { onRobotClick() }
 function toggleMute() {
@@ -128,15 +137,29 @@ function playOnce(blob) {
     a.play().catch(done)
   })
 }
-function startListening() { answer.value = ''; voice.start() }
+async function startListening() {
+  answer.value = ''
+  mode.value = 'listening'
+  await voice.start()
+  // 没真正开始录音（无设备 / 权限拒绝 / 非 HTTPS·非 localhost）→ 持续显示针对性原因，点机器人重试
+  if (voice.status.value !== 'recording') {
+    errMsg.value = '🔇 ' + (voice.error.value || '无法开启麦克风（请用 localhost/HTTPS 打开并允许麦克风权限）')
+    mode.value = 'error'
+  }
+}
 async function greetAndListen() {
   mode.value = 'greeting'
   answer.value = pickGreeting()
   if (!muted.value) {
     try {
-      const blob = await voiceApi.speak(answer.value)
-      if (mode.value !== 'greeting') return            // 已被打断
-      await playOnce(blob)
+      await Promise.race([
+        (async () => {
+          const blob = await voiceApi.speak(answer.value)
+          if (mode.value !== 'greeting') return            // 已被打断
+          await playOnce(blob)
+        })(),
+        delay(6000),                                       // 合成/播放超时兜底，避免卡死在招呼态
+      ])
     } catch { /* 合成失败则跳过，继续进入聆听 */ }
   } else {
     await delay(700)                                    // 静音：只做视觉招呼
@@ -155,6 +178,14 @@ async function handleQuestion(text) {
     mode.value = 'error'
     setTimeout(() => { if (mode.value === 'error') mode.value = 'idle' }, 3500)
   }
+}
+
+// VAD 自动结束 / 手动结束后，转写为空或失败 —— 提示并回待机，避免卡在聆听态
+function handleEmpty() {
+  if (mode.value === 'thinking' || mode.value === 'speaking') return
+  errMsg.value = '没听清，请再说一次'
+  mode.value = 'error'
+  setTimeout(() => { if (mode.value === 'error') mode.value = 'idle' }, 1800)
 }
 
 let asking = false
@@ -236,9 +267,9 @@ onMounted(() => { agentApi.initSession(SID).catch(() => {}) })
   gap: 8px;
   --accent: #38bdf8;
 }
-.va-root.listening { --accent: #f87171; }
+.va-root.listening { --accent: #34d399; }
 .va-root.thinking  { --accent: #fbbf24; }
-.va-root.speaking  { --accent: #38bdf8; }
+.va-root.speaking  { --accent: #34d399; }
 .va-root.greeting  { --accent: #34d399; }
 .va-root.error     { --accent: #f87171; }
 
@@ -263,7 +294,16 @@ onMounted(() => { agentApi.initSession(SID).catch(() => {}) })
 }
 .va-status-line { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; }
 .va-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: vaPulse 1.1s ease-in-out infinite; flex-shrink: 0; }
-.va-answer { white-space: pre-wrap; }
+.va-answer { display: block; }
+.va-answer :deep(p) { margin: 0 0 6px; }
+.va-answer :deep(p:last-child) { margin-bottom: 0; }
+.va-answer :deep(ul), .va-answer :deep(ol) { margin: 4px 0; padding-left: 18px; }
+.va-answer :deep(li) { margin: 2px 0; }
+.va-answer :deep(b), .va-answer :deep(strong) { color: #fff; }
+.va-answer :deep(code) { background: rgba(0,0,0,.3); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); font-size: 11px; }
+.va-answer :deep(pre) { background: rgba(0,0,0,.35); padding: 8px 10px; border-radius: 8px; overflow-x: auto; margin: 6px 0; }
+.va-answer :deep(pre code) { background: transparent; padding: 0; }
+.va-answer :deep(h1), .va-answer :deep(h2), .va-answer :deep(h3) { font-size: 13px; margin: 6px 0 4px; color: #fff; }
 .va-err { color: #fecaca; }
 .va-pop-enter-active, .va-pop-leave-active { transition: all .18s ease; }
 .va-pop-enter-from, .va-pop-leave-to { opacity: 0; transform: translateY(6px) scale(.96); }
@@ -271,6 +311,7 @@ onMounted(() => { agentApi.initSession(SID).catch(() => {}) })
 
 /* 机器人按钮 */
 .va-robot {
+  position: relative;
   width: 72px; height: 72px;
   border: 0; background: transparent;
   cursor: pointer; padding: 0;
@@ -282,7 +323,26 @@ onMounted(() => { agentApi.initSession(SID).catch(() => {}) })
 .greeting .va-robot { animation: vaWave .55s ease-in-out infinite; }
 .greeting .r-eye, .greeting .r-mouth { fill: #34d399; }
 @keyframes vaWave { 0%,100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } }
-.robot-svg { width: 100%; height: 100%; display: block; overflow: visible; }
+
+/* 波纹：聆听时由外向内收，说话时由内向外扩 */
+.va-ripples { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+.va-ripples i {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 64%; height: 64%;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  opacity: 0;
+  box-sizing: border-box;
+}
+.listening .va-ripples i { animation: rippleIn 1.6s ease-out infinite; }
+.speaking .va-ripples i { animation: rippleOut 1.3s ease-out infinite; }
+.va-ripples i:nth-child(2) { animation-delay: .5s; }
+.va-ripples i:nth-child(3) { animation-delay: 1s; }
+@keyframes rippleIn { 0% { transform: scale(1.8); opacity: 0; } 20% { opacity: .55; } 100% { transform: scale(.6); opacity: 0; } }
+@keyframes rippleOut { 0% { transform: scale(.6); opacity: 0; } 20% { opacity: .55; } 100% { transform: scale(1.8); opacity: 0; } }
+.robot-svg { position: relative; z-index: 1; width: 100%; height: 100%; display: block; overflow: visible; }
 
 .r-ant { stroke: #94a3b8; stroke-width: 2.5; }
 .r-light { fill: var(--accent); transition: fill .2s; }
@@ -297,15 +357,16 @@ onMounted(() => { agentApi.initSession(SID).catch(() => {}) })
 .r-eyes { transform-box: fill-box; transform-origin: center; }
 .r-eye { fill: #38bdf8; }
 .idle .r-eyes { animation: vaBlink 4.2s infinite; }
-.listening .r-eye { fill: #f87171; }
+.listening .r-eye { fill: #34d399; }
 .thinking .r-eye { fill: #fbbf24; }
+.speaking .r-eye { fill: #34d399; }
 @keyframes vaBlink { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
 
 .r-mouth-g { transform-box: fill-box; transform-origin: center; }
 .r-mouth { fill: #38bdf8; transition: fill .2s; }
-.listening .r-mouth { fill: #f87171; }
+.listening .r-mouth { fill: #34d399; }
 .thinking .r-mouth { fill: #fbbf24; }
-.speaking .r-mouth { fill: #38bdf8; animation: vaTalk .16s infinite alternate; }
+.speaking .r-mouth { fill: #34d399; animation: vaTalk .16s infinite alternate; }
 @keyframes vaTalk { from { transform: scaleY(.6); } to { transform: scaleY(2.4); } }
 
 /* 静音 */
