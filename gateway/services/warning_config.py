@@ -125,6 +125,9 @@ DEFAULT_STANDARDS = {
     "wecom_webhook": "",
     "dingtalk_webhook": "",
     "dingtalk_secret": "",
+    "dingtalk_outgoing_token": "",      # 钉钉 outgoing 机器人回调校验 token
+    "dingtalk_bot_app_key": "",         # 钉钉企业内部应用 appKey（Stream 模式用，先留空）
+    "dingtalk_bot_app_secret": "",      # 钉钉企业内部应用 appSecret（Stream 模式用，先留空）
     "description": "默认预警标准 — 适用于汉江流域中游测站",
 }
 
