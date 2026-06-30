@@ -6,7 +6,7 @@
       <h1 class="banner-title">水文监测预报指挥中心</h1>
       <span class="banner-side right"></span>
     </header>
-    <Sidebar />
+    <TabBar />
     <main class="workspace" :data-page="$route.name">
       <router-view />
       <ContextMenu v-if="$route.name !== 'agent'" />
@@ -18,7 +18,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import CesiumMap from '../components/CesiumMap.vue'
-import Sidebar from '../components/Sidebar.vue'
+import TabBar from '../components/TabBar.vue'
 import ContextMenu from '../components/ContextMenu.vue'
 import VoiceAssistant from '../components/VoiceAssistant.vue'
 
@@ -33,6 +33,5 @@ onMounted(() => {
   root.style.setProperty('--warning-w', '28fr')
   root.style.setProperty('--gap', '10px')
   root.style.setProperty('--pad', '10px')
-  root.style.setProperty('--sidebar-w', '220px')
 })
 </script>

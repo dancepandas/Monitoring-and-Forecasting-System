@@ -6,14 +6,13 @@
   min-height: 0;
   padding: var(--pad, 10px);
   display: grid;
-  grid-template-columns: var(--sidebar-w, 220px) minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: var(--gap, 10px);
 }
 
 /* ===== 顶部系统标题横幅（居中大屏标题）===== */
 .app-banner {
-  grid-column: 1 / -1;
   position: relative;
   z-index: 1;
   display: flex;
