@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 from .config import settings
 from .seed import seed
-from .routes import auth, data, forecast, agent, reports, system, notify, alerts, voice
+from .routes import auth, data, forecast, agent, reports, system, notify, alerts, voice, notify_inbox
 from .services import scheduler
 from .services.monitor_engine import get_engine as get_monitor_engine
 from .services.agent_alert_dispatcher import init_dispatcher
@@ -103,6 +103,7 @@ app.include_router(system.router)
 app.include_router(notify.router)
 app.include_router(alerts.router)
 app.include_router(voice.router)
+app.include_router(notify_inbox.router)
 
 @app.get("/api/health")
 async def health():
