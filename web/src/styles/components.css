@@ -84,7 +84,7 @@
 .middle-grid {
   min-height: 0;
   display: grid;
-  grid-template-columns: var(--video-w, 21.6fr) var(--map-w, 51.0fr) var(--warning-w, 27.5fr);
+  grid-template-columns: var(--map-w, 51.0fr) var(--warning-w, 28fr);
   gap: var(--gap, 10px);
 }
 

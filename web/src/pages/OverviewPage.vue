@@ -29,19 +29,6 @@
     </section>
 
     <section class="middle-grid">
-      <article class="panel video-panel">
-        <div class="panel-head"><h2>视频巡检</h2><span>最近两次快照</span></div>
-        <div class="panel-body">
-          <div class="video-grid">
-            <div class="video-card" v-for="(v, i) in displaySnapshots" :key="v.time || i" @click="openStage(v.label, 'video', v.live_address)">
-              <video v-if="v.live_address" :ref="el => setVideoRef(i, el)" muted autoplay playsinline class="video-player"></video>
-              <div v-else class="video-placeholder">无视频信号</div>
-              <div v-if="v.label" class="video-meta"><span>{{ v.label }}</span></div>
-            </div>
-          </div>
-        </div>
-      </article>
-
       <article class="panel map-panel" />
 
       <article class="panel">
@@ -52,7 +39,7 @@
             <p>{{ warningInsight }}</p>
           </div>
           <div class="risk-list">
-            <div class="risk-item" v-for="w in displayWarnings" :key="w.id" @click="openStage(w.name, 'warning')">
+            <div class="risk-item" v-for="w in displayWarnings" :key="w.id" @click="openDrawer(w)">
               <div class="risk-row"><b>{{ w.name }}</b><span :class="['badge', levelBadgeClass(w.level)]">{{ levelLabel(w.level) }}</span></div>
               <p>{{ w.message }}</p>
             </div>
@@ -112,6 +99,8 @@
           <AgentChatPanel :sessionId="overviewAgentSid" />
         </div>
       </div>
+
+      <StationDrawer :visible="drawerVisible" :station="drawerStation" @close="closeDrawer" />
     </Teleport>
 </template>
 
@@ -121,6 +110,7 @@ import flvjs from 'flv.js'
 import Topbar from '../components/Topbar.vue'
 import TrendChart from '../components/TrendChart.vue'
 import AgentChatPanel from '../components/AgentChatPanel.vue'
+import StationDrawer from '../components/StationDrawer.vue'
 import { api } from '../api'
 import { levelLabel, levelBadgeClass, levelSeverity } from '../utils/warningLevel'
 
@@ -193,6 +183,22 @@ const stageVideoUrl = ref('')
 const stageVideoEl = ref(null)
 const stagePlayer = ref(null)
 const showAgentModal = ref(false)
+
+const drawerVisible = ref(false)
+const drawerStation = ref({})
+function openDrawer(w) {
+  drawerStation.value = {
+    name: w.name,
+    code: w.code || w.id || '',
+    level: w.level,
+    flow: w.flow,
+    status: w.level ? levelLabel(w.level) : '—',
+    badgeClass: levelBadgeClass(w.level),
+    detail: w.message || '',
+  }
+  drawerVisible.value = true
+}
+function closeDrawer() { drawerVisible.value = false }
 
 const trendHistory = ref([])
 const trendForecast = ref([])
