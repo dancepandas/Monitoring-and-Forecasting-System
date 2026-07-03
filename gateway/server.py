@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import sys
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
@@ -28,14 +29,27 @@ async def lifespan(app: FastAPI):
     if settings.jwt_secret == "change-me":
         logger.critical("SECURITY: jwt_secret is default 'change-me'. Set JWT_SECRET in environment!")
     seed()
-    scheduler.init_scheduler(app)
-    logger.info("Scheduler initialized")
+    sched = None
+    try:
+        scheduler.init_scheduler(app)
+        sched = scheduler.get_scheduler()
+        logger.info("Scheduler initialized")
+        # 幂等播种 4 类日报的每日自动生成（docx）
+        try:
+            scheduler.seed_daily_reports()
+        except Exception as e:
+            logger.warning(f"seed_daily_reports failed (non-fatal): {e}")
+    except Exception as e:
+        logger.critical(f"Scheduler init failed: {e} — continuing without scheduled tasks")
 
-    # 启动 24x7 值守引擎并注册智能体分发器
+    # 启动 24x7 值守引擎并注册智能体分发器（scheduler 可能为 None，降级模式）
     monitor = get_monitor_engine()
-    await monitor.start(scheduler.get_scheduler())
+    if sched is not None:
+        await monitor.start(sched)
+        logger.info("Monitor engine and alert dispatcher initialized")
+    else:
+        logger.critical("Monitor engine skipped (no scheduler) — scheduled monitoring disabled")
     init_dispatcher(monitor)
-    logger.info("Monitor engine and alert dispatcher initialized")
 
     # 把数据收集放到独立子进程，stdout/stderr 重定向到日志文件以便诊断
     log_fh = open(str(_COLLECTOR_LOG), "a", encoding="utf-8")
@@ -48,22 +62,56 @@ async def lifespan(app: FastAPI):
     app.state.collector_log = log_fh
     logger.info(f"[collector] subprocess started: pid={collector_proc.pid}")
 
-    # collector 健康监控：每 60 秒检查子进程是否存活
+    # collector 健康监控：每 30 秒检查子进程存活 + 心跳文件时效
+    # 心跳路径与 collector.py 保持一致（项目根/data/）
+    heartbeat_file = Path(__file__).parent / "data" / "collector_heartbeat.txt"
+    restart_count = 0  # 连续重启计数，用于退避
+
     async def _watch_collector():
-        nonlocal collector_proc, log_fh
+        nonlocal collector_proc, restart_count
         while True:
-            await asyncio.sleep(60)
+            await asyncio.sleep(30)
+            needs_restart = False
+            # 进程已死 → 重启
             if collector_proc.returncode is not None:
                 logger.error(f"[collector] subprocess died (rc={collector_proc.returncode}), restarting...")
+                needs_restart = True
+            else:
+                # 进程存活但心跳过期 → 可能卡死，强制重启
                 try:
-                    collector_proc = await asyncio.create_subprocess_exec(
-                        sys.executable, "-m", "gateway.services.collector",
-                        stdout=log_fh, stderr=log_fh,
-                    )
-                    app.state.collector_proc = collector_proc
-                    logger.info(f"[collector] restarted: pid={collector_proc.pid}")
+                    if heartbeat_file.exists():
+                        age = time.time() - float(heartbeat_file.read_text().strip())
+                        if age > 600:  # 10 分钟无心跳
+                            logger.error(f"[collector] heartbeat stale ({age:.0f}s), force restarting...")
+                            collector_proc.terminate()
+                            try:
+                                await asyncio.wait_for(collector_proc.wait(), timeout=5)
+                            except Exception:
+                                collector_proc.kill()
+                                await collector_proc.wait()
+                            needs_restart = True
                 except Exception as e:
-                    logger.exception(f"[collector] restart failed: {e}")
+                    logger.warning(f"[collector] heartbeat check failed: {e}")
+
+            if not needs_restart:
+                restart_count = 0  # 本轮健康，重置退避计数
+                continue
+
+            # 退避保护：连续重启超过 5 次后停止自动重启，仅告警
+            restart_count += 1
+            if restart_count > 5:
+                logger.critical(f"[collector] restarted {restart_count} times, giving up auto-restart (manual intervention needed)")
+                continue
+
+            try:
+                collector_proc = await asyncio.create_subprocess_exec(
+                    sys.executable, "-m", "gateway.services.collector",
+                    stdout=log_fh, stderr=log_fh,
+                )
+                app.state.collector_proc = collector_proc
+                logger.info(f"[collector] restarted (attempt {restart_count}): pid={collector_proc.pid}")
+            except Exception as e:
+                logger.exception(f"[collector] restart failed: {e}")
 
     watcher_task = asyncio.create_task(_watch_collector())
 
@@ -71,6 +119,13 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Gateway shutting down")
     watcher_task.cancel()
+    # 关闭线程池
+    from .services import aiflow_client, agent_alert_dispatcher
+    for name, ex in [("aiflow", getattr(aiflow_client, '_executor', None)),
+                      ("alert-dispatch", getattr(agent_alert_dispatcher, '_dispatch_executor', None))]:
+        if ex:
+            logger.info(f"Shutting down {name} executor")
+            ex.shutdown(wait=True)
     try:
         collector_proc.terminate()
         await asyncio.wait_for(collector_proc.wait(), timeout=5)

@@ -13,7 +13,7 @@ _cache: dict[str, dict] = {}
 
 @router.get("/interpret")
 async def get_forecast_interpret(
-    station_code: str = Query("00106"),
+    station_code: str = Query("00125"),
     field: str = Query("virtualFlow"),
     user: dict = Depends(get_current_user),
 ):

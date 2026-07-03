@@ -2,6 +2,7 @@ import json
 import logging
 import os
 from datetime import datetime, timedelta
+from .time_utils import parse_ts, default_times
 from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -9,7 +10,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 
 from ..config import settings
-from . import data_cache, warning_config, system_status
+from . import data_cache, system_status, station_names
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,44 @@ def cancel_task(task_id: str) -> bool:
         return False
 
 
+# 启动时幂等播种的稳定 job id 与 cron（错峰避开 0 点 + 防 LLM 并发）
+_DAILY_REPORT_SEEDS = [
+    ("seed_report_daily",  "generate_report", "3 0 * * *",  {"report_type": "daily"}),
+    ("seed_report_review", "generate_report", "8 0 * * *",  {"report_type": "review"}),
+    ("seed_report_device", "generate_report", "13 0 * * *", {"report_type": "device"}),
+    ("seed_report_model",  "generate_report", "18 0 * * *", {"report_type": "model"}),
+]
+
+
+def seed_daily_reports():
+    """启动时幂等注册 4 类日报的每日自动生成任务（docx）。
+
+    - 清掉旧的 agent_daily_report 任务（产出单薄 txt，已弃用）
+    - 用稳定 job id + replace_existing 保证不重复注册
+    """
+    if _scheduler is None:
+        logger.warning("seed_daily_reports skipped — scheduler not initialized")
+        return
+    # 清理旧的单薄 txt daily 任务
+    for j in list(_scheduler.get_jobs()):
+        if j.kwargs.get("task_type") == "agent_daily_report":
+            try:
+                _scheduler.remove_job(j.id)
+                logger.info("removed stale thin-txt daily job: %s", j.id)
+            except Exception:
+                pass
+    for job_id, task_type, cron, params in _DAILY_REPORT_SEEDS:
+        if _scheduler.get_job(job_id) is None:
+            _scheduler.add_job(
+                _execute_task,
+                trigger=CronTrigger.from_crontab(cron),
+                id=job_id,
+                replace_existing=True,
+                kwargs={"task_type": task_type, "params": params},
+            )
+            logger.info("seeded daily report job: %s (%s %s)", job_id, task_type, cron)
+
+
 import asyncio
 
 async def _execute_task(task_type: str, params: dict) -> None:
@@ -90,12 +129,15 @@ async def _execute_task(task_type: str, params: dict) -> None:
         elif task_type == "agent_system_check":
             await _run_system_check(params)
         elif task_type == "generate_report":
-            station = params.get("station_code", settings.station_codes.split(",")[0] if settings.station_codes else "00106")
-            date = params.get("date", datetime.now().strftime("%Y-%m-%d"))
-            cmd = ["python", "-m", "gateway.scripts.generate_report", "--type", params.get("report_type", "daily"), "--station", station, "--date", date]
+            # 调度归档约定：未指定 date → 取昨日（00:0X 跑出的是刚结束那一天）；按需路由会显式传今天
+            date = params.get("date", (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"))
+            cmd = ["python", "-m", "gateway.scripts.generate_report", "--type", params.get("report_type", "daily"), "--date", date]
+            station = params.get("station_code", "")
+            if station:
+                cmd.extend(["--station", station])
             proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             try:
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=180)
                 logger.info(f"generate_report finished: rc={proc.returncode}")
                 if stderr: logger.warning(f"generate_report stderr: {stderr.decode('utf-8', errors='ignore')[:500]}")
             except asyncio.TimeoutError:
@@ -132,131 +174,71 @@ async def _retry(fn, name, max_retries=2, delay=30):
 
 
 STATIONS = [s.strip() for s in settings.station_codes.split(",")]
-DEVICE = settings.default_device_code
 
 
-async def _collect_all_data():
-    """从缓存采集系统中所有站点的全部数据。"""
-    standards = warning_config.get_standards()
-    stations_info = []
-
-    for code in STATIONS:
-        # 水位
-        level = await data_cache.get(f"aiflow:level:{code}", max_age=600)
-        level_items = (level.get("data", []) or []) if level else []
-        wl_vals = [float(it["waterLevel"]) for it in level_items if it.get("waterLevel") is not None]
-        # fallback: 用 flow_raw 里的 waterLevel 补
-        if not wl_vals:
-            flow = await data_cache.get(f"aiflow:flow_raw:{code}:{DEVICE}", max_age=600)
-            if flow:
-                for it in (flow.get("data", []) or []):
-                    wl = it.get("waterLevel")
-                    if wl is not None:
-                        wl_vals.append(float(wl))
-
-        # 流量
-        flow = await data_cache.get(f"aiflow:flow_raw:{code}:{DEVICE}", max_age=600)
-        flow_items = (flow.get("data", []) or []) if flow else []
-        flow_vals = [float(it["virtualFlow"]) for it in flow_items if it.get("virtualFlow") is not None]
-
-        # 预警
-        warn_list = []
-        latest_wl = wl_vals[-1] if wl_vals else None
-        if latest_wl:
-            lv = warning_config.check_level(latest_wl, standards)
-            if lv:
-                warn_list.append(f"水位{lw_name(lv)}: {latest_wl:.2f}m")
-        latest_flow = flow_vals[-1] if flow_vals else None
-        if latest_flow:
-            lv = warning_config.check_flow(latest_flow, standards)
-            if lv:
-                warn_list.append(f"流量{lw_name(lv)}: {latest_flow:.0f}m³/s")
-
-        stations_info.append({
-            "code": code,
-            "wl_max": f"{max(wl_vals):.2f}" if wl_vals else "—",
-            "wl_min": f"{min(wl_vals):.2f}" if wl_vals else "—",
-            "wl_avg": f"{sum(wl_vals)/len(wl_vals):.2f}" if wl_vals else "—",
-            "wl_latest": f"{wl_vals[-1]:.2f}m ({level_items[-1].get('measureTime','')})" if wl_vals and level_items else "—",
-            "flow_max": f"{max(flow_vals):.0f}" if flow_vals else "—",
-            "flow_min": f"{min(flow_vals):.0f}" if flow_vals else "—",
-            "flow_avg": f"{sum(flow_vals)/len(flow_vals):.0f}" if flow_vals else "—",
-            "flow_latest": f"{flow_vals[-1]:.0f}m³/s ({flow_items[-1].get('measureTime','')})" if flow_vals and flow_items else "—",
-            "warnings": "、".join(warn_list) if warn_list else "无",
-        })
-
-    return stations_info, standards
+def _device(code: str) -> str:
+    return station_names.station_device(code) or settings.default_device_code
 
 
 async def _run_agent_daily_report(params: dict):
-    """日报：读取系统全部站点水位/流量/预警 → LLM 整理 → 存 txt。"""
-    date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    """日报（agent 触发/重试）：委托给 generate_report 统一 docx 生成器（数据表 + LLM 综述 + 全站名）。
 
-    stations_info, standards = await _collect_all_data()
+    全部文档一律存 docx，不再产出 txt。
+    """
+    from gateway.scripts.generate_report import generate_report
+    date = params.get("date") or (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    result = await generate_report("daily", None, date)
+    logger.info(f"daily report saved: {result.get('filename')}")
 
-    # 构建数据上下文
-    lines = [f"## 系统全量数据 ({date})"]
-    for s in stations_info:
-        lines.append(f"### {s['code']}站")
-        lines.append(f"水位: 最新 {s['wl_latest']} | 最高 {s['wl_max']}m 最低 {s['wl_min']}m 平均 {s['wl_avg']}m")
-        lines.append(f"流量: 最新 {s['flow_latest']} | 最大 {s['flow_max']}m³/s 最小 {s['flow_min']}m³/s 平均 {s['flow_avg']}m³/s")
-        lines.append(f"预警: {s['warnings']}")
-    lines.append(f"\n预警阈值: 水位 {standards.get('level',{})} | 流量 {standards.get('flow',{})}")
 
-    data_context = "\n".join(lines)
+def _read_daily_text(reports_dir: Path, date_str: str) -> str:
+    """读取某日日报文本：docx 优先（抽段落），txt 兼容旧文件。无则返回占位。"""
+    docx_path = reports_dir / f"daily_{date_str}.docx"
+    if docx_path.exists():
+        try:
+            from docx import Document
+            doc = Document(str(docx_path))
+            lines = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+            return "\n".join(lines)[:2000] if lines else "（该日日报为空）"
+        except Exception as e:
+            logger.warning(f"read daily docx {date_str} failed: {e}")
+    txt_path = reports_dir / f"daily_{date_str}.txt"
+    if txt_path.exists():
+        return txt_path.read_text(encoding="utf-8")[:2000]
+    return "（该日无日报）"
 
-    # 自适应报告：无预警日简化，有事件日详述
-    has_warnings = any(s["warnings"] != "无" for s in stations_info)
-    if has_warnings:
-        prompt = f"""你是专业水文日报编辑。今天有预警事件，请生成一份详细日报。
 
-{data_context}
+def _save_llm_docx(filepath: Path, title: str, info_line: str, body_text: str):
+    """把 LLM 生成的 markdown 风格文本存为 docx（## / ### 解析为标题）。全部文档一律 docx，不存 txt。"""
+    from docx import Document
+    from docx.shared import Pt
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-请按以下格式直接输出（不要加```标记）：
+    doc = Document()
+    t = doc.add_heading(title, level=0)
+    t.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    if info_line:
+        info = doc.add_paragraph()
+        info.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        info.add_run(info_line).font.size = Pt(10)
 
-## 水文监测日报
-**日期**: {date}
-**覆盖站点**: {', '.join(STATIONS)}
-
-### 一、全流域水情综述
-（2-3 句话概括当天水情）
-
-### 二、各站水情
-（按站点分节，简述各站水位/流量特征）
-
-### 三、预警与处置
-（当天预警触发情况及级别，重点展开）
-
-### 四、设备与视频巡检
-（汇总设备在线情况）
-
-### 五、关注要点与建议
-（次日需关注 2-3 条）"""
-    else:
-        prompt = f"""你是专业水文日报编辑。今天比较平静，请生成一份精简日报（2-3 句即可）。
-
-{data_context}
-
-请直接输出（不要加```标记）：
-
-## 水文监测日报
-**日期**: {date}
-**覆盖站点**: {', '.join(STATIONS)}
-
-### 今日概况
-（2-3 句话简述水位/流量数据和设备状态，无需分节展开）"""
-
-    report_body = await _call_llm(prompt, data_context, date)
-
-    reports_dir = Path(settings.reports_dir)
-    reports_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"daily_{date}.txt"
-    (reports_dir / filename).write_text(report_body, encoding="utf-8")
-    logger.info(f"daily report saved: {filename}")
+    for raw in (body_text or "").split("\n"):
+        line = raw.rstrip()
+        if not line.strip():
+            continue
+        if line.startswith("### "):
+            doc.add_heading(line[4:].strip(), level=2)
+        elif line.startswith("## "):
+            doc.add_heading(line[3:].strip(), level=1)
+        elif line.startswith("# "):
+            doc.add_heading(line[2:].strip(), level=0)
+        else:
+            doc.add_paragraph(line)
+    doc.save(filepath)
 
 
 async def _run_agent_weekly_report(params: dict):
-    """周报：读取最近 7 天的日报 txt → LLM 汇总 → 存 txt。"""
+    """周报：读取最近 7 天的日报（docx 优先，txt 兼容） → LLM 汇总 → 存 txt。"""
     today = datetime.now()
     reports_dir = Path(settings.reports_dir)
 
@@ -264,11 +246,7 @@ async def _run_agent_weekly_report(params: dict):
     daily_texts = []
     for i in range(7):
         d = (today - timedelta(days=i + 1)).strftime("%Y-%m-%d")
-        filepath = reports_dir / f"daily_{d}.txt"
-        if filepath.exists():
-            daily_texts.append(f"=== {d} ===\n{filepath.read_text(encoding='utf-8')[:2000]}")
-        else:
-            daily_texts.append(f"=== {d} ===\n（该日无日报）")
+        daily_texts.append(f"=== {d} ===\n{_read_daily_text(reports_dir, d)}")
 
     week_data = "\n\n".join(daily_texts)
     week_start = (today - timedelta(days=7)).strftime("%Y-%m-%d")
@@ -298,8 +276,10 @@ async def _run_agent_weekly_report(params: dict):
 
     report_body = await _call_llm(prompt, week_data, week_end)
 
-    filename = f"weekly_{week_start}_{week_end}.txt"
-    (reports_dir / filename).write_text(report_body, encoding="utf-8")
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"weekly_{week_start}_{week_end}.docx"
+    _save_llm_docx(reports_dir / filename, "水文监测周报",
+                   f"周期: {week_start} ~ {week_end}　|　覆盖站点: {', '.join(STATIONS)}", report_body)
     logger.info(f"weekly report saved: {filename}")
 
 
@@ -313,7 +293,7 @@ async def _run_system_check(params: dict):
 
     for code in STATIONS:
         level_ok = await data_cache.get(f"aiflow:level:{code}", max_age=600)
-        flow_raw = await data_cache.get(f"aiflow:flow_raw:{code}:{DEVICE}", max_age=600)
+        flow_raw = await data_cache.get(f"aiflow:flow_raw:{code}:{_device(code)}", max_age=600)
         flow_items = (flow_raw.get("data", []) or []) if flow_raw else []
         level_items = (level_ok.get("data", []) or []) if level_ok else []
 
@@ -321,7 +301,7 @@ async def _run_system_check(params: dict):
         age_h = 0
         if flow_items:
             last_time = str(flow_items[0].get("measureTime", ""))
-            ts = _parse_ts(last_time)
+            ts = parse_ts(last_time)
             age_h = (now_ts - ts) / 3600 if ts else 0
 
         null_count = sum(1 for it in flow_items[:10] if it.get("virtualFlow") is None)
@@ -369,16 +349,6 @@ async def _run_system_check(params: dict):
     logger.info("system_check done: %s, %d issues", diagnosis, len(issues_list))
 
 
-def _parse_ts(t) -> float:
-    """解析时间字符串为 Unix timestamp"""
-    if not t: return 0
-    if isinstance(t, dict): return 0
-    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
-        try: return datetime.strptime(str(t), fmt).timestamp()
-        except: pass
-    return 0
-
-
 async def _call_llm(prompt, data_fallback, date):
     """调 LLM 生成报告正文，不可达时返回纯数据版本。"""
     from .agent_utils import quick_ask
@@ -391,17 +361,3 @@ async def _call_llm(prompt, data_fallback, date):
 （LLM 不可用，以上为原始数据汇总）"""
 
 
-def lw_name(lv):
-    return {"blue": "蓝", "yellow": "黄", "orange": "橙", "red": "红"}.get(lv, lv)
-
-
-def _time_series_for_forecast(raw_data: list, value_key: str, time_key: str = "measureTime") -> list[dict]:
-    result = []
-    for item in (raw_data or []):
-        t = item.get(time_key)
-        if isinstance(t, dict):
-            t = f"{t.get('year','')}-{str(t.get('month','')).zfill(2)}-{str(t.get('day','')).zfill(2)} {str(t.get('hours','')).zfill(2)}:{str(t.get('minutes','')).zfill(2)}"
-        v = item.get(value_key)
-        if t and v is not None:
-            result.append({"Time": str(t), "Flow": float(v)})
-    return result
