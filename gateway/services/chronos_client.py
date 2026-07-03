@@ -11,9 +11,21 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from ..config import settings
 
 logger = logging.getLogger(__name__)
+
+# ── 健康状态 ──
+_forecast_failures = 0
+_forecast_successes = 0
+
+
+def get_forecast_health() -> dict:
+    """返回 Chronos 预测健康状态。"""
+    return {
+        "successes": _forecast_successes,
+        "failures": _forecast_failures,
+        "healthy": _forecast_failures < 2,  # 连续 2 次失败即不健康
+    }
 
 _pipeline = None
 _pipeline_lock = threading.Lock()
@@ -93,6 +105,8 @@ async def predict_flow(
     import asyncio
     loop = asyncio.get_event_loop()
 
+    global _forecast_successes, _forecast_failures
+
     series = data[-context_length:] if len(data) > context_length else data
     target_vals = [float(s.get(target, 0) or 0) for s in series]
 
@@ -134,9 +148,13 @@ async def predict_flow(
             series, target, prediction_length, effective_mode,
             valid_past, valid_future,
         )
+        _forecast_successes += 1
+        if _forecast_failures > 0:
+            _forecast_failures = 0  # reset consecutive failure counter on success
         return result
     except Exception as e:
         logger.warning("Chronos-2 预测失败，降级到本地趋势: %s", e)
+        _forecast_failures += 1
         vals = [float(s.get(target, 0) or 0) for s in data]
         return _local_poly_forecast(np.array(vals), prediction_length)
 

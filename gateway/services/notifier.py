@@ -18,6 +18,7 @@ from typing import Optional
 import httpx
 
 from . import warning_config
+from .station_names import station_name
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +128,7 @@ async def push_alert(
     """推送一条告警消息。channel 支持 dingtalk / wecom。"""
     emoji = {"红色": "🚨", "橙色": "⚠️", "黄色": "🔶", "蓝色": "🔷", "提示": "ℹ️"}.get(level, "ℹ️")
     header = f"{emoji} **{title}** — {level}预警"
-    station_line = f"\n**站点**：{station_code}" if station_code else ""
+    station_line = f"\n**站点**：{station_name(station_code)}" if station_code else ""
     markdown = f"{header}{station_line}\n\n{message}\n\n— FloodMind 智能值守"
 
     if channel == "dingtalk":

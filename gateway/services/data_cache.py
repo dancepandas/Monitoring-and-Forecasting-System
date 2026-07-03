@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from ..config import settings
+from . import station_names
 
 logger = logging.getLogger(__name__)
 
@@ -41,17 +42,16 @@ _DEVICE_CODE = settings.default_device_code
 
 def _load_full() -> dict:
     if not CACHE_FILE.exists():
-        return {"meta": {"version": "3.0"}, "raw": {}, "aligned": {}, "forecast": {}}
+        return {"meta": {"version": "3.0"}, "raw": {}, "aligned": {}}
     try:
         with open(CACHE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         data.setdefault("raw", {})
         data.setdefault("aligned", {})
-        data.setdefault("forecast", {})
         return data
     except Exception as e:
         logger.warning(f"Cache load failed: {e}")
-        return {"meta": {"version": "3.0"}, "raw": {}, "aligned": {}, "forecast": {}}
+        return {"meta": {"version": "3.0"}, "raw": {}, "aligned": {}}
 
 
 def _save_full(data: dict) -> None:
@@ -618,7 +618,12 @@ async def _read_aligned_section(section: str, station: str, dtype: str = None,
             entry = data.get("aligned", {}).get(station)
         if not entry:
             return None
-        if time.time() - entry.get("updated_at", 0) > max_age:
+        age = time.time() - entry.get("updated_at", 0)
+        if age > max_age:
+            # 数据过期，但仍在扩展窗口内 → 返回陈旧数据而非空
+            if age <= 3600:
+                entry["stale"] = True
+                return entry
             return None
         return entry
 
@@ -653,8 +658,9 @@ async def all_keys() -> list:
         data = _load_full()
         keys = []
         for station, types in data.get("raw", {}).items():
+            dev = station_names.station_device(station) or _DEVICE_CODE
             for dtype in types:
-                keys.append(f"aiflow:{dtype}:{station}:{_DEVICE_CODE}")
+                keys.append(f"aiflow:{dtype}:{station}:{dev}")
         return keys
 
 
@@ -666,7 +672,11 @@ _MAX_VIDEO_SNAPSHOTS = 10
 
 
 async def save_video_snapshot(station_code: str, snapshot: dict) -> list:
-    """保存一条视频快照，保留最近 10 条。返回当前全部快照列表。"""
+    """保存一条视频快照，保留最近 N 条（N 由 _MAX_VIDEO_SNAPSHOTS 控制）。
+
+    萤石云 liveAddress 有 expire 窗口（约 2 小时），过期后 404。_MAX_VIDEO_SNAPSHOTS
+    按有效窗口 / 采集间隔设定，确保保留的每条快照地址都还在有效期内。
+    """
     async with _video_lock:
         snaps = _load_video_snapshots()
         station_snaps = snaps.get(station_code, [])
@@ -677,11 +687,32 @@ async def save_video_snapshot(station_code: str, snapshot: dict) -> list:
         return station_snaps
 
 
+def _filter_live(snaps: list) -> list:
+    """过滤掉 liveAddress 已过期的快照（基于 expire_at 绝对时间戳）。
+
+    expire_at == 0 视为无法解析，按"未过期"保留（向后兼容旧快照）。
+    """
+    now = time.time()
+    return [s for s in snaps if not s.get("expire_at") or s["expire_at"] > now]
+
+
 async def get_video_snapshots(station_code: str, limit: int = 10) -> list:
-    """读取视频快照列表。"""
+    """读取视频快照列表（已自动过滤 liveAddress 过期的）。"""
     async with _video_lock:
         snaps = _load_video_snapshots()
-        return snaps.get(station_code, [])[:limit]
+        return _filter_live(snaps.get(station_code, []))[:limit]
+
+
+async def get_all_video_snapshots(limit: int = 10) -> dict:
+    """读取所有站点的视频快照，按站点分组（已自动过滤过期的）。"""
+    async with _video_lock:
+        all_snaps = _load_video_snapshots()
+        result = {}
+        for code, snaps in all_snaps.items():
+            live = _filter_live(snaps)
+            if live:
+                result[code] = live[:limit]
+        return result
 
 
 def _load_video_snapshots() -> dict:

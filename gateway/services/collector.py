@@ -1,16 +1,28 @@
 import asyncio
 import logging
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from ..config import settings
-from . import data_cache, aiflow_client
+from . import data_cache, aiflow_client, station_names
 
 logger = logging.getLogger(__name__)
 
 _STATION_CODES = [s.strip() for s in settings.station_codes.split(",")]
-_DEVICE_CODE = settings.default_device_code
 _INTERVAL = settings.collector_interval
+
+
+def _parse_expire(url: str) -> int:
+    """从萤石云直播地址解析 expire 参数为绝对 Unix 时间戳，无法解析返回 0。"""
+    if not url or "expire=" not in url:
+        return 0
+    try:
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(url).query)
+        return int(qs.get("expire", [0])[0])
+    except (ValueError, TypeError):
+        return 0
 
 
 def _extract_flow_records(api_response: dict) -> list:
@@ -48,9 +60,10 @@ async def collect_all():
         pass
 
     for code in _STATION_CODES:
+        device = station_names.station_device(code) or settings.default_device_code
         try:
             resp = await asyncio.wait_for(
-                aiflow_client.get_flow_original_data(code, _DEVICE_CODE, begin_time, end_time, count=200),
+                aiflow_client.get_flow_original_data(code, device, begin_time, end_time, count=200),
                 timeout=30,
             )
             records = _extract_flow_records(resp)
@@ -70,22 +83,27 @@ async def collect_all():
 
         # ── 视频快照采集 ──
         try:
-            cam = await asyncio.wait_for(aiflow_client.get_camera_info(_DEVICE_CODE), timeout=15)
+            cam = await asyncio.wait_for(aiflow_client.get_camera_info(device), timeout=15)
             if cam.get("code") == 200:
                 cam_data = cam.get("data", {}) or {}
                 if isinstance(cam_data, list):
                     cam_data = cam_data[0] if cam_data else {}
                 if isinstance(cam_data, dict):
+                    live_addr = cam_data.get("liveAddress") or cam_data.get("live_address")
+                    # 解析萤石云地址的 expire 参数 → 绝对过期时间戳，供读取时过滤已失效快照
+                    expire_at = _parse_expire(live_addr)
                     snap = {
                         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "station_code": code,
-                        "device_code": _DEVICE_CODE,
-                        "live_address": cam_data.get("liveAddress") or cam_data.get("live_address"),
+                        "station_name": station_names.station_name(code),
+                        "device_code": device,
+                        "live_address": live_addr,
+                        "expire_at": expire_at,  # 0 表示无法解析（按不过滤处理）
                         "device_name": cam_data.get("deviceName") or cam_data.get("device_name", ""),
-                        "status": "online" if (cam_data.get("liveAddress") or cam_data.get("live_address")) else "offline",
+                        "status": "online" if live_addr else "offline",
                     }
                     await data_cache.save_video_snapshot(code, snap)
-                    logger.info(f"[collector] video snapshot saved for {code}, status={snap['status']}")
+                    logger.info(f"[collector] video snapshot saved for {code}, status={snap['status']}, expire_at={expire_at}")
         except Exception as exc:
             logger.warning(f"[collector] video snapshot {code} failed: {type(exc).__name__}: {exc}")
         await asyncio.sleep(0.2)
@@ -104,16 +122,25 @@ async def collect_all():
 
 
 async def run_loop():
+    # 心跳路径与 server.py 看门狗保持一致（gateway/data/）
+    # collector.py 在 gateway/services/ 下，需 parent.parent 才到 gateway/
+    heartbeat_file = Path(__file__).parent.parent / "data" / "collector_heartbeat.txt"
+
+    async def _collect_with_heartbeat():
+        await collect_all()
+        heartbeat_file.parent.mkdir(parents=True, exist_ok=True)
+        heartbeat_file.write_text(str(time.time()))
+
     logger.info("[collector] starting background loop")
     try:
-        await collect_all()
+        await _collect_with_heartbeat()
     except Exception as e:
         logger.error(f"[collector] initial collection failed: {e}")
 
     while True:
         await asyncio.sleep(_INTERVAL)
         try:
-            await collect_all()
+            await _collect_with_heartbeat()
         except Exception as e:
             logger.error(f"[collector] loop error: {e}")
 
