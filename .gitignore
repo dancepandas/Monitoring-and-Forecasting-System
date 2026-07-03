@@ -2,9 +2,15 @@
 *.log
 node_modules/
 assets/
-agent.html
+/*.html
+# 根目录原型/演示 HTML（正式应用入口为 web/index.html，根目录 html 均为设计原型）
 __pycache__/
-.claude/
+.pytest_cache/
+# pytest 本地缓存（README 建议不跟踪）
+.claude
+# Claude Code 本地配置/skills/计划等，不进库
+.superpowers
+# Superpowers skills 本地缓存，不进库
 .env
 aiflow_profile.env
 *.env
@@ -18,7 +24,8 @@ gateway/gateway.db
 data/
 reports/
 chat_test.json
-layout-tuner.html
+/preview/
+# 设计预览原型
 web/dist/
 __pycache__/
 *.pyc

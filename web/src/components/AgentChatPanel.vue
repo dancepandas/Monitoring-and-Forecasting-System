@@ -65,6 +65,12 @@
 
     <!-- Input -->
     <div class="input-row">
+      <VoiceButton
+        :status="voiceStatus" :muted="voiceMuted"
+        :can-record="voiceCanRecord" :error="voiceError"
+        @toggle-mic="voiceStatus === 'recording' ? voice.stop() : voice.start()"
+        @toggle-mute="voice.setMuted(!voiceMuted)"
+      />
       <textarea v-model="input" id="agentChatInput" name="message" class="chat-input" placeholder="输入任务指令..." aria-label="输入消息"
         :disabled="streaming" rows="1" @keydown="onKey" ref="inputRef"></textarea>
       <button v-if="streaming" class="btn danger send-btn" @click="doCancel">暂停</button>
@@ -77,6 +83,8 @@
 import { ref, reactive, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { agentApi } from '../api/agent.js'
 import { marked } from 'marked'
+import VoiceButton from './VoiceButton.vue'
+import { useVoice } from '../composables/useVoice.js'
 marked.setOptions({ breaks: true, gfm: true })
 
 const props = defineProps({ sessionId: { type: String, required: true } })
@@ -93,6 +101,15 @@ const retryCount = ref(0)
 const MAX_RETRIES = 3
 const scrollRef = ref(null)
 const inputRef = ref(null)
+
+// ── 语音助手 ──
+const lastSpokenLen = ref(0)
+function onVoiceText(text) {
+  input.value = text
+  doSend()
+}
+const voice = useVoice({ onResult: onVoiceText })
+const { status: voiceStatus, muted: voiceMuted, canRecord: voiceCanRecord, error: voiceError } = voice
 
 let stepCounter = 0; let blockId = 0
 function bId() { return 'b' + (++blockId) }
@@ -130,6 +147,8 @@ async function doSend() {
   const aMsg = reactive({ id: uid(), role: 'assistant', content: '', _blocks: [], _streaming: true, _showArchived: false, tokenUsage: null })
   msgs.push(aMsg)
   streaming.value = true; reconnecting.value = false; retryCount.value = 0; permissionAsk.value = null; stepCounter = 0
+  voice.stopSpeak()        // 新一轮提问，停止上一轮播报
+  lastSpokenLen.value = 0  // 重置已念偏移
   scroll()
   // 如果是从面板右键"询问智能体"进来的，注入面板上下文
   let fullMsg = text
@@ -215,12 +234,43 @@ function addAction(aMsg, toolName, callId, status, content, inputPreview) {
 }
 function addBlock(aMsg, type, content) { aMsg._blocks.push({ _uk:bId(), type, content, _archived:false }) }
 function archiveBlocks(aMsg) { aMsg._blocks.forEach(b => { if(b.type==='thought'||b.type==='action'){b._archived=true;b._collapsed=true;b._streaming=false} }) }
-function finishMsg(aMsg) { aMsg._streaming=false; archiveBlocks(aMsg); streaming.value=false; abortCtrl.value=null; if(!aMsg._blocks.length&&!aMsg.content)aMsg.content='(无回复)'; scroll() }
+function finishMsg(aMsg) {
+  aMsg._streaming=false; archiveBlocks(aMsg); streaming.value=false; abortCtrl.value=null
+  if(!aMsg._blocks.length&&!aMsg.content)aMsg.content='(无回复)'
+  scroll()
+  // 把流式中尚未念完的尾部也念掉
+  if (aMsg.content && !voice.muted.value && aMsg.content.length > lastSpokenLen.value) {
+    const tail = aMsg.content.slice(lastSpokenLen.value)
+    const sentences = voice.splitSentences(voice.stripMarkdown(tail))
+    if (sentences.length) voice.enqueueSentences(sentences)
+    lastSpokenLen.value = aMsg.content.length
+  }
+}
 function doCancel() { if(abortCtrl.value) abortCtrl.value.abort(); streaming.value=false }
 async function respondPerm(approved) { const p=permissionAsk.value; if(!p)return; permissionAsk.value=null; await agentApi.respondPermission(p.askId,approved,p.sessionId).catch(()=>{}) }
 function onKey(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();doSend()} }
 
+// 回答流式播报：每当新增内容里出现完整句（到句末标点止），即入队播报
+watch(
+  () => {
+    const last = msgs[msgs.length - 1]
+    return last && last.role === 'assistant' ? last.content : ''
+  },
+  (content) => {
+    if (!content || voice.muted.value) return
+    if (content.length <= lastSpokenLen.value) return
+    const freshRaw = content.slice(lastSpokenLen.value)
+    const m = freshRaw.match(/.*[。！？!?]/s)   // 贪婪到最后一个句末标点，其后未完句留到下一拍 / finishMsg
+    if (!m) return
+    const completeRaw = m[0]
+    lastSpokenLen.value += completeRaw.length
+    const sentences = voice.splitSentences(voice.stripMarkdown(completeRaw))
+    if (sentences.length) voice.enqueueSentences(sentences)
+  }
+)
+
 onMounted(() => scroll())
+onUnmounted(() => { voice.stopSpeak() })
 </script>
 
 <style scoped>
@@ -228,7 +278,7 @@ onMounted(() => scroll())
 .chat-msgs { flex:1; min-height:0; max-height:none !important; overflow-y:auto; overflow-x:hidden; display:grid; align-content:start; gap:10px; padding:4px 4px 12px 0; }
 
 /* Common message styles */
-.msg-user { justify-self:end; max-width:75%; background:#2d2923; color:#fff; border-radius:18px 18px 6px 18px; padding:10px 14px; font-size:13px; line-height:1.55; word-break:break-word; animation:msgIn .2s ease; }
+.msg-user { justify-self:end; max-width:75%; background:var(--primary); color:#fff; border-radius:18px 18px 6px 18px; padding:10px 14px; font-size:13px; line-height:1.55; word-break:break-word; animation:msgIn .2s ease; }
 .msg-ai { display:grid; gap:6px; max-width:100%; }
 .welcome-msg { text-align:center; padding:24px 16px; }
 .welcome-icon { font-family:var(--serif); font-size:24px; font-weight:600; letter-spacing:-.04em; margin-bottom:12px; color:var(--ink); }
@@ -236,42 +286,42 @@ onMounted(() => scroll())
 .welcome-msg p { margin:0; color:var(--muted); font-size:13px; }
 
 /* Banners */
-.perm-banner { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 14px; border:1px solid var(--amber); border-radius:12px; background:rgba(181,139,63,.08); font-size:12px; flex-shrink:0; }
+.perm-banner { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 14px; border:1px solid var(--warn); border-radius:12px; background:rgba(245,158,11,.08); font-size:12px; flex-shrink:0; }
 .perm-btns { display:flex; gap:6px; flex-shrink:0; }
-.recon-banner { display:flex; align-items:center; gap:8px; padding:8px 14px; border-radius:12px; background:rgba(109,146,159,.1); font-size:12px; color:var(--river); flex-shrink:0; }
+.recon-banner { display:flex; align-items:center; gap:8px; padding:8px 14px; border-radius:12px; background:var(--chip); font-size:12px; color:#fff; flex-shrink:0; }
 .spin { display:inline-block; animation:spin 1s linear infinite; }
 @keyframes spin { to{transform:rotate(360deg)} }
 @keyframes msgIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
 
 /* CoT */
-.cot-wrap { border:1px solid var(--line); border-radius:12px; overflow:hidden; background:rgba(109,146,159,.025); }
-.cot-wrap.streaming { border-color:var(--river-soft); box-shadow:0 0 0 1px rgba(109,146,159,.12); }
+.cot-wrap { border:1px solid var(--line); border-radius:12px; overflow:hidden; background:rgba(14,165,233,.025); }
+.cot-wrap.streaming { border-color:var(--water-soft); box-shadow:0 0 0 1px rgba(14,165,233,.12); }
 .cot-hd { display:flex; align-items:center; gap:8px; padding:8px 12px; cursor:pointer; user-select:none; font-size:12px; }
-.cot-hd:hover { background:rgba(109,146,159,.05); }
+.cot-hd:hover { background:rgba(14,165,233,.05); }
 .cot-arrow { font-size:8px; width:12px; color:var(--muted); flex-shrink:0; }
-.cot-label { display:flex; align-items:center; gap:6px; font-weight:600; color:var(--river); }
+.cot-label { display:flex; align-items:center; gap:6px; font-weight:600; color:#fff; }
 .cot-meta { margin-left:auto; font-size:10px; color:var(--muted); font-weight:400; }
-.cot-dot { width:7px; height:7px; border-radius:50%; background:var(--river); flex-shrink:0; }
+.cot-dot { width:7px; height:7px; border-radius:50%; background:var(--water); flex-shrink:0; }
 .cot-dot.pulse { animation:cotPulse 1.5s ease-in-out infinite; }
-@keyframes cotPulse { 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(109,146,159,.4)} 50%{opacity:.5;box-shadow:0 0 0 6px transparent} }
+@keyframes cotPulse { 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(14,165,233,.4)} 50%{opacity:.5;box-shadow:0 0 0 6px transparent} }
 .cot-body { padding:0 12px 10px; display:grid; gap:6px; }
 
 /* Thought */
 .thought-step { display:grid; grid-template-columns:auto 1fr; gap:8px; align-items:start; }
 .thought-dot-row { width:16px; display:flex; justify-content:center; padding-top:3px; }
-.thought-dot-indicator { width:5px; height:5px; border-radius:50%; background:var(--river); opacity:.4; }
+.thought-dot-indicator { width:5px; height:5px; border-radius:50%; background:var(--water); opacity:.4; }
 .thought-dot-indicator.live { opacity:1; animation:cotPulse 1.5s ease-in-out infinite; }
 .thought-text { font-size:11px; color:var(--ink-2); line-height:1.55; white-space:pre-wrap; word-break:break-word; }
 .thought-text.live { color:var(--ink); }
 
 /* Tool card */
-.tool-card { border:1px solid var(--line); border-radius:8px; overflow:hidden; cursor:pointer; background:rgba(255,255,255,.7); transition:all .15s; }
-.tool-card:hover { border-color:rgba(37,33,28,.18); }
-.tool-card.running { border-color:rgba(181,139,63,.25); background:rgba(181,139,63,.04); animation:toolPulse 2s ease-in-out infinite; }
-@keyframes toolPulse { 0%,100%{box-shadow:0 0 0 0 rgba(181,139,63,.1)} 50%{box-shadow:0 0 0 3px transparent} }
+.tool-card { border:1px solid var(--line); border-radius:8px; overflow:hidden; cursor:pointer; background:var(--chip); transition:all .15s; }
+.tool-card:hover { border-color:rgba(15,23,42,.18); }
+.tool-card.running { border-color:rgba(245,158,11,.25); background:rgba(245,158,11,.04); animation:toolPulse 2s ease-in-out infinite; }
+@keyframes toolPulse { 0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.1)} 50%{box-shadow:0 0 0 3px transparent} }
 .tool-row { display:flex; align-items:center; gap:8px; padding:7px 10px; font-size:11px; }
 .tool-icon { flex-shrink:0; width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; }
-.ti-running { background:rgba(181,139,63,.15); color:var(--amber); animation:spin 1.5s linear infinite; }
+.ti-running { background:rgba(245,158,11,.15); color:var(--warn); animation:spin 1.5s linear infinite; }
 .ti-done { background:rgba(95,117,103,.13); color:var(--ok); }
 .ti-error { background:rgba(169,79,67,.12); color:var(--danger); }
 .tool-name { font-weight:600; color:var(--ink-2); font-family:var(--mono); font-size:10px; white-space:nowrap; }
@@ -291,9 +341,9 @@ onMounted(() => scroll())
 .answer-text :deep(li){margin:2px 0}
 .answer-text :deep(table){border-collapse:collapse;width:100%;margin:8px 0;font-size:12px}
 .answer-text :deep(th),.answer-text :deep(td){border:1px solid var(--line);padding:4px 8px;text-align:left}
-.answer-text :deep(th){background:rgba(37,33,28,.04);font-weight:600}
-.answer-text :deep(pre){margin:8px 0;padding:10px;border-radius:10px;background:rgba(37,33,28,.06);font-family:var(--mono);font-size:11px;overflow-x:auto;white-space:pre-wrap}
-.answer-text :deep(code){font-family:var(--mono);font-size:11px;background:rgba(37,33,28,.08);border-radius:4px;padding:1px 5px}
+.answer-text :deep(th){background:rgba(15,23,42,.04);font-weight:600}
+.answer-text :deep(pre){margin:8px 0;padding:10px;border-radius:10px;background:rgba(15,23,42,.06);font-family:var(--mono);font-size:11px;overflow-x:auto;white-space:pre-wrap}
+.answer-text :deep(code){font-family:var(--mono);font-size:11px;background:rgba(15,23,42,.08);border-radius:4px;padding:1px 5px}
 .answer-text :deep(b){font-weight:700}
 
 /* Error */
@@ -308,9 +358,9 @@ onMounted(() => scroll())
 
 /* Input */
 .input-row { display:flex; align-items:flex-end; gap:8px; flex-shrink:0; }
-.chat-input { flex:1; min-width:0; min-height:38px; max-height:140px; border:1px solid rgba(37,33,28,.12); border-radius:18px; background:rgba(255,255,255,.72); padding:8px 14px; outline:none; color:var(--ink); font-size:13px; resize:none; line-height:1.45; font-family:inherit; }
-.chat-input:focus { border-color:var(--clay); }
-.chat-input::placeholder { color:var(--muted); }
+.chat-input { flex:1; min-width:0; min-height:38px; max-height:140px; border:1px solid rgba(15,23,42,.12); border-radius:18px; background:rgba(255,255,255,.72); padding:8px 14px; outline:none; color:var(--ink-dark); font-size:13px; resize:none; line-height:1.45; font-family:inherit; }
+.chat-input:focus { border-color:var(--primary); }
+.chat-input::placeholder { color:var(--muted-dark); }
 .send-btn { flex-shrink:0; min-height:36px; padding:0 16px; font-size:13px; }
 .send-btn:disabled { opacity:.45; cursor:not-allowed; }
 </style>

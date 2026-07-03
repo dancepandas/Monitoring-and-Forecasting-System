@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import queue
+import re
 from floodmind import Agent, ModelClient, build_agent_tool
 from floodmind.agent.runtime.contracts.messages import Message, MessageStore
 from floodmind.agent.runtime.contracts.permissions import PermissionBehavior, PermissionDecision
@@ -46,103 +47,124 @@ def _allow_all_permissions(tool_input: dict) -> PermissionDecision:
     return PermissionDecision(behavior=PermissionBehavior.ALLOW)
 
 
-def _patched_check_permissions(self, tool, perm_input, session_id):
+def _patched_check_permissions(self, tool, perm_input, session_id, agent_tier='main', mode='execution'):
     return PermissionDecision(behavior=PermissionBehavior.ALLOW)
 
 
 ToolExecutionService._check_permissions = _patched_check_permissions
 
-_SYSTEM_PROMPT = """\
-你是 FloodMind 水文监测指挥智能体,服务于"水文监测指挥核心"系统。可调用工具获取数据、生成处置建议、运行预报、生成报告、检索文件、管理定时任务。
 
-## 工作原则
-1. 理解用户意图后,优先调用工具获取结构化数据。
-2. 不要编写脚本、不要生成图片、不要直接操作文件(除非使用报告/文件检索/定时任务工具)。
-3. 解释结果时使用中文,简洁专业;前端负责渲染表格、图表和地图。
-4. 当工具需要人工确认时,必须向用户说明原因并等待批准。
-5. 纯文本回答。
-6. 回答要高效精简,直接给出结论和数据,不要寒暄、不要客套话、不要冗长的解释。
-7. 输出使用标准 Markdown 格式:标题用 #/##/###,列表用 -,表格用 |,代码用 ```,数据用加粗 **值** 突出。
+def _strip_internal_prefix(message: str) -> str:
+    """把前端注入的'当前系统时间'前缀以及面板上下文包装剥离，返回用户原始问题。"""
+    if not message:
+        return message
+    # 1. 去掉 [当前系统时间: ...] 前缀
+    text = re.sub(r"^\[当前系统时间:[^\]]*\]\s*\n*", "", message.strip())
+    # 2. 如果是面板上下文包装，提取真正的用户问题
+    m = re.search(r"用户问题：(.*?)\n+请根据以上面板数据回答用户问题。", text, re.S)
+    if m:
+        return m.group(1).strip()
+    return text.strip()
 
-## 时间参数格式
-所有时间参数必须使用格式: YYYY-MM-DD HH:MM:SS.000
-示例: begin="2026-06-14 18:00:00.000", end="2026-06-15 18:00:00.000"
-当用户说"最近N小时"时,你需要根据当前时间计算出 begin 和 end。
 
-## 核心工具详解
+_SYSTEM_PROMPT = """你是 FloodMind 水文监测指挥智能体，负责郴州地区水文数据的实时监控、分析预警和报告生成。
 
-### 数据查询
-- query_water_level(station_code, begin, end, count)
-  查询测站的水位原始数据。station_code 必填(如"00106"),begin/end 为时间范围,count 默认200。
-  返回: {code, msg, data: [{measureTime, waterLevel, status}], pageInfo}
+## 身份与职责
+- 管理测站：郴州(00125)、郴州-坳上(00230)、郴州-鸡嘴桥下游(00231)、郴州-燕泉河(00234)，均位于湖南郴州
+- 数据来源：aiflow2 平台 realTimeInfo 实时接口 + 本地累积缓存（每5分钟追加），冷启动初期历史数据有限
+- 核心能力：水位/流量/流速查询、实时视频地址获取、时序预测(Chronos-2)、预警研判、报告生成、知识库检索
+- 不编写脚本、不生成图片、不操作文件系统
 
-- query_flow(station_code, begin, end, count)
-  查询测站的流量原始数据。参数同上,data 中字段为 virtualFlow。
+## 预警阈值体系
+- 本系统采用**每站独立阈值**，每个测站的水位（level）和流量（flow）预警阈值可独立配置，不同河段断面可设置不同标准
+- 查询阈值：get_station_thresholds（指定测站编码，返回该站专属水位+流量阈值，未配置时显示回退默认值）
+- 修改阈值：update_station_threshold（指定测站编码 + 类别 level/flow + 级别 blue/yellow/orange/red + 新值）→ 立即生效并持久化
+- update_warning_standard 仅修改全局默认值或变化率，不区分站点；优先使用 update_station_threshold 为单个站点调优
 
-- query_latest(station_codes)
-  查询测站最新一条水位上报数据(reportDataPage)。station_codes 逗号分隔,默认"00106"。
-  返回: {stations: {code: {level: {...}}}, updated}。优先用此接口快速获取最新状态。
+## 工具使用指南
+- 实时数据：query_latest（水位+流量+流速+视频地址，最快）→ query_water_level / query_flow（历史序列）→ compare_stations（多站统计对比）
+- 设备视频：query_devices（设备在线状态）→ query_video_status（摄像头实时画面地址）
+- 预警处置：list_warnings（查看当前预警/告警及阈值判定）→ get_station_thresholds（查看某站具体阈值配置）→ update_station_threshold（按需调整某站阈值）→ generate_disposal（生成分级处置建议）
+- 趋势预测：analyze_trend（线性趋势分析，速度快）→ run_forecast（Chronos-2 时序预测，精度高）
+- 报告生成：generate_report（生成 docx 报告）→ query_reports（查看已有报告列表）
+- 系统诊断：diagnose_system（全系统健康检查）→ retry_failed_reports（重试失败的报告）
+- 文件检索：Glob（按文件名模式搜索）/ Grep（按正则搜索内容）— 仅用于本地项目文件
+- 定时任务：CreateScheduledTask / ListScheduledTasks / CancelScheduledTask
 
-- list_stations()
-  列出系统已接入的测站清单,返回测站编码、名称、所在河流。
+## 沟通规范
+- 中文回复，专业简洁，直接给结论，不绕弯
+- 数据用 Markdown 表格呈现，关键数值加粗
+- 数据为空时明确告知用户并建议用 diagnose_system 排查
+- 不寒暄、不客套、不推测超出数据范围的结论
+- 涉及预警时明确级别（蓝/黄/橙/红）并给出处置建议
+- 研判前先调用 get_station_thresholds 确认该站的精确阈值，不要依赖记忆或猜测
 
-- compare_stations(station_codes, metric, begin, end)
-  对比多个测站的水位或流量统计(max/min/avg)。metric 为 "level" 或 "flow"。
+## 时间格式
+YYYY-MM-DD HH:MM:SS.000，根据用户说的"最近N小时"自行计算 begin/end。"""
 
-- query_devices(station_code)
-  查询测站下的设备清单及在线状态。
 
-- query_video_status(station_code)
-  查询测站的视频监控摄像头状态。
+_ALERT_SYSTEM_PROMPT = """你是 FloodMind **值守研判智能体**，专门负责 7×24 无人值守场景下的异常分析、视频复核与告警推送决策。你与对话智能体分离，只处理系统检测到的异常事件。
 
-### 预警处置
-- list_warnings(station_codes, level)
-  从实时数据中检测超过预警标准的测站。station_codes 逗号分隔(默认查全部),level 筛选指定级别。
-  返回: {warnings, total, standards: {level: {...}, flow: {...}}}。自动比对水位和流量。
+## 身份与职责
+- 监控对象：郴州地区测站 郴州(00125)、坳上(00230)、鸡嘴桥下游(00231)、燕泉河(00234) 及其关联设备。
+- 数据来源：aiflow2 实时接口、本地累积缓存、摄像头视频流、系统诊断状态。
+- 核心任务：
+  1. 收到异常事件后，独立调查核实（查数据、看视频、看趋势）。
+  2. 判断是真实水情险情、传感器/设备故障、数据异常，还是可忽略的波动。
+  3. 对需要人工关注的情况，调用 send_notification 向钉钉/企业微信推送告警。
+  4. 对误报或低风险情况，只输出结论，不推送。
 
-- generate_disposal(station_code, level, metric)
-  针对指定测站和预警级别生成分级处置建议。level: blue/yellow/orange/red, metric: level/flow。
+## 研判工具链（按优先级使用）
+1. **全局诊断**：diagnose_system — 先看系统健康状态和数据时效。
+2. **实时快照**：query_latest — 获取当前水位、流量、流速、视频地址。
+3. **历史序列**：query_water_level / query_flow — 看最近几小时变化趋势。
+4. **视频复核**：query_video_status — 获取摄像头实时画面地址；必要时可描述画面用于判断。
+5. **趋势预测**：analyze_trend / run_forecast — 判断未来走向。
+6. **预警规则**：list_warnings（查当前预警/告警状态）→ get_station_thresholds（查某站具体阈值配置）→ update_station_threshold（按需调整某站阈值）— 确认阈值和当前预警状态。
+7. **推送通知**：send_notification — 向指定渠道发送告警消息。
+8. **知识库**：search_knowledge_base — 遇到水文原理、处置规范问题时检索。
 
-- update_warning_standard(category, level, value)
-  修改预警标准阈值。category: level(水位,m)/flow(流量,m³/s), level: blue/yellow/orange/red, value: 新阈值。
+## 推送决策标准
+| 事件类型 | 推送策略 |
+|---|---|
+| 红色/橙色水文预警 | 通常立即推送，附当前值、阈值、趋势。 |
+| 黄色水文预警 | 先看视频或近 1 小时趋势，确认风险再推送。 |
+| 数据缓存为空 / 全站无数据 | 若 30 分钟内未推送过同类事件，推送一次给管理员。 |
+| 数据停更 > 2 小时 | 黄色，推送给值班员。 |
+| 数据停更 > 4 小时 | 红色，推送给值班员 + 负责人。 |
+| 数据异常跳变 | 先看视频/历史判断传感器故障；确认非误报再推送。 |
+| 多站同时预警 | 升级推送，通知负责人。 |
 
-### 预报分析
-- run_forecast(station_code, prediction_length, target)
-  基于过去3天历史流量运行Chronos时序预测。prediction_length默认72,target默认"Flow"。
+## 消息内容规范
+调用 send_notification 时，**必须传入 `alert_id`**（本次事件ID），并确保 message 包含：
+- 异常现象简述
+- 当前数值与阈值对比（如有）
+- 你的判断结论（真实险情 / 设备故障 / 数据异常 / 持续观察）
+- 建议处置措施
 
-- analyze_trend(station_code, metric, days)
-  分析水位或流量的变化趋势(最小二乘法),返回斜率、趋势方向和最新值。
+## 约束
+- 不推测超出数据范围的结论。
+- 同一事件 30 分钟内不要重复推送。
+- 推送前尽量完成一次视频或数据复核。
+- 所有结论用中文，专业简洁。
+- **研判前先调用 get_station_thresholds 确认该站的精确阈值**，不要依赖记忆或猜测。
+- **去重**：调用 `list_active_alerts` 查看事件 `notify_count`，若 > 0 表示已推送过，不要再推。
+"""
 
-### 报告生成
-- generate_report(report_type, station_code, date)
-  生成Word格式水文报告。type: daily/weekly/monthly,date格式YYYY-MM-DD。
 
-- query_reports()
-  列出已生成的所有报告文件。
+def _build_tool_strategy(mcp_connected: bool) -> str:
+    """根据 MCP 实际连接状态构建工具使用策略段落。不硬编码，MCP 不可用时知识库指导完全不出现。"""
+    lines = []
+    if mcp_connected:
+        lines.append("""## 知识库工具（当前可用）
+- search_knowledge_base：检索水文领域专业文档（原理、规范、处置标准、案例等）
+- search_with_scores：检索并返回相似度分数，适合精确匹配
+- list_partitions：查看知识库产品分区
+- list_documents：查看知识库文档统计
 
-### 文件检索
-- Glob(pattern, path)
-  按glob模式搜索文件。
-
-- Grep(pattern, path, glob)
-  按正则表达式搜索文件内容。
-
-### 定时任务
-- CreateScheduledTask(task_type, cron, params)
-  创建定时任务。task_type: generate_report/run_forecast/check_warnings。cron如"0 8 * * *"。
-
-- ListScheduledTasks()
-  列出所有定时任务。
-
-- CancelScheduledTask(task_id)
-  取消指定定时任务。
-
-## 常见场景指导
-- 用户问"最新水位": 调用 list_stations 获取编码,然后调 query_latest。
-- 用户问"过去N小时数据": 先调 query_latest 快速确认有数据,再调 query_water_level 或 query_flow 指定时间范围。时间格式必须包含 .000 毫秒后缀。
-- 数据返回为空: 告知用户无数据,建议用 query_latest 查看最新记录,或调 query_devices 检查设备状态。
-- 用户问设备/视频: 调 query_devices 和 query_video_status。
-- 用户问"预测/预报": 调 run_forecast 和 analyze_trend。"""
+**使用策略**：涉及水文专业原理、预报方法、处置规范等知识性问题时，优先用知识库检索。
+实时监测数据（水位、流量）用内置 query 工具。两者互补：知识库提供"怎么做"，内置工具提供"现在是什么"。""")
+    return "\n".join(lines) if lines else ""
 
 
 class InMemoryStore:
@@ -251,9 +273,12 @@ class AgentService:
     """每个 session 复用一个 AgentService 实例。持久化用本地 session_store。"""
 
     _instances: dict[str, "AgentService"] = {}
+    _alert_instances: dict[str, "AgentService"] = {}
 
-    def __init__(self, session_id: str = ""):
+    def __init__(self, session_id: str = "", system_prompt: str = _SYSTEM_PROMPT, role: str = "chat"):
         self.session_id = session_id
+        self.role = role
+        self._system_prompt = system_prompt
         self.model_client = ModelClient(
             api_key=settings.dashscope_api_key,
             base_url=settings.dashscope_base_url,
@@ -276,16 +301,67 @@ class AgentService:
             llm=self.model_client,
             max_tokens=settings.agent_max_tokens,
         )
+
+        # ── MCP 连接状态追踪 ──
+        self._mcp_connected = False
+
         self.agent = Agent(
             llm=self.model_client,
             tools=tools,
-            system_prompt=_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             memory=self.memory,
             session_id=session_id or "",
         )
 
         # 连接 MCP 服务器 (如 HydroRAG 知识库)
         self._connect_mcp()
+
+        # ── 确保自定义提示词实际送达 LLM ──
+        kb_section = _build_tool_strategy(self._mcp_connected)
+        custom_prompt = system_prompt
+        if kb_section:
+            custom_prompt += "\n\n" + kb_section
+        self.agent.raw._agent_info.prompt = custom_prompt + """
+
+{project_context}
+
+## 当前时间
+{current_time_context}
+
+## 会话信息
+{session_env}
+
+## 可用工具
+{tool_descriptions}"""
+        self.agent.raw._rebuild_system_prompts()
+
+        # 保存完整 system prompt 到文件，方便调试
+        try:
+            from pathlib import Path
+            descs = self.agent.raw._build_tool_descriptions(self.agent.raw._orchestrator_registry)
+            kb_section = _build_tool_strategy(self._mcp_connected)
+            full_parts = [system_prompt]
+            if kb_section:
+                full_parts.append(kb_section)
+            full_parts.append(f"## 工具描述（自动注入）\n{descs}")
+            full = "# 系统提示词\n\n" + "\n\n".join(full_parts)
+            p = Path(__file__).parent.parent / "data" / f"last_system_prompt_{role}.txt"
+            p.write_text(full, encoding="utf-8")
+            logger.info(f"debug prompt saved to {p}")
+        except Exception:
+            pass
+
+        # ── 验证：输出 actual system prompts ──
+        try:
+            executor = self.agent.raw._orchestrator_executor
+            if executor and executor.system_prompts:
+                for i, sp in enumerate(executor.system_prompts):
+                    logger.info("Actual system_prompts[%d] (len=%d, first 200): %s",
+                        i, len(sp), sp[:200])
+            else:
+                logger.warning("Actual system_prompts: EMPTY — 自定义提示词可能未生效！")
+        except Exception as e:
+            logger.warning("Failed to read actual system_prompts: %s", e)
 
         # 确保 session 存在于 SQLite（失败不阻塞，智能体仍可用）
         if session_id:
@@ -297,27 +373,37 @@ class AgentService:
                 logger.warning("floodmind session init failed for %s, agent continues without persistence", session_id)
 
     def _connect_mcp(self):
-        """加载并连接 floodmind mcp.json 中配置的 MCP 服务器"""
+        """加载并连接 floodmind mcp.json 中配置的 MCP 服务器，记录连接状态。"""
+        self._mcp_connected = False
         try:
             from floodmind.config.settings import settings as flood_settings
             from floodmind.agent.mcp_client import get_mcp_client_pool
 
             servers = flood_settings.mcp.servers if hasattr(flood_settings, 'mcp') else []
             if not servers:
+                logger.info("MCP: 无配置的服务端")
                 return
 
             pool = get_mcp_client_pool()
             connected = pool.connect_all(servers)
             if connected <= 0:
+                logger.info("MCP: 所有服务端连接失败")
                 return
 
             native = self.agent.raw
             registry = native._orchestrator_registry
+            total = 0
             for server_name, conn in pool._connections.items():
                 count = native._register_mcp_tools(server_name, conn, registry)
                 logger.info("MCP [%s]: %d tools registered", server_name, count)
+                total += count
+
+            if total > 0:
+                self._mcp_connected = True
+                logger.info("MCP: 已连接，共 %d 个工具可用", total)
         except Exception as e:
             logger.warning("MCP connection failed: %s", e)
+            self._mcp_connected = False
 
     @classmethod
     def get_or_create_agent(cls, session_id: str) -> "AgentService":
@@ -325,18 +411,50 @@ class AgentService:
             cls._instances[session_id] = cls(session_id=session_id)
         return cls._instances[session_id]
 
+    @classmethod
+    def get_or_create_alert_agent(cls, session_id: str) -> "AgentService":
+        """获取值守研判专用智能体，与对话智能体隔离，使用独立的系统提示词。"""
+        if session_id not in cls._alert_instances:
+            cls._alert_instances[session_id] = cls(
+                session_id=session_id,
+                system_prompt=_ALERT_SYSTEM_PROMPT,
+                role="alert",
+            )
+        return cls._alert_instances[session_id]
+
     def _generate_title(self, user_message: str, answer_text: str) -> str:
+        # 优先用模型生成标题；失败或返回空时基于用户问题做兜底
+        fallback = self._fallback_title(user_message)
         try:
             prompt = (
                 "根据以下对话生成3-8字简短标题,只返回标题:\n\n"
                 f"用户: {user_message[:200]}\nAI: {answer_text[:300]}"
             )
+            logger.info("title prompt: %s", prompt[:200])
             result = self.model_client.invoke(prompt)
+            logger.info("title result type=%s repr=%s", type(result).__name__, repr(result)[:200])
             title = (result.content if hasattr(result, "content") else str(result)).strip()
-            title = title.replace('"', '').replace("'", '')
-            return title[:20] or "新对话"
-        except Exception:
+            title = title.replace('"', '').replace("'", '').replace("标题：", "").replace("标题:", "").strip()
+            logger.info("title cleaned: %s", title)
+            if title and len(title) >= 2:
+                logger.info("title generated: %s", title)
+                return title[:20]
+            logger.warning("title empty from model, fallback: %s", fallback)
+        except Exception as e:
+            logger.exception("title generation failed: %s, fallback: %s", e, fallback)
+        return fallback
+
+    @staticmethod
+    def _fallback_title(user_message: str) -> str:
+        text = (user_message or "").strip()
+        if not text:
             return "新对话"
+        # 去掉常见动词/疑问词后取前 8 字
+        cleaned = re.sub(r"^[请帮我|帮我|请|请问|一下|查询|查一下|查|看看|看一下|分析|预测|生成|运行]+", "", text)
+        cleaned = cleaned.strip("，,。.?？!！:\n ")
+        if not cleaned:
+            cleaned = text
+        return cleaned[:8] or "新对话"
 
     def _sync_stream(self, message: str, q: queue.Queue) -> None:
         try:
@@ -351,12 +469,43 @@ class AgentService:
     async def stream(
         self, session_id: str, message: str, uploaded_files: Optional[list] = None,
     ) -> AsyncGenerator[dict, None]:
-        session_store.add_message(session_id, "user", parts=[{"type": "text", "text": message}])
+        # 首次调用时保存完整 system prompt
+        if not getattr(self, '_prompt_saved', False):
+            self._prompt_saved = True
+            try:
+                descs = self.agent.raw._build_tool_descriptions(self.agent.raw._orchestrator_registry)
+                kb_section = _build_tool_strategy(self._mcp_connected)
+                full_parts = [_SYSTEM_PROMPT]
+                if kb_section:
+                    full_parts.append(kb_section)
+                full_parts.append(f"## 工具描述（自动注入）\n{descs}")
+                full = "# 系统提示词\n\n" + "\n\n".join(full_parts)
+                from pathlib import Path as _Path
+                (_Path(__file__).parent.parent / "data" / "last_system_prompt.txt").write_text(full, encoding="utf-8")
+                logger.info("debug prompt saved")
+            except Exception as e:
+                logger.warning("prompt save failed: %s", e)
+
+        session_store.add_message(session_id, "user", parts=[{"type": "text", "text": _strip_internal_prefix(message)}])
         self.agent.raw.session_id = session_id
 
         loop = asyncio.get_event_loop()
         q: queue.Queue = queue.Queue()
-        loop.run_in_executor(None, self._sync_stream, message, q)
+        future = loop.run_in_executor(None, self._sync_stream, message, q)
+
+        def _on_stream_done(f):
+            try:
+                f.result()
+            except Exception as ex:
+                logger.exception("[agent] sync stream failed: %s", ex)
+            finally:
+                # 确保消费者能退出
+                try:
+                    q.put(None, block=False)
+                except queue.Full:
+                    pass
+
+        future.add_done_callback(_on_stream_done)
 
         answer_text = ""
         reasoning_text = ""
@@ -383,8 +532,10 @@ class AgentService:
                 session_store.add_message(session_id, "assistant", parts=parts)
 
             session_info = session_store.get_session(session_id)
-            if session_info and (not session_info.get("title")):
-                title = self._generate_title(message, answer_text)
+            current_title = session_info.get("title") if session_info else None
+            if session_info and (not current_title or current_title == "新对话"):
+                title = self._generate_title(_strip_internal_prefix(message), answer_text)
+                logger.info("renaming session %s title from '%s' to '%s'", session_id, current_title, title)
                 session_store.rename_session(session_id, title)
 
             yield {"type": "stream_end"}

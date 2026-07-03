@@ -1,23 +1,8 @@
-const BASE = '/api'
-
-async function agentFetch(path, init = {}) {
-  const token = localStorage.getItem('token')
-  const headers = { ...init.headers }
-  if (token) headers['Authorization'] = `Bearer ${token}`
-  if (!(init.body instanceof FormData)) {
-    headers['Content-Type'] = 'application/json'
-  }
-  const res = await fetch(`${BASE}${path}`, { ...init, headers })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(text || `请求失败 (${res.status})`)
-  }
-  return res
-}
+import { streamRequest } from './client.js'
 
 export const agentApi = {
   initSession(sessionId, config = {}) {
-    return agentFetch('/init', {
+    return streamRequest('/init', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId, ...config })
@@ -25,27 +10,27 @@ export const agentApi = {
   },
 
   fetchModels() {
-    return agentFetch('/models').then(r => r.json())
+    return streamRequest('/models').then(r => r.json())
   },
 
   fetchSessions() {
-    return agentFetch('/sessions').then(r => r.json())
+    return streamRequest('/sessions').then(r => r.json())
   },
 
   fetchSession(sessionId) {
-    return agentFetch(`/sessions/${encodeURIComponent(sessionId)}`).then(r => r.json())
+    return streamRequest(`/sessions/${encodeURIComponent(sessionId)}`).then(r => r.json())
   },
 
   fetchSessionMessages(sessionId) {
-    return agentFetch(`/sessions/${encodeURIComponent(sessionId)}/messages`).then(r => r.json())
+    return streamRequest(`/sessions/${encodeURIComponent(sessionId)}/messages`).then(r => r.json())
   },
 
   deleteSession(sessionId) {
-    return agentFetch(`/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' })
+    return streamRequest(`/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' })
   },
 
   saveSession(sessionId) {
-    return agentFetch('/sessions/save', {
+    return streamRequest('/sessions/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId })
@@ -53,7 +38,7 @@ export const agentApi = {
   },
 
   createChatRequest(sessionId, message, uploadedFiles = [], assistantMessageId) {
-    return agentFetch('/chat', {
+    return streamRequest('/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -66,15 +51,15 @@ export const agentApi = {
   },
 
   resumeStream(sessionId, afterIndex = 0) {
-    return agentFetch(`/stream/resume?session_id=${encodeURIComponent(sessionId)}&after_index=${afterIndex}`)
+    return streamRequest(`/stream/resume?session_id=${encodeURIComponent(sessionId)}&after_index=${afterIndex}`)
   },
 
   fetchSessionStatus(sessionId) {
-    return agentFetch(`/session/status?session_id=${encodeURIComponent(sessionId)}`).then(r => r.json())
+    return streamRequest(`/session/status?session_id=${encodeURIComponent(sessionId)}`).then(r => r.json())
   },
 
   pauseSession(sessionId) {
-    return agentFetch('/session/pause', {
+    return streamRequest('/session/pause', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId })
@@ -82,7 +67,7 @@ export const agentApi = {
   },
 
   resumeSession(sessionId) {
-    return agentFetch('/session/resume', {
+    return streamRequest('/session/resume', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId })
@@ -90,7 +75,7 @@ export const agentApi = {
   },
 
   respondPermission(askId, approved, sessionId) {
-    return agentFetch('/permission/respond', {
+    return streamRequest('/permission/respond', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ask_id: askId, approved, session_id: sessionId })
@@ -101,20 +86,20 @@ export const agentApi = {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('session_id', sessionId)
-    return agentFetch('/upload', { method: 'POST', body: formData })
+    return streamRequest('/upload', { method: 'POST', body: formData })
   },
 
   fetchScheduledTasks(sessionId) {
     const params = sessionId ? `session_id=${encodeURIComponent(sessionId)}` : 'include_all=1'
-    return agentFetch(`/scheduled-tasks?${params}`).then(r => r.json())
+    return streamRequest(`/scheduled-tasks?${params}`).then(r => r.json())
   },
 
   deleteScheduledTask(taskId) {
-    return agentFetch(`/scheduled-tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' })
+    return streamRequest(`/scheduled-tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' })
   },
 
   createScheduledTask(sessionId, taskType, cron, params = {}) {
-    return agentFetch('/scheduled-tasks', {
+    return streamRequest('/scheduled-tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId, task_type: taskType, cron, params })

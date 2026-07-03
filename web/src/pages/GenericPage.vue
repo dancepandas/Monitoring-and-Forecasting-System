@@ -5,7 +5,7 @@
       <article class="panel" v-for="p in page.panels" :key="p.head">
         <div class="panel-head"><h2>{{ p.head }}</h2><span>{{ p.span }}</span></div>
         <div class="panel-body">
-          <p style="color:var(--muted);font-size:13px;line-height:1.7;">{{ p.desc }}</p>
+          <p class="panel-desc">{{ p.desc }}</p>
         </div>
       </article>
     </div>
@@ -19,3 +19,18 @@ defineProps({
   page: { type: Object, required: true }
 })
 </script>
+
+<style scoped>
+.page-content {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.panel-desc {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: break-word;
+  margin: 0;
+}
+</style>

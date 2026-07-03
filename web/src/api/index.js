@@ -1,144 +1,117 @@
-const BASE = '/api'
+// ── 郴州四站配置（与后端 station_names.STATIONS 保持一致）──
+export const PRIMARY_STATION = '00125'
+export const ALL_STATION_CODES = '00125,00230,00231,00234'
 
-async function _fetchOnce(path, options, timeout) {
-  const url = `${BASE}${path}`
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => {
-    console.warn(`[api] timeout after ${timeout}ms: ${url}`)
-    ctrl.abort()
-  }, timeout)
-
-  try {
-    const res = await fetch(url, { ...options, signal: ctrl.signal })
-    clearTimeout(timer)
-    return res
-  } catch (e) {
-    clearTimeout(timer)
-    throw e
-  }
-}
+import { apiRequest } from './client.js'
 
 async function request(path, options = {}) {
-  const token = localStorage.getItem('token')
-  const headers = { 'Content-Type': 'application/json', ...options.headers }
-  if (token) headers['Authorization'] = `Bearer ${token}`
-
-  const url = `${BASE}${path}`
-  const timeout = options.timeout || 30000
-  const retries = options.retries ?? 1
-
-  console.log(`[api] request -> ${options.method || 'GET'} ${url}`)
-  let lastErr
-  for (let i = 0; i <= retries; i++) {
-    try {
-      if (i > 0) console.log(`[api] retry ${i} -> ${url}`)
-      const res = await _fetchOnce(path, { ...options, headers }, timeout)
-      console.log(`[api] response <- ${url} status=${res.status}`)
-      if (res.status === 401) {
-        localStorage.removeItem('token')
-        window.location.href = '/login'
-        throw new Error('登录已过期')
-      }
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        console.error(`[api] error <- ${url} status=${res.status}`, err)
-        throw new Error(err.detail || `请求失败 (${res.status})`)
-      }
-      const data = await res.json()
-      console.log(`[api] data <- ${url}`, data)
-      return data
-    } catch (e) {
-      lastErr = e
-      if (e.name === 'AbortError') {
-        console.error(`[api] aborted by timeout: ${url}`)
-        lastErr = new Error(`请求超时 (${timeout}ms)`)
-        if (i < retries) continue
-      } else {
-        console.error(`[api] fetch failed: ${url}`, e)
-      }
-      throw lastErr
-    }
-  }
-  throw lastErr
+  const res = await apiRequest(path, options)
+  return res.json()
 }
 
 export const api = {
   login: (username, password) =>
     request('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
 
-  getLatest: (stationCodes = '00106') =>
-    request(`/data/latest?station_codes=${stationCodes}`),
+  getLatest: (stationCodes = ALL_STATION_CODES) =>
+    request(`/data/latest?station_codes=${encodeURIComponent(stationCodes)}`),
 
-  getLevel: (stationCode, begin = '', end = '') => {
-    const params = new URLSearchParams({ station_code: stationCode })
-    if (begin) { params.set('begin_time', begin); params.set('end_time', end || begin) }
-    return request(`/data/level?${params}`)
+  getLevel: (stationCode, begin = '', end = '', count = 200) => {
+    const p = new URLSearchParams({ station_code: stationCode, begin_time: begin, end_time: end, count })
+    return request(`/data/level?${p}`)
   },
 
-  getFlow: (stationCode, begin = '', end = '') => {
-    const params = new URLSearchParams({ station_code: stationCode })
-    if (begin) { params.set('begin_time', begin); params.set('end_time', end || begin) }
-    return request(`/data/flow?${params}`)
+  getFlow: (stationCode, begin = '', end = '', count = 200) => {
+    const p = new URLSearchParams({ station_code: stationCode, begin_time: begin, end_time: end, count })
+    return request(`/data/flow?${p}`)
   },
 
-  getFlowRaw: (stationCode, deviceCode, begin = '', end = '') => {
-    const params = new URLSearchParams({ station_code: stationCode, device_code: deviceCode })
-    if (begin) { params.set('begin_time', begin); params.set('end_time', end || begin) }
-    return request(`/data/flow-raw?${params}`)
+  getFlowRaw: (stationCode, deviceCode, begin = '', end = '', count = 200) => {
+    const p = new URLSearchParams({ station_code: stationCode, device_code: deviceCode, begin_time: begin, end_time: end, count })
+    return request(`/data/flow-raw?${p}`)
   },
 
-  runForecast: (stationCode, predictionLength = 72, mode = 'univariate', contextLength = 72) =>
-    request('/forecast/run', {
-      method: 'POST',
-      body: JSON.stringify({ station_code: stationCode, prediction_length: predictionLength, context_length: contextLength, mode })
-    }),
+  runForecast: (data) =>
+    request('/forecast/run', { method: 'POST', body: JSON.stringify(data) }),
 
   getForecastResult: (stationCode) =>
-    request(`/forecast/result?station_code=${stationCode}`),
+    request(`/forecast/result?station_code=${encodeURIComponent(stationCode)}`),
 
-  getWarnings: (stationCodes = '00106') =>
-    request(`/data/warnings?station_codes=${stationCodes}`),
+  getForecastInterpret: (stationCode, field = 'virtualFlow') =>
+    request(`/forecast/interpret?station_code=${encodeURIComponent(stationCode)}&field=${encodeURIComponent(field)}`),
+
+  getWarnings: (stationCodes = ALL_STATION_CODES) =>
+    request(`/data/warnings?station_codes=${encodeURIComponent(stationCodes)}`),
 
   getDisposal: (stationCode, level = 'yellow', metric = 'level') =>
-    request(`/data/disposal?station_code=${stationCode}&level=${level}&metric=${metric}`),
+    request(`/data/disposal?station_code=${encodeURIComponent(stationCode)}&level=${level}&metric=${metric}`),
 
-  getVideoFeeds: (stationCodes = '00106,00107,00108') =>
-    request(`/data/video-feeds?station_codes=${stationCodes}`),
+  getDisposalAgent: (stationCode, level = 'yellow', metric = 'level', wlValue = 0, vfValue = 0) => {
+    const p = new URLSearchParams({ station_code: stationCode, level, metric, wl_value: wlValue, vf_value: vfValue })
+    return request(`/data/disposal/agent?${p}`)
+  },
 
-  getDeviceStats: (stationCodes = '00106,00107,00108') =>
-    request(`/data/device-stats?station_codes=${stationCodes}`),
+  getVideoFeeds: (stationCodes = ALL_STATION_CODES) =>
+    request(`/data/video-feeds?station_codes=${encodeURIComponent(stationCodes)}`),
 
-  // ── 报告 ──
+  getVideoSnapshots: (stationCode = '__all__', limit = 10) =>
+    request(`/data/video-snapshots?station_code=${encodeURIComponent(stationCode)}&limit=${limit}`),
+
+  getAllVideoSnapshots: (limit = 10) =>
+    request(`/data/video-snapshots?station_code=__all__&limit=${limit}`),
+
+  getDeviceStats: (stationCodes = ALL_STATION_CODES) =>
+    request(`/data/device-stats?station_codes=${encodeURIComponent(stationCodes)}`),
+
   listReports: (type = '') => {
     const params = type ? `?report_type=${encodeURIComponent(type)}` : ''
     return request(`/reports/list${params}`)
   },
 
-  downloadReport: (filename) => `${BASE}/reports/download/${encodeURIComponent(filename)}`,
+  downloadReport: (filename) =>
+    `/api/reports/download/${encodeURIComponent(filename)}`,
 
-  previewReport: (filename) => request(`/reports/preview/${encodeURIComponent(filename)}`),
+  previewReport: (filename) =>
+    request(`/reports/preview/${encodeURIComponent(filename)}`),
 
-  generateReport: (data) => request('/reports/generate', { method: 'POST', body: JSON.stringify(data) }),
+  generateReport: (data) =>
+    request('/reports/generate', { method: 'POST', body: JSON.stringify(data) }),
 
-  // ── 系统状态 ──
-  getSystemStatus: () => request('/system/status'),
+  getSystemStatus: () =>
+    request('/system/status'),
 
-  triggerSystemCheck: () => request('/system/check', { method: 'POST' }),
+  triggerSystemCheck: () =>
+    request('/system/check', { method: 'POST' }),
 
-  // ── 对齐图表数据 ──
   getAlignedChart: (stationCode, field = 'virtualFlow') =>
-    request(`/data/aligned/chart?station_code=${stationCode}&field=${field}`),
+    request(`/data/aligned/chart?station_code=${encodeURIComponent(stationCode)}&field=${encodeURIComponent(field)}`),
 
-  getStats: (stationCode, field) =>
-    request(`/data/stats?station_code=${stationCode}&field=${field}`),
+  getStats: (stationCode, field = 'virtualFlow') =>
+    request(`/data/stats?station_code=${encodeURIComponent(stationCode)}&field=${encodeURIComponent(field)}`),
 
-  // ── 管理 ──
-  getUsers: () => request('/auth/users'),
-
-  getScheduledTasks: () => request('/scheduled-tasks'),
-
-  getReportsList: (type = '') => {
-    const params = type ? `?report_type=${encodeURIComponent(type)}` : ''
-    return request(`/reports/list${params}`)
+  getActiveAlerts: (stationCode = '', level = '') => {
+    const p = new URLSearchParams()
+    if (stationCode) p.set('station_code', stationCode)
+    if (level) p.set('level', level)
+    const qs = p.toString()
+    return request(`/alerts/active${qs ? '?' + qs : ''}`)
   },
+
+  getAlertHistory: (limit = 50) =>
+    request(`/alerts/history?limit=${limit}`),
+
+  acknowledgeAlert: (alertId) =>
+    request(`/alerts/${encodeURIComponent(alertId)}/acknowledge`, { method: 'POST', body: JSON.stringify({ by: 'operator' }) }),
+
+  resolveAlert: (alertId, resolution = '人工解除') =>
+    request(`/alerts/${encodeURIComponent(alertId)}/resolve`, { method: 'POST', body: JSON.stringify({ resolution, by: 'operator' }) }),
+
+  getUsers: () =>
+    request('/auth/users'),
+
+  getScheduledTasks: () =>
+    request('/scheduled-tasks'),
+
+  getWarningStandards: () =>
+    request('/data/warning-standards'),
 }

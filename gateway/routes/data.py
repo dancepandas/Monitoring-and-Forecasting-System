@@ -1,20 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from datetime import datetime, timedelta
+import json
 import logging
 
 logger = logging.getLogger(__name__)
 
 from ..auth.middleware import get_current_user
 from ..config import settings
-from ..services import data_cache, warning_config, station_names
+from ..services import data_cache, warning_config, station_names, aiflow_client
+from ..services.time_utils import default_times
 
 router = APIRouter(prefix="/api/data", tags=["data"])
-
-
-def _default_times():
-    now = datetime.now()
-    today = now.strftime("%Y-%m-%d")
-    return f"{today} 00:00:00.000", f"{today} 23:59:59.999"
 
 
 def _empty(code: str = settings.station_codes.split(",")[0] if settings.station_codes else "00106"):
@@ -74,74 +70,155 @@ async def get_latest(station_codes: str = settings.station_codes, user: dict = D
 @router.get("/warnings")
 async def get_warnings(station_codes: str = settings.station_codes, user: dict = Depends(get_current_user)):
     codes = [c.strip() for c in station_codes.split(",")]
-    standards = warning_config.get_standards()
     admin = warning_config.get_admin_contact()
     warnings = []
     alerts = []
 
-    for code in codes:
-        level_data = await data_cache.get(f"aiflow:level:{code}", max_age=600)
-        level_items = (level_data.get("data", []) or []) if level_data else []
-        flow_data = await data_cache.get(f"aiflow:flow_raw:{code}:{settings.default_device_code}", max_age=600)
-        flow_items = (flow_data.get("data", []) or []) if flow_data else []
+    # 从 AlertTracker 获取活跃告警（已确认的过滤掉），使用引擎单例的 tracker
+    from ..services.monitor_engine import MonitorEngine
+    tracker = MonitorEngine.get()._tracker
+    tracker_alerts = await tracker.list_active()
+    tracker_ids = set()  # 用于去重
 
-        # 缓存告警
-        if not level_items and not flow_items:
+    for code in codes:
+        # 使用 aligned 层数据，与 monitor_engine 和前端图表保持一致
+        aligned = await data_cache.get_aligned(code, max_age=600)
+        aligned_records = aligned.get("records", []) if aligned else []
+
+        # 只取实测记录
+        measured = [r for r in aligned_records if r.get("waterLevel_source") == "measured" or r.get("virtualFlow_source") == "measured"]
+
+        # 缓存告警：无实测数据才触发
+        if not measured:
+            alert_id = f"AL-cache-{code}"
+            tracker_ids.add(alert_id)
             alerts.append({
-                "id": f"AL-cache-{code}", "type": "告警", "category": "系统",
+                "id": alert_id, "type": "告警", "category": "系统",
                 "name": "数据缓存异常", "level": "提示", "station_code": code,
                 "message": f"测站 {station_names.station_name(code)} 数据缓存为空。可能 aiflow2 连接异常或采集程序未运行。如持续超过 10 分钟，请联系管理员（{admin}）。",
                 "time": datetime.now().isoformat(),
             })
-        elif not level_items:
-            alerts.append({
-                "id": f"AL-cache-{code}", "type": "告警", "category": "系统",
-                "name": "数据缓存异常", "level": "提示", "station_code": code,
-                "message": f"测站 {station_names.station_name(code)} 水位数据缓存为空。请联系管理员（{admin}）。",
-                "time": datetime.now().isoformat(),
-            })
 
-        # 水位预警
+        # 水位预警（取最新实测值）
         wl_val = None
-        for item in level_items:
-            if item.get("waterLevel") is not None:
-                wl_val = float(item["waterLevel"]); break
-        if wl_val is None:
-            for item in flow_items:
-                if item.get("waterLevel") is not None:
-                    wl_val = float(item["waterLevel"]); break
+        for r in reversed(aligned_records):
+            if r.get("waterLevel_source") == "measured" and r.get("waterLevel") is not None:
+                wl_val = float(r["waterLevel"])
+                break
         if wl_val is not None:
-            lv = warning_config.check_level(wl_val, standards)
+            lv = warning_config.check_level(wl_val, code)
             if lv:
+                thresholds = warning_config.get_station_thresholds(code)
                 warnings.append({
                     "id": f"EW-level-{code}-{lv}", "type": "预警", "category": "水文",
                     "name": "水位超限预警", "level": warning_config.level_name(lv), "station_code": code,
                     "value": round(wl_val, 2), "unit": "m",
-                    "message": f"测站 {station_names.station_name(code)} 当前水位 {wl_val:.2f}m，已达到{standards['level'].get(lv, 0)}m（{warning_config.level_name(lv)}阈值）。请加强监测。",
+                    "message": f"测站 {station_names.station_name(code)} 当前水位 {wl_val:.2f}m，已达到{thresholds['level'].get(lv, 0)}m（{warning_config.level_name(lv)}阈值）。请加强监测。",
                     "time": datetime.now().isoformat(),
                 })
 
-        # 流量预警
+        # 流量预警（取最新实测值）
         vf_val = None
-        for item in flow_items:
-            if item.get("virtualFlow") is not None:
-                vf_val = float(item["virtualFlow"]); break
+        for r in reversed(aligned_records):
+            if r.get("virtualFlow_source") == "measured" and r.get("virtualFlow") is not None:
+                vf_val = float(r["virtualFlow"])
+                break
         if vf_val is not None:
-            lv = warning_config.check_flow(vf_val, standards)
+            lv = warning_config.check_flow(vf_val, code)
             if lv:
+                thresholds = warning_config.get_station_thresholds(code)
                 warnings.append({
                     "id": f"EW-flow-{code}-{lv}", "type": "预警", "category": "水文",
                     "name": "流量超限预警", "level": warning_config.level_name(lv), "station_code": code,
                     "value": round(vf_val, 0), "unit": "m³/s",
-                    "message": f"测站 {station_names.station_name(code)} 当前流量 {vf_val:.0f}m³/s，已达到{standards['flow'].get(lv, 0)}m³/s（{warning_config.level_name(lv)}阈值）。请通知航运部门关注。",
+                    "message": f"测站 {station_names.station_name(code)} 当前流量 {vf_val:.0f}m³/s，已达到{thresholds['flow'].get(lv, 0)}m³/s（{warning_config.level_name(lv)}阈值）。请通知航运部门关注。",
                     "time": datetime.now().isoformat(),
                 })
+
+    # 合并 AlertTracker 中的活跃告警（未确认的），去重
+    for ta in tracker_alerts:
+        if ta.acknowledged:
+            continue  # 已确认的告警不展示在预警列表
+        if ta.station_code not in codes:
+            continue
+        alert_id = ta.id
+        if alert_id in tracker_ids:
+            continue
+        tracker_ids.add(alert_id)
+        alerts.append({
+            "id": alert_id,
+            "type": "告警",
+            "category": "系统",
+            "name": ta.title,
+            "level": ta.level,
+            "station_code": ta.station_code,
+            "message": ta.message,
+            "time": datetime.fromtimestamp(ta.triggered_at).isoformat(),
+            "notify_count": ta.notify_count,
+            "acknowledged": ta.acknowledged,
+        })
 
     return {
         "warnings": warnings, "warning_count": len(warnings),
         "alerts": alerts, "alert_count": len(alerts),
         "total": len(warnings) + len(alerts),
         "updated": datetime.now().isoformat(),
+    }
+
+
+@router.get("/disposal/agent")
+async def get_disposal_agent(
+    station_code: str,
+    level: str = "yellow",
+    metric: str = "level",
+    wl_value: float = 0,
+    vf_value: float = 0,
+    user: dict = Depends(get_current_user),
+):
+    """Agent 动态生成处置建议，基于实时数值而非静态字典。"""
+    from ..services.agent_utils import quick_ask
+
+    unit = "m" if metric == "level" else "m³/s"
+    value = wl_value if metric == "level" else vf_value
+    name = station_names.station_name(station_code)
+    thresholds = warning_config.get_station_thresholds(station_code)
+    metric_thresholds = thresholds.get(metric, {})
+
+    prompt = f"""你是防汛专家。请为以下情况生成 3-5 条具体的处置建议：
+
+- 测站：{name}（{station_code}）
+- 当前{ '水位' if metric == 'level' else '流量' }：{value:.2f} {unit}
+- 预警级别：{level}
+- 各级阈值：{json.dumps(metric_thresholds, ensure_ascii=False)}
+
+要求：
+1. 每行一条建议，以 - 开头
+2. 建议应具体可操作，包含时间频率和具体行动
+3. 针对当前数值给出针对性建议，不要泛泛而谈
+4. 纯文本，不要 markdown 代码块
+
+示例格式：
+- 每1小时记录一次水位数据，关注变化趋势
+- 通知下游航运部门注意航行安全
+- 检查堤防和闸门设备运行状态"""
+
+    system = "你是防汛指挥专家，用中文输出具体可操作的处置建议，每条一行以 - 开头。"
+    text = await quick_ask(prompt, system, max_tokens=600)
+    if not text:
+        # fallback to static disposal
+        return await get_disposal(station_code, level, metric, user)
+    suggestions = [{"text": s.lstrip("- ").strip(), "color": "var(--river)"}
+                   for s in text.strip().split("\n") if s.strip().startswith("-")]
+    if not suggestions:
+        suggestions = [{"text": s.strip(), "color": "var(--river)"}
+                       for s in text.strip().split("\n") if s.strip()]
+    return {
+        "station_code": station_code,
+        "level": level,
+        "metric": metric,
+        "suggestions": suggestions or [{"text": "保持常规监测，关注水情变化趋势。", "color": "var(--river)"}],
+        "generated_at": datetime.now().isoformat(),
+        "source": "agent",
     }
 
 
@@ -170,75 +247,86 @@ async def get_disposal(station_code: str, level: str = "yellow", metric: str = "
 
 @router.get("/video-feeds")
 async def get_video_feeds(station_codes: str = settings.station_codes, user: dict = Depends(get_current_user)):
-    """聚合各站视频链路状态"""
+    """各站实时视频状态（调 deviceCamera 接口获取播放地址）。"""
     codes = [c.strip() for c in station_codes.split(",")]
     feeds = []
-    cam_id = 0
     for code in codes:
-        data = await data_cache.get(f"aiflow:flow:{code}", max_age=600)
-        if not data:
-            continue
-        items = data.get("data", []) or []
-        if items and items[0]:
-            item = items[0]
-            video_urls = []
-            for key in ("videoUrl", "videoUrlSecond", "videoUrlThird"):
-                url = item.get(key)
-                if url:
-                    video_urls.append(url)
-            cam_files = item.get("cameraVideoFiles") or []
-            for cf in cam_files:
-                if cf.get("videoUrl"):
-                    video_urls.append(cf["videoUrl"])
-            ai_tasks = []
-            if item.get("measureResult") is not None:
-                ai_tasks.append("流速估计")
-            if video_urls:
-                ai_tasks.append("漂浮物识别")
-            cam_id += 1
-            feeds.append({
-                "id": f"CAM-{cam_id:02d}",
-                "station_code": code,
-                "label": f"{code}站",
-                "status": "online" if item.get("uploadStatus") == 1 else "offline",
-                "ai_tasks": ai_tasks,
-                "video_count": len(video_urls),
-                "water_level": item.get("waterLevel"),
-                "water_flow": item.get("waterFlow"),
-            })
+        device = station_names.station_device(code) or settings.default_device_code
+        try:
+            # 先尝试调 deviceCamera 获取真实摄像头列表
+            cam_resp = await aiflow_client.get_camera_info(device)
+            cameras = cam_resp.get("data", []) or []
+        except Exception:
+            cameras = []
+
+        if cameras:
+            for i, cam in enumerate(cameras):
+                cam_id = cam.get("cameraId", i + 1)
+                live_addr = cam.get("liveAddress") or ""  # None → ""，让前端跳过空地址
+                feeds.append({
+                    "id": f"CAM-{cam_id}",
+                    "station_code": code,
+                    "label": f"{station_names.station_name(code)} · {cam.get('name', '摄像头')}",
+                    "status": "online" if cam.get("programState") == 1 and live_addr else "offline",
+                    "ai_tasks": ["监测画面"],
+                    "live_address": live_addr,
+                    "camera_index": cam.get("cameraIndex"),
+                })
+        else:
+            # 回退：从缓存读（可能有 videoUrl）
+            data = await data_cache.get(f"aiflow:flow_raw:{code}:{device}", max_age=600)
+            if data:
+                items = data.get("data", []) or []
+                for i, item in enumerate(items[:3]):
+                    vu = item.get("videoUrl")
+                    if vu:
+                        feeds.append({
+                            "id": f"CAM-{i + 1:02d}",
+                            "station_code": code,
+                            "label": station_names.station_name(code),
+                            "status": "online",
+                            "ai_tasks": ["监测画面"],
+                            "live_address": str(vu),
+                        })
+                    if len(feeds) >= 3:
+                        break
+
     return {"feeds": feeds, "total": len(feeds), "updated": datetime.now().isoformat()}
+
+
+@router.get("/video-snapshots")
+async def get_video_snapshots(
+    station_code: str = Query("00106"),
+    limit: int = Query(10, ge=1, le=10),
+    user: dict = Depends(get_current_user),
+):
+    """视频快照历史。station_code=__all__ 时返回所有站点分组。"""
+    if station_code == "__all__":
+        grouped = await data_cache.get_all_video_snapshots(limit=limit)
+        allowed = set(s.strip() for s in settings.station_codes.split(","))
+        stations = []
+        for code, snaps in grouped.items():
+            if code not in allowed:
+                continue
+            name = station_names.station_name(code)
+            stations.append({
+                "station_code": code,
+                "station_name": name,
+                "snapshots": snaps,
+                "count": len(snaps),
+            })
+        stations.sort(key=lambda s: s["station_name"])
+        return {"stations": stations, "total_stations": len(stations), "total_snapshots": sum(s["count"] for s in stations)}
+
+    snaps = await data_cache.get_video_snapshots(station_code, limit=limit)
+    return {"snapshots": snaps, "total": len(snaps), "station_code": station_code}
 
 
 @router.get("/device-stats")
 async def get_device_stats(station_codes: str = settings.station_codes, user: dict = Depends(get_current_user)):
-    """设备统计"""
-    codes = [c.strip() for c in station_codes.split(",")]
-    online = 0
-    total = 0
-    detail = []
-    for code in codes:
-        # 优先从 flow_raw 缓存读取（有实际数据），level 缓存做 fallback
-        data = await data_cache.get(f"aiflow:flow_raw:{code}:{settings.default_device_code}", max_age=600)
-        if data:
-            items = data.get("data", []) or []
-        else:
-            data = await data_cache.get(f"aiflow:level:{code}", max_age=600)
-            items = (data.get("data", []) or []) if data else []
-        if items and items[0]:
-            item = items[0]
-            total += 1
-            status = "online" if item.get("uploadStatus") in (1, None, 0) else "offline"
-            if status == "online":
-                online += 1
-            detail.append({
-                "station_code": code,
-                "status": status,
-                "water_level": item.get("waterLevel"),
-                "device_code": item.get("deviceCode", item.get("waterDeviceCode", "")),
-            })
-        else:
-            detail.append({"station_code": code, "status": "no_data"})
-    return {"total": total, "online": online, "offline": total - online, "detail": detail, "updated": datetime.now().isoformat()}
+    """设备统计（RTU 在线 + 摄像头 + 采集器心跳）。逻辑见 station_collector.collect_device_stats。"""
+    from ..services.station_collector import collect_device_stats
+    return await collect_device_stats()
 
 
 @router.get("/aligned/chart")
@@ -259,3 +347,24 @@ async def get_stats(
 ):
     """返回指定字段的统计信息（仅实测值）。"""
     return await data_cache.get_stats(station_code, field)
+
+
+@router.get("/warning-standards")
+async def get_warning_standards(station_codes: str = settings.station_codes, user: dict = Depends(get_current_user)):
+    """返回各站预警阈值配置（用于管理页面展示）。"""
+    codes = [c.strip() for c in station_codes.split(",")]
+    cfg = warning_config.get_standards()
+    stations_thresholds = {}
+    for code in codes:
+        t = warning_config.get_station_thresholds(code)
+        stations_thresholds[code] = {
+            "name": station_names.station_name(code),
+            "level": t.get("level", {}),
+            "flow": t.get("flow", {}),
+        }
+    return {
+        "stations": stations_thresholds,
+        "defaults": cfg.get("_defaults", {}),
+        "rate_of_change": cfg.get("rate_of_change", {}),
+        "updated": datetime.now().isoformat(),
+    }

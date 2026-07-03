@@ -3,33 +3,45 @@
   <div class="command-grid">
     <article class="panel">
       <div class="panel-head"><h2>关键站点</h2><span>当前状态</span></div>
-        <div class="panel-body">
-          <div class="risk-list">
-            <div class="risk-item" v-for="s in stations" :key="s.code">
-              <div class="risk-row"><b>{{ s.name }}</b><span :class="['badge', s.badgeClass]">{{ s.status }}</span></div>
-              <p>水位 {{ s.level }}m · 流量 {{ s.flow || '—' }}m³/s · {{ s.detail }}</p>
+      <div class="panel-body">
+        <div class="risk-list">
+          <div v-if="stations.length === 0" class="empty-state">暂无站点数据</div>
+          <div class="risk-item" v-for="s in stations" :key="s.code">
+            <div class="risk-row">
+              <b>{{ s.name }}</b>
+              <span :class="['badge', s.badgeClass]">{{ s.status }}</span>
+            </div>
+            <p>水位 {{ s.level ?? '—' }}m · 流量 {{ s.flow || '—' }}m³/s · {{ s.detail }}</p>
+          </div>
+        </div>
+      </div>
+    </article>
+    <article class="panel">
+      <div class="panel-head"><h2>设备统计</h2><span>42 路</span></div>
+      <div class="panel-body">
+        <div class="risk-list">
+          <div class="risk-item" v-for="d in deviceStats" :key="d.label">
+            <div class="risk-row">
+              <b>{{ d.label }}</b>
+              <span class="stat-value">{{ d.value }}</span>
             </div>
           </div>
         </div>
-      </article>
-      <article class="panel">
-        <div class="panel-head"><h2>设备统计</h2><span>42 路</span></div>
-        <div class="panel-body">
-          <div class="risk-list">
-            <div class="risk-item" v-for="d in deviceStats" :key="d.label"><div class="risk-row"><b>{{ d.label }}</b><span style="font-family:var(--mono);color:var(--muted)">{{ d.value }}</span></div></div>
-          </div>
-        </div>
-      </article>
-    </div>
+      </div>
+    </article>
+  </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import Topbar from '../components/Topbar.vue'
-import { api } from '../api'
+import { api, ALL_STATION_CODES } from '../api'
 
 const STATIONS = [
-  { code: '00106', name: '湖北-仙桃', deviceCode: 'FD000489923695' },
+  { code: '00125', name: '郴州', deviceCode: 'FD000848891909' },
+  { code: '00230', name: '郴州-坳上', deviceCode: 'FD000696565714' },
+  { code: '00231', name: '郴州-鸡嘴桥下游', deviceCode: 'FD000445060600' },
+  { code: '00234', name: '郴州-燕泉河', deviceCode: 'FD000823998862' },
 ]
 
 const stations = ref([])
@@ -42,7 +54,7 @@ const deviceStats = ref([
 onMounted(async () => {
   try {
     // 设备统计
-    const stats = await api.getDeviceStats('00106')
+    const stats = await api.getDeviceStats(ALL_STATION_CODES)
     deviceStats.value = [
       { label: '在线', value: `${stats.online}` },
       { label: '离线', value: `${stats.offline}` },
@@ -79,3 +91,9 @@ onMounted(async () => {
   }
 })
 </script>
+
+<style scoped>
+.empty-state { padding: 40px 0; text-align: center; color: var(--muted); font-size: 13px; }
+.stat-value { font-family: var(--mono); color: var(--muted); flex-shrink: 0; }
+.risk-item p { overflow-wrap: break-word; }
+</style>

@@ -8,7 +8,7 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     username: str
     password: str
-    display_name: str
+    display_name: Optional[str] = None
     role: str = "user"
 
 class UserResponse(BaseModel):

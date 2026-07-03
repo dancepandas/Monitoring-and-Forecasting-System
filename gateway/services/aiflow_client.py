@@ -18,25 +18,39 @@ AIFLOW_READ_TIMEOUT = 10
 CACHE_TTL = 300  # 5 minutes
 
 _cache = {}
+_cache_lock = threading.Lock()
+_CACHE_MAX_SIZE = 200  # 最多 200 个缓存条目
+
 _executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="aiflow")
 _session = requests.Session()
 
 
-def _cache_key(endpoint: str, json_data: dict) -> str:
-    return f"{endpoint}:{json.dumps(json_data, sort_keys=True, ensure_ascii=False)}"
+def _cache_key(endpoint: str, json_data: dict = None) -> str:
+    if json_data:
+        return f"{endpoint}:{json.dumps(json_data, sort_keys=True, ensure_ascii=False)}"
+    return endpoint
 
 
 def _get_cached(key: str):
     now = time.time()
-    entry = _cache.get(key)
-    if entry and now - entry["ts"] < CACHE_TTL:
-        logger.info(f"aiflow2 cache hit: {key[:120]}")
-        return entry["data"]
+    with _cache_lock:
+        entry = _cache.get(key)
+        if entry and now - entry["ts"] < CACHE_TTL:
+            logger.info(f"aiflow2 cache hit: {key[:120]}")
+            return entry["data"]
+        if entry:
+            del _cache[key]  # 过期条目立即清理
     return None
 
 
 def _set_cached(key: str, data: dict):
-    _cache[key] = {"ts": time.time(), "data": data}
+    # LRU 策略：超过上限时清理最旧的 10% 条目
+    with _cache_lock:
+        if len(_cache) >= _CACHE_MAX_SIZE:
+            to_remove = sorted(_cache.items(), key=lambda x: x[1]["ts"])[:_CACHE_MAX_SIZE // 10]
+            for k, _ in to_remove:
+                del _cache[k]
+        _cache[key] = {"ts": time.time(), "data": data}
 
 
 def _sync_post(url: str, json_data: dict, headers: dict = None) -> dict:
@@ -63,6 +77,34 @@ def _sync_post(url: str, json_data: dict, headers: dict = None) -> dict:
         raise
 
 
+def _sync_get(endpoint: str) -> dict:
+    """同步 HTTP GET，带 token 认证和自动重试。"""
+    token = _sync_get_token()
+    url = f"{settings.aiflow_base_url}{endpoint}"
+    logger.info(f"aiflow2 sync request: GET {url}")
+    try:
+        r = _session.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=(AIFLOW_CONNECT_TIMEOUT, AIFLOW_READ_TIMEOUT))
+        data = r.json()
+        logger.info(f"aiflow2 sync response: GET {url} status={r.status_code} code={data.get('code')}")
+        if r.status_code == 401:
+            global _token
+            _token = None
+            token = _sync_get_token()
+            # 重建 headers 避免使用 stale token
+            r = _session.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=(AIFLOW_CONNECT_TIMEOUT, AIFLOW_READ_TIMEOUT))
+            data = r.json()
+        return data
+    except requests.exceptions.Timeout:
+        logger.error(f"aiflow2 sync timeout: GET {endpoint}")
+        raise
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"aiflow2 sync connection error: GET {endpoint} - {e}")
+        raise
+    except Exception as e:
+        logger.error(f"aiflow2 sync error: GET {endpoint} - {type(e).__name__}: {e}")
+        raise
+
+
 def _sync_get_token() -> str:
     global _token
     with _token_lock:
@@ -79,17 +121,15 @@ def _sync_get_token() -> str:
 
 def _sync_proxy_post(endpoint: str, json_data: dict) -> dict:
     token = _sync_get_token()
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     url = f"{settings.aiflow_base_url}{endpoint}"
     try:
-        return _sync_post(url, json_data, headers)
-    except requests.exceptions.HTTPError as e:
-        if e.response is not None and e.response.status_code == 401:
+        return _sync_post(url, json_data, {"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+    except Exception as e:
+        if hasattr(e, 'response') and e.response is not None and e.response.status_code == 401:
             global _token
             _token = None
             token = _sync_get_token()
-            headers["Authorization"] = f"Bearer {token}"
-            return _sync_post(url, json_data, headers)
+            return _sync_post(url, json_data, {"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
         raise
 
 
@@ -115,29 +155,80 @@ async def proxy_post(endpoint: str, json_data: dict) -> dict:
         raise
 
 
-async def get_level(station_code: str, begin: str, end: str, count: int = 200) -> dict:
-    return await proxy_post("/level/reportDataPage", {
-        "count": count, "page": 1,
-        "request": {"stationCode": station_code, "beginTime": begin, "endTime": end, "isMedia": 1}
-    })
+async def proxy_get(endpoint: str) -> dict:
+    """异步 GET 请求（带缓存），用于无 body 的查询接口。"""
+    key = _cache_key(endpoint)
+    cached = _get_cached(key)
+    if cached is not None:
+        return cached
+
+    loop = asyncio.get_event_loop()
+    try:
+        data = await loop.run_in_executor(_executor, partial(_sync_get, endpoint))
+        _set_cached(key, data)
+        return data
+    except requests.exceptions.Timeout:
+        logger.error(f"aiflow2 timeout: GET {endpoint}")
+        raise Exception(f"aiflow2 timeout: GET {endpoint}")
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"aiflow2 connection error: GET {endpoint} - {e}")
+        raise Exception(f"aiflow2 connection error: GET {endpoint}")
+    except Exception as e:
+        logger.error(f"aiflow2 error: GET {endpoint} - {type(e).__name__}: {e}")
+        raise
 
 
-async def get_flow(station_code: str, begin: str, end: str, count: int = 200) -> dict:
-    return await proxy_post("/flow/reportDataPage", {
-        "count": count, "page": 1,
-        "request": {"stationCode": station_code, "beginTime": begin, "endTime": end, "isMedia": 1}
-    })
+# ── 时序库数据接口 ──
 
-
-async def get_level_raw(station_code: str, device_code: str, begin: str, end: str, count: int = 200) -> dict:
-    return await proxy_post("/level/originalDataFilterPage", {
-        "count": count, "page": 1,
-        "request": {"stationCode": station_code, "deviceCode": device_code, "beginTime": begin, "endTime": end}
-    })
-
-
-async def get_flow_raw(station_code: str, device_code: str, begin: str, end: str, count: int = 200) -> dict:
+async def get_flow_original_data(
+    station_code: str,
+    device_code: str,
+    begin_time: str,
+    end_time: str,
+    count: int = 200,
+    page: int = 1,
+) -> dict:
+    """查询流量原始数据（时序库 originalDataFilterPage 接口）。"""
     return await proxy_post("/flow/originalDataFilterPage", {
-        "count": count, "page": 1,
-        "request": {"stationCode": station_code, "deviceCode": device_code, "beginTime": begin, "endTime": end}
+        "count": count,
+        "page": page,
+        "request": {
+            "beginTime": begin_time,
+            "deviceCode": device_code,
+            "endTime": end_time,
+            "stationCode": station_code,
+        },
     })
+
+
+async def get_level_original_data(
+    station_code: str,
+    device_code: str,
+    begin_time: str,
+    end_time: str,
+    count: int = 200,
+    page: int = 1,
+) -> dict:
+    """查询水位原始数据（时序库 originalDataFilterPage 接口）。"""
+    return await proxy_post("/level/originalDataFilterPage", {
+        "count": count,
+        "page": page,
+        "request": {
+            "beginTime": begin_time,
+            "deviceCode": device_code,
+            "endTime": end_time,
+            "stationCode": station_code,
+        },
+    })
+
+
+# ── 实时数据接口 ──
+
+async def get_realtime_info(station_code: str) -> dict:
+    """获取站点实时监测数据（水位+流量+流速+视频地址+摄像头）。"""
+    return await proxy_get(f"/client/monitorWater/realTimeInfo/{station_code}")
+
+
+async def get_camera_info(device_code: str) -> dict:
+    """查询设备实时视频信息。"""
+    return await proxy_get(f"/deviceCamera/cameraInfo/{device_code}")
