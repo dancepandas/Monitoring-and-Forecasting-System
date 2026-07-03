@@ -5,7 +5,8 @@ assets/
 /*.html
 # 根目录原型/演示 HTML（正式应用入口为 web/index.html，根目录 html 均为设计原型）
 __pycache__/
-.claude/
+.claude
+# Claude Code 本地配置/skills/计划等，不进库
 .env
 aiflow_profile.env
 *.env
