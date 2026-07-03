@@ -11,6 +11,11 @@
               <span class="risk-meta">{{ r.latestDate || '暂无' }}</span>
             </div>
             <p>{{ r.latestSummary || '点击查看最新日报内容' }}</p>
+            <div class="risk-foot">
+              <button class="btn sm gen-btn" :disabled="!!generating[r.key]" @click.stop="generateNow(r)">
+                {{ generating[r.key] ? '生成中…' : '立即生成' }}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -120,6 +125,7 @@ const previewTitle = ref('')
 const previewContent = ref('')
 const previewLoading = ref(false)
 const currentFile = ref('')
+const generating = ref({})  // report_type → bool，立即生成按钮态
 
 const showArchive = ref(false)
 const archiveTitle = ref('')
@@ -158,6 +164,18 @@ async function loadStats() {
     }
   } catch (e) {
     console.error('loadStats failed:', e)
+  }
+}
+
+async function generateNow(r) {
+  generating.value = { ...generating.value, [r.key]: true }
+  try {
+    await api.generateReport({ report_type: r.key })
+    await loadStats()
+  } catch (e) {
+    alert('生成失败：' + (e?.message || e))
+  } finally {
+    generating.value = { ...generating.value, [r.key]: false }
   }
 }
 
@@ -254,6 +272,10 @@ onMounted(() => { loadStats() })
 
 .clickable { cursor: pointer; }
 .clickable:hover { background: rgba(109, 146, 159, .05); }
+
+.risk-foot { display: flex; justify-content: flex-end; margin-top: 6px; }
+.gen-btn { border-radius: 999px; }
+.gen-btn:disabled { opacity: .6; cursor: progress; }
 
 .risk-meta {
   font-family: var(--mono);

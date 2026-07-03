@@ -20,16 +20,28 @@ REPORTS_DIR = Path(settings.reports_dir)
 
 
 def _parse_filename(filename: str) -> dict | None:
-    """Parse report filename like 00106_daily_2026-06-15.docx -> metadata."""
+    """Parse report filename -> metadata.
+
+    Formats:
+      daily_2026-07-01.docx           → {type, date, station_code=""}
+      daily_2026-07-01_00125.docx      → {type, date, station_code="00125"}
+      weekly_2026-06-23_2026-06-29.txt → {type, date, station_code=""}
+    """
     name = filename.rsplit(".", 1)[0]
     parts = name.split("_")
-    if len(parts) >= 3:
-        return {
-            "station_code": parts[0],
-            "type": parts[1],
-            "date": parts[2],
-        }
-    return None
+    if len(parts) < 2:
+        return None
+
+    station_code = ""
+    # 末尾一段是 5 位数字 → 单站报告
+    if len(parts) >= 3 and parts[-1].isdigit() and len(parts[-1]) == 5:
+        station_code = parts[-1]
+
+    return {
+        "station_code": station_code,
+        "type": parts[0],
+        "date": parts[1],
+    }
 
 
 @router.get("/list")
@@ -108,16 +120,17 @@ async def preview_report(filename: str, user: dict = Depends(get_current_user)):
 
 @router.post("/generate")
 async def generate_report_api(body: dict, user: dict = Depends(get_current_user)):
-    """在线生成报告。参数: report_type(daily/weekly/monthly), station_code, date(可选,默认昨天)。"""
+    """在线生成日报。参数: report_type(daily/review/device/model), station_code(仅 daily 可选), date(可选,默认今天)。"""
     report_type = body.get("report_type", "daily")
-    station_code = body.get("station_code", "00106")
+    station_code = body.get("station_code", None)  # None → 覆盖全部站点
     date = body.get("date", "")
 
     cmd = [
         "python", "-m", "gateway.scripts.generate_report",
         "--type", report_type,
-        "--station", station_code,
     ]
+    if station_code:
+        cmd.extend(["--station", station_code])
     if date:
         cmd.extend(["--date", date])
 
@@ -128,7 +141,7 @@ async def generate_report_api(body: dict, user: dict = Depends(get_current_user)
             stderr=asyncio.subprocess.PIPE,
             env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=180)
         if proc.returncode != 0:
             err = stderr.decode("utf-8", errors="ignore")
             logger.error(f"generate_report failed: {err}")
