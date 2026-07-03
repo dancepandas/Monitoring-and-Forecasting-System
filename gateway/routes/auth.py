@@ -37,6 +37,22 @@ def register(req: RegisterRequest, user: dict = Depends(require_role("admin", "s
     db.add(new_user); db.commit(); db.refresh(new_user)
     return UserResponse(**user_to_response(new_user))
 
+
+@router.post("/signup")
+def signup(req: RegisterRequest, db: Session = Depends(get_db)):
+    """公开自注册 —— 仅允许创建普通用户角色，无需登录。"""
+    if db.query(User).filter(User.username == req.username).first():
+        raise HTTPException(status_code=400, detail="用户名已存在")
+    if len(req.username) < 2:
+        raise HTTPException(status_code=400, detail="用户名至少 2 个字符")
+    if len(req.password) < 4:
+        raise HTTPException(status_code=400, detail="密码至少 4 个字符")
+    pw_hash = bcrypt.hashpw(req.password.encode(), bcrypt.gensalt()).decode()
+    new_user = User(username=req.username, password_hash=pw_hash, display_name=req.display_name or req.username, role="user")
+    db.add(new_user); db.commit(); db.refresh(new_user)
+    token = create_token(new_user.id, new_user.role)
+    return TokenResponse(token=token, user=UserResponse(**user_to_response(new_user)))
+
 @router.get("/me")
 def me(user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     u = db.query(User).filter(User.id == user["user_id"]).first()

@@ -24,6 +24,24 @@ export const useAuthStore = defineStore('auth', () => {
     return data
   }
 
+  async function signup(username, password, displayName) {
+    const res = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, display_name: displayName || username })
+    })
+    if (!res.ok) {
+      const err = await res.json()
+      throw new Error(err.detail || '注册失败')
+    }
+    const data = await res.json()
+    token.value = data.token
+    user.value = data.user
+    role.value = data.user.role
+    localStorage.setItem('token', data.token)
+    return data
+  }
+
   function logout() {
     token.value = ''
     user.value = null
@@ -45,5 +63,5 @@ export const useAuthStore = defineStore('auth', () => {
     } catch {}
   }
 
-  return { token, user, role, login, logout, fetchMe }
+  return { token, user, role, login, signup, logout, fetchMe }
 })
