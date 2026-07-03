@@ -15,6 +15,8 @@ from apscheduler.triggers.cron import CronTrigger
 from ..config import settings
 from . import data_cache, warning_config
 from .alert_tracker import AlertEvent, AlertTracker
+from .station_names import station_name
+from .time_utils import parse_ts
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +89,21 @@ class MonitorEngine:
         except Exception as e:
             logger.exception("[monitor] check station %s failed: %s", station_code, e)
 
+    async def recheck_station(self, station_code: str):
+        """公开入口：阈值修改后立即重新巡检指定站点的全部状态。
+
+        完整重跑 4 项检查（数据可用性 / 阈值 / 跳变 / 预报），
+        确保新阈值生效且各类历史告警（含 data_spike 等）能被正确重新评估与解除。
+        """
+        logger.info("[monitor] manual recheck triggered for %s", station_code)
+        try:
+            await self._check_data_availability(station_code)
+            await self._check_thresholds(station_code)
+            await self._check_spike(station_code)
+            await self._check_forecast_thresholds(station_code)
+        except Exception as e:
+            logger.exception("[monitor] recheck station %s failed: %s", station_code, e)
+
     # ------------------------------------------------------------------
     # 1. 数据可用性检查（基于 aligned 层）
     # ------------------------------------------------------------------
@@ -104,7 +121,7 @@ class MonitorEngine:
                 station_code=station_code,
                 alert_type="cache_stale",
                 level="提示",
-                title=f"测站 {station_code} 数据缓存异常",
+                title=f"测站 {station_name(station_code)} 数据缓存异常",
                 message=msg,
                 metric={"reason": "aligned 缓存为空"},
             )
@@ -121,7 +138,7 @@ class MonitorEngine:
                 station_code=station_code,
                 alert_type="cache_stale",
                 level="提示",
-                title=f"测站 {station_code} 数据缓存异常",
+                title=f"测站 {station_name(station_code)} 数据缓存异常",
                 message=msg,
                 metric={"reason": "aligned records 为空"},
             )
@@ -140,7 +157,7 @@ class MonitorEngine:
                 station_code=station_code,
                 alert_type="cache_stale",
                 level="提示",
-                title=f"测站 {station_code} 数据缓存异常",
+                title=f"测站 {station_name(station_code)} 数据缓存异常",
                 message=msg,
                 metric={"reason": "无实测数据"},
             )
@@ -151,7 +168,7 @@ class MonitorEngine:
         # aligned 按时间升序，最后一条 = 最新实测
         latest = measured[-1]
         last_time = latest.get("time", "")
-        last_ts = self._parse_ts(last_time)
+        last_ts = parse_ts(last_time)
         age_hours = (time.time() - last_ts) / 3600 if last_ts else 999
 
         if age_hours > 4:
@@ -162,7 +179,7 @@ class MonitorEngine:
                 station_code=station_code,
                 alert_type="data_frozen",
                 level="红色",
-                title=f"测站 {station_code} 数据严重停更",
+                title=f"测站 {station_name(station_code)} 数据严重停更",
                 message=msg,
                 metric={"age_hours": round(age_hours, 1), "last_time": last_time},
             )
@@ -176,7 +193,7 @@ class MonitorEngine:
                 station_code=station_code,
                 alert_type="data_frozen",
                 level="黄色",
-                title=f"测站 {station_code} 数据长时间未更新",
+                title=f"测站 {station_name(station_code)} 数据长时间未更新",
                 message=msg,
                 metric={"age_hours": round(age_hours, 1), "last_time": last_time},
             )
@@ -198,7 +215,7 @@ class MonitorEngine:
                 station_code=station_code,
                 alert_type="data_missing",
                 level="提示",
-                title=f"测站 {station_code} 数据连续缺测",
+                title=f"测站 {station_name(station_code)} 数据连续缺测",
                 message=msg,
                 metric={"missing_count": null_count},
             )
@@ -211,7 +228,7 @@ class MonitorEngine:
     # 2. 水文阈值检查（基于 aligned 层实测值）
     # ------------------------------------------------------------------
     async def _check_thresholds(self, station_code: str):
-        standards = warning_config.get_standards()
+        thresholds = warning_config.get_station_thresholds(station_code)
 
         aligned = await data_cache.get_aligned(station_code, max_age=600)
         if not aligned:
@@ -232,15 +249,15 @@ class MonitorEngine:
 
         # 水位
         if wl is not None:
-            lv = warning_config.check_level(wl, standards)
+            lv = warning_config.check_level(wl, station_code, thresholds)
             if lv:
                 lv_name = warning_config.level_name(lv)  # 完整名称，如 "蓝色预警"
-                threshold = standards["level"][lv]
+                threshold = thresholds["level"][lv]
                 event, is_new = await self._tracker.create_or_update(
                     station_code=station_code,
                     alert_type=f"level_{lv}",
                     level=lv_name,
-                    title=f"测站 {station_code} 水位{lv_name}",
+                    title=f"测站 {station_name(station_code)} 水位{lv_name}",
                     message=f"当前水位 **{wl:.2f}m**，已达到 **{lv_name}** 阈值 **{threshold}m**，请加强监测并关注趋势变化。",
                     metric={"value": wl, "threshold": threshold, "unit": "m"},
                 )
@@ -252,15 +269,15 @@ class MonitorEngine:
 
         # 流量
         if vf is not None:
-            lv = warning_config.check_flow(vf, standards)
+            lv = warning_config.check_flow(vf, station_code, thresholds)
             if lv:
                 lv_name = warning_config.level_name(lv)
-                threshold = standards["flow"][lv]
+                threshold = thresholds["flow"][lv]
                 event, is_new = await self._tracker.create_or_update(
                     station_code=station_code,
                     alert_type=f"flow_{lv}",
                     level=lv_name,
-                    title=f"测站 {station_code} 流量{lv_name}",
+                    title=f"测站 {station_name(station_code)} 流量{lv_name}",
                     message=f"当前流量 **{vf:.0f}m³/s**，已达到 **{lv_name}** 阈值 **{threshold}m³/s**，请通知航运部门关注。",
                     metric={"value": vf, "threshold": threshold, "unit": "m³/s"},
                 )
@@ -311,7 +328,7 @@ class MonitorEngine:
             station_code=station_code,
             alert_type="data_spike",
             level=level,
-            title=f"测站 {station_code} 数据异常跳变",
+            title=f"测站 {station_name(station_code)} 数据异常跳变",
             message=f"流量从 **{prev:.0f}m³/s** 突变为 **{curr:.0f}m³/s**，变化幅度 **{delta:.0f}m³/s**，超过正常波动范围。请核对数据合理性，必要时现场检查传感器。",
             metric={"prev": prev, "curr": curr, "delta": delta},
         )
@@ -323,7 +340,7 @@ class MonitorEngine:
     # ------------------------------------------------------------------
     async def _check_forecast_thresholds(self, station_code: str):
         """检查未来预报值是否超过阈值，提前发出预报预警。"""
-        standards = warning_config.get_standards()
+        thresholds = warning_config.get_station_thresholds(station_code)
 
         aligned = await data_cache.get_aligned(station_code, max_age=600)
         if not aligned:
@@ -352,16 +369,16 @@ class MonitorEngine:
         for r in forecast_records:
             wl = r.get("waterLevel")
             if wl is not None:
-                lv = warning_config.check_level(float(wl), standards)
+                lv = warning_config.check_level(float(wl), station_code, thresholds)
                 if lv:
                     lv_name = warning_config.level_name(lv)
-                    threshold = standards["level"][lv]
+                    threshold = thresholds["level"][lv]
                     forecast_time = r.get("time", "")
                     event, is_new = await self._tracker.create_or_update(
                         station_code=station_code,
                         alert_type=f"forecast_level_{lv}",
                         level=f"预报{lv_name}",
-                        title=f"测站 {station_code} 预报水位将达{lv_name}",
+                        title=f"测站 {station_name(station_code)} 预报水位将达{lv_name}",
                         message=f"Chronos-2 预报 **{forecast_time}** 水位将达到 **{float(wl):.2f}m**，超过 **{lv_name}** 阈值 **{threshold}m**。请提前做好防范准备。",
                         metric={"value": float(wl), "threshold": threshold, "unit": "m", "forecast_time": forecast_time},
                     )
@@ -373,16 +390,16 @@ class MonitorEngine:
         for r in forecast_records:
             vf = r.get("virtualFlow")
             if vf is not None:
-                lv = warning_config.check_flow(float(vf), standards)
+                lv = warning_config.check_flow(float(vf), station_code, thresholds)
                 if lv:
                     lv_name = warning_config.level_name(lv)
-                    threshold = standards["flow"][lv]
+                    threshold = thresholds["flow"][lv]
                     forecast_time = r.get("time", "")
                     event, is_new = await self._tracker.create_or_update(
                         station_code=station_code,
                         alert_type=f"forecast_flow_{lv}",
                         level=f"预报{lv_name}",
-                        title=f"测站 {station_code} 预报流量将达{lv_name}",
+                        title=f"测站 {station_name(station_code)} 预报流量将达{lv_name}",
                         message=f"Chronos-2 预报 **{forecast_time}** 流量将达到 **{float(vf):.0f}m³/s**，超过 **{lv_name}** 阈值 **{threshold}m³/s**。请通知航运部门提前关注。",
                         metric={"value": float(vf), "threshold": threshold, "unit": "m³/s", "forecast_time": forecast_time},
                     )
@@ -393,13 +410,13 @@ class MonitorEngine:
         # 清除未触发的预报告警级别
         for lv in ("blue", "yellow", "orange", "red"):
             has_wl = any(
-                r.get("waterLevel") is not None and warning_config.check_level(float(r["waterLevel"]), standards) == lv
+                r.get("waterLevel") is not None and warning_config.check_level(float(r["waterLevel"]), station_code, thresholds) == lv
                 for r in forecast_records
             )
             if not has_wl:
                 await self._auto_resolve(station_code, f"forecast_level_{lv}", "预报值未达该级别阈值")
             has_vf = any(
-                r.get("virtualFlow") is not None and warning_config.check_flow(float(r["virtualFlow"]), standards) == lv
+                r.get("virtualFlow") is not None and warning_config.check_flow(float(r["virtualFlow"]), station_code, thresholds) == lv
                 for r in forecast_records
             )
             if not has_vf:
@@ -422,17 +439,6 @@ class MonitorEngine:
             if event.alert_type == alert_type and event.resolved_at is None:
                 await self._tracker.resolve(event.id, reason)
                 logger.info("[monitor] auto resolved %s: %s", event.id, reason)
-
-    @staticmethod
-    def _parse_ts(t) -> float:
-        if not t:
-            return 0
-        for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
-            try:
-                return datetime.strptime(str(t), fmt).timestamp()
-            except Exception:
-                pass
-        return 0
 
     @staticmethod
     def _parse_dt_str(t) -> Optional[datetime]:

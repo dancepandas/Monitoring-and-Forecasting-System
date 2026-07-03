@@ -1,14 +1,56 @@
 """Agent 轻量工具 — 非流式 LLM 调用，用于预报解读、告警复盘、报告生成等场景。"""
 
 import logging
+import threading
+import time
 from ..config import settings
 
 logger = logging.getLogger(__name__)
 
+# ── DashScope 熔断器（线程安全） ──
+_FAIL_COUNT = 0
+_FAIL_THRESHOLD = 3
+_COOLDOWN_SECS = 60
+_LAST_FAIL_TIME = 0.0
+_CB_LOCK = threading.Lock()
+
+
+def _circuit_breaker() -> bool:
+    """Returns True if the circuit is CLOSED (calls allowed), False if OPEN (calls blocked)."""
+    global _FAIL_COUNT
+    with _CB_LOCK:
+        if _FAIL_COUNT >= _FAIL_THRESHOLD:
+            if time.time() - _LAST_FAIL_TIME < _COOLDOWN_SECS:
+                return False  # circuit open — skip call
+            # cooldown expired — reset
+            _FAIL_COUNT = 0
+        return True
+
+
+def _record_failure():
+    global _FAIL_COUNT, _LAST_FAIL_TIME
+    with _CB_LOCK:
+        _FAIL_COUNT += 1
+        _LAST_FAIL_TIME = time.time()
+        if _FAIL_COUNT >= _FAIL_THRESHOLD:
+            logger.warning(f"DashScope circuit OPEN — {_FAIL_COUNT} consecutive failures, cooling down {_COOLDOWN_SECS}s")
+
+
+def _record_success():
+    global _FAIL_COUNT
+    with _CB_LOCK:
+        if _FAIL_COUNT > 0:
+            logger.info(f"DashScope circuit reset after {_FAIL_COUNT} failures")
+        _FAIL_COUNT = 0
+
 
 async def quick_ask(prompt: str, system: str = "", temperature: float = 0.3,
                      max_tokens: int = 800) -> str:
-    """轻量 LLM 调用，返回纯文本回复。用于不需要工具调用的分析场景。"""
+    """轻量 LLM 调用，返回纯文本回复。熔断保护：连续 3 次失败后 60 秒内跳过调用。"""
+    if not _circuit_breaker():
+        logger.warning("quick_ask skipped — DashScope circuit breaker open")
+        return ""
+
     import httpx
 
     messages = []
@@ -29,10 +71,13 @@ async def quick_ask(prompt: str, system: str = "", temperature: float = 0.3,
                 },
             )
             if r.status_code == 200:
+                _record_success()
                 return r.json()["choices"][0]["message"]["content"]
             logger.warning("quick_ask failed: %s", r.status_code)
+            _record_failure()
         except Exception as e:
             logger.warning("quick_ask error: %s", e)
+            _record_failure()
     return ""
 
 
