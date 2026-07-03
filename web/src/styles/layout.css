@@ -4,28 +4,21 @@
   z-index: 1;
   height: 100vh;
   min-height: 0;
-  padding: var(--pad, 10px);
+  padding: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   gap: var(--gap, 10px);
 }
 
-/* ===== 顶部系统标题横幅（标题 + tabs + 状态 + 退出）===== */
+/* ===== 顶部系统标题横幅（无贯通背景，各元素独立玻璃芯片）===== */
 .app-banner {
   position: relative;
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 6px 16px;
-  border: 1px solid var(--edge);
-  border-radius: 4px;
-  clip-path: var(--clip);
-  background: var(--glass-strong);
-  -webkit-backdrop-filter: blur(16px) saturate(1.1);
-  backdrop-filter: blur(16px) saturate(1.1);
-  box-shadow: var(--shadow-panel);
+  gap: 8px;
+  padding: 6px 8px 4px;
 }
 
 .banner-title {
@@ -66,6 +59,52 @@
 
 .banner-spacer { flex: 1; min-width: 8px; }
 
+/* 倒梯形标题框 — 上宽下窄，居中 */
+.trapezoid-title {
+  flex-shrink: 0;
+  padding: 10px 155px;
+  clip-path: polygon(0% 0%, 100% 0%, 94% 100%, 6% 100%);
+  background: linear-gradient(to top,
+    rgba(14, 42, 78, .00) 0%,
+    rgba(14, 42, 78, .15) 30%,
+    rgba(14, 42, 78, .45) 58%,
+    rgba(14, 42, 78, .75) 82%,
+    rgba(14, 42, 78, .90) 100%);
+  -webkit-backdrop-filter: blur(16px) saturate(1.1);
+  backdrop-filter: blur(16px) saturate(1.1);
+  border: 1px solid var(--edge);
+}
+.trapezoid-title .banner-title {
+  margin: 0;
+}
+
+/* 横幅右侧：账户ID、系统状态、管理、退出（从右往左） */
+.banner-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.banner-account {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  padding: 6px 12px;
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  clip-path: var(--clip);
+  background: linear-gradient(to top,
+    rgba(14, 42, 78, .00) 0%,
+    rgba(14, 42, 78, .15) 30%,
+    rgba(14, 42, 78, .45) 58%,
+    rgba(14, 42, 78, .75) 82%,
+    rgba(14, 42, 78, .90) 100%);
+  -webkit-backdrop-filter: blur(16px) saturate(1.1);
+  backdrop-filter: blur(16px) saturate(1.1);
+}
+
 /* 系统状态指示 */
 .system-status {
   display: flex;
@@ -75,6 +114,18 @@
   font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
+  padding: 6px 12px;
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  clip-path: var(--clip);
+  background: linear-gradient(to top,
+    rgba(14, 42, 78, .00) 0%,
+    rgba(14, 42, 78, .15) 30%,
+    rgba(14, 42, 78, .45) 58%,
+    rgba(14, 42, 78, .75) 82%,
+    rgba(14, 42, 78, .90) 100%);
+  -webkit-backdrop-filter: blur(16px) saturate(1.1);
+  backdrop-filter: blur(16px) saturate(1.1);
 }
 .status-dot {
   width: 7px; height: 7px;
@@ -97,27 +148,45 @@
 .logout-btn {
   flex-shrink: 0;
   min-height: 28px;
-  border: 0;
+  border: 1px solid var(--edge);
   border-radius: 4px;
+  clip-path: var(--clip);
   padding: 0 12px;
-  background: var(--chip);
+  background: linear-gradient(to top,
+    rgba(14, 42, 78, .00) 0%,
+    rgba(14, 42, 78, .15) 30%,
+    rgba(14, 42, 78, .45) 58%,
+    rgba(14, 42, 78, .75) 82%,
+    rgba(14, 42, 78, .90) 100%);
+  -webkit-backdrop-filter: blur(16px) saturate(1.1);
+  backdrop-filter: blur(16px) saturate(1.1);
   color: var(--muted);
   font-size: 11px;
   cursor: pointer;
-  transition: color .15s, background .15s;
+  transition: color .15s, background .15s, border-color .15s;
 }
-.logout-btn:hover { color: #fff; background: rgba(220, 38, 38, .25); }
+.logout-btn:hover { color: #fff; background: rgba(220, 38, 38, .25); border-color: rgba(220, 38, 38, .4); }
 
 /* 管理员齿轮 */
 .admin-gear {
   position: relative;
   flex-shrink: 0;
-  border: 0;
-  background: transparent;
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  clip-path: var(--clip);
+  background: linear-gradient(to top,
+    rgba(14, 42, 78, .00) 0%,
+    rgba(14, 42, 78, .15) 30%,
+    rgba(14, 42, 78, .45) 58%,
+    rgba(14, 42, 78, .75) 82%,
+    rgba(14, 42, 78, .90) 100%);
+  -webkit-backdrop-filter: blur(16px) saturate(1.1);
+  backdrop-filter: blur(16px) saturate(1.1);
+  background-attachment: fixed;
   color: var(--muted);
   font-size: 16px;
   cursor: pointer;
-  padding: 2px 4px;
+  padding: 4px 8px;
   transition: color .15s;
 }
 .admin-gear:hover { color: #fff; }
@@ -279,8 +348,18 @@
   overflow: hidden;
 }
 
+.workspace[data-page="Warnings"] {
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
 .workspace[data-page="Agent"] {
   grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.workspace[data-page="Devices"] {
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .workspace > * { min-height: 0; }

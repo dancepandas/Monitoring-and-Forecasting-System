@@ -1,134 +1,129 @@
 <template>
-  <Topbar title="预警处置" subtitle="预警与告警实时监控，按紧急程度排序。" />
-  <div class="sub-tabs">
-    <button :class="{ active: subTab === 'current' }" @click="subTab = 'current'">当前预警</button>
-    <button :class="{ active: subTab === 'history' }" @click="subTab = 'history'">历史告警</button>
+  <Topbar title="预警处置" subtitle="实时监控 · 按紧急程度排序" />
+  <div class="command-grid">
+    <!-- 左：未解决 -->
+    <article class="panel">
+      <div class="panel-head"><h2>未解决</h2><span>{{ unresolved.length }} 条</span></div>
+      <div class="panel-body">
+        <div class="risk-list">
+          <!-- 处置建议（有预警时优先展示） -->
+          <div v-if="suggestions.length" class="risk-item suggestion-item">
+            <div class="risk-row"><b>FloodMind · 处置建议</b></div>
+            <ol class="suggest-inline">
+              <li v-for="(s, i) in suggestions" :key="i">{{ s.text }}</li>
+            </ol>
+          </div>
+          <div v-if="unresolved.length === 0" class="empty-state">暂无未解决的预警或告警</div>
+          <div v-for="item in unresolved" :key="item._key" :class="['risk-item', levelBadgeClass(item.level)]">
+            <div class="risk-row">
+              <b>{{ item.name || item.title }}</b>
+              <span :class="['badge', levelBadgeClass(item.level)]">{{ levelLabel(item.level) }}</span>
+            </div>
+            <p v-html="renderMessage(item.message)"></p>
+            <div v-if="item._type === 'alert'" class="alert-meta">
+              <span>站点 {{ item.station_code || '—' }}</span>
+              <span>触发 {{ fmtTime(item.triggered_at) }}</span>
+              <span v-if="item.notify_count > 0">已推送 {{ item.notify_count }} 次</span>
+            </div>
+            <div v-if="item._type === 'alert'" class="alert-actions">
+              <template v-if="acknowledgedIds.has(item.id) || item.acknowledged">
+                <span class="acked-badge">✓ 已确认</span>
+                <button class="btn sm primary" :disabled="processing.has(item.id)" @click="resolve(item.id)">
+                  {{ processing.has(item.id) ? '解除中...' : '解除' }}
+                </button>
+              </template>
+              <template v-else>
+                <button class="btn sm" :disabled="processing.has(item.id)" @click="askConfirm(item)">
+                  确认
+                </button>
+                <button class="btn sm primary" :disabled="processing.has(item.id)" @click="resolve(item.id)">
+                  {{ processing.has(item.id) ? '解除中...' : '解除' }}
+                </button>
+              </template>
+              <span v-if="feedback.id === item.id" class="feedback-flash">{{ feedback.text }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <!-- 右：已解决 -->
+    <article class="panel">
+      <div class="panel-head"><h2>已解决</h2><span>{{ resolved.length }} 条</span></div>
+      <div class="panel-body">
+        <div class="risk-list">
+          <div v-if="resolved.length === 0" class="empty-state">暂无已解决的告警</div>
+          <div v-for="item in resolved" :key="item._key" class="risk-item">
+            <div class="risk-row">
+              <b>{{ item.title }}</b>
+              <span class="risk-meta">{{ fmtTime(item.resolved_at) }}</span>
+            </div>
+            <p v-html="renderMessage(item.message)"></p>
+            <div class="alert-meta">
+              <span>站点 {{ item.station_code || '—' }}</span>
+              <span>触发 {{ fmtTime(item.triggered_at) }}</span>
+            </div>
+            <div v-if="item.postmortem" class="postmortem">
+              <span class="pm-label">AI 复盘</span>
+              <p>{{ item.postmortem }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
   </div>
 
-  <!-- 当前预警 -->
-  <template v-if="subTab === 'current'">
-    <div class="command-grid">
-      <article class="panel">
-        <div class="panel-head"><h2>当前预警与告警</h2><span>{{ totalCount }} 条</span></div>
-        <div class="panel-body">
-          <div class="risk-list">
-            <div v-if="allItems.length === 0" class="empty-state">当前无预警和告警 🎉</div>
-            <div class="risk-item" v-for="w in allItems" :key="w.id">
-              <div class="risk-row"><b>{{ w.name }}</b><span :class="['badge', levelBadgeClass(w.level)]">{{ levelLabel(w.level) }}</span></div>
-              <p>{{ w.message }}</p>
-            </div>
-          </div>
+  <!-- 确认告警弹窗 -->
+  <Teleport to="body">
+    <div v-if="confirmTarget" class="modal-overlay" @click.self="confirmTarget = null">
+      <div class="confirm-modal">
+        <h3>确认告警</h3>
+        <p class="confirm-detail"><b>{{ confirmTarget.title }}</b> — {{ confirmTarget.message }}</p>
+        <div class="confirm-explain">
+          <p>确认后，系统将<em>停止对该告警的重复推送</em>。相同类型的告警在 <strong>30 分钟</strong>内不会再次通知。此操作仅表示您已知悉该告警，不会影响告警的解除流程。</p>
         </div>
-      </article>
-      <article class="panel">
-        <div class="panel-head"><h2>处置建议</h2><span>FloodMind</span></div>
-        <div class="panel-body">
-          <div class="suggest-list">
-            <div class="suggest-item" v-for="s in suggestions" :key="s.text">
-              <span class="suggest-dot" :style="{background:s.color,boxShadow:'0 0 0 0 '+s.color}"></span>
-              <span class="suggest-text">{{ s.text }}</span>
-            </div>
-          </div>
+        <div class="confirm-actions">
+          <button class="btn" @click="confirmTarget = null">取消</button>
+          <button class="btn primary" @click="doAck">确认已知悉</button>
         </div>
-      </article>
+      </div>
     </div>
-  </template>
-
-  <!-- 历史告警 -->
-  <template v-if="subTab === 'history'">
-    <section class="command-grid">
-      <article class="panel">
-        <div class="panel-head">
-          <h2>活动告警</h2>
-          <span>未解除 {{ activeAlerts.length }} 条</span>
-        </div>
-        <div class="panel-body">
-          <div v-if="alertLoading" class="welcome-msg"><p>加载中...</p></div>
-          <div v-else-if="activeAlerts.length === 0" class="welcome-msg">
-            <p>当前无活动告警 🎉</p>
-          </div>
-          <div v-else class="risk-list">
-            <div v-for="a in activeAlerts" :key="a.id" :class="['risk-item', levelBadgeClass(a.level)]">
-              <div class="risk-row">
-                <b>{{ a.title }}</b>
-                <span :class="['badge', levelBadgeClass(a.level)]">{{ levelLabel(a.level) }}</span>
-              </div>
-              <p>{{ a.message }}</p>
-              <div class="alert-meta">
-                <span>站点：{{ a.station_code || '—' }}</span>
-                <span>触发：{{ fmtTime(a.triggered_at) }}</span>
-                <span v-if="a.notify_count > 0">已推送 {{ a.notify_count }} 次</span>
-                <span v-else>未推送</span>
-              </div>
-              <div class="alert-actions">
-                <button class="btn" @click="ack(a.id)">确认</button>
-                <button class="btn primary" @click="resolve(a.id)">解除</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </article>
-
-      <article class="panel">
-        <div class="panel-head">
-          <h2>历史告警</h2>
-          <span>最近 100 条</span>
-        </div>
-        <div class="panel-body">
-          <div v-if="alertLoading" class="welcome-msg"><p>加载中...</p></div>
-          <div v-else-if="historyAlerts.length === 0" class="welcome-msg">
-            <p>暂无历史告警</p>
-          </div>
-          <div v-else class="risk-list">
-            <div v-for="a in historyAlerts" :key="a.id" class="risk-item">
-              <div class="risk-row">
-                <b>{{ a.title }}</b>
-                <span :class="['badge', levelBadgeClass(a.level)]">{{ levelLabel(a.level) }}</span>
-              </div>
-              <p>{{ a.message }}</p>
-              <div class="alert-meta">
-                <span>站点：{{ a.station_code || '—' }}</span>
-                <span>触发：{{ fmtTime(a.triggered_at) }}</span>
-                <span v-if="a.resolved_at">解除：{{ fmtTime(a.resolved_at) }}</span>
-              </div>
-              <div v-if="a.postmortem" class="postmortem">
-                <span class="postmortem-label">AI 复盘</span>
-                <p>{{ a.postmortem }}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </article>
-    </section>
-  </template>
+  </Teleport>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import Topbar from '../components/Topbar.vue'
-import { api } from '../api'
+import { api, ALL_STATION_CODES } from '../api'
 import { levelLabel, levelBadgeClass, levelSeverity } from '../utils/warningLevel'
 
-const subTab = ref('current')
-
-// ── 当前预警 ──
-const allItems = ref([])
+const warnings = ref([])
 const suggestions = ref([])
-const totalCount = ref(0)
+const activeAlerts = ref([])
+const historyAlerts = ref([])
+const processing = ref(new Set())
+const feedback = ref({ id: '', text: '' })
+const confirmTarget = ref(null)
+const acknowledgedIds = ref(new Set())
 
 let pollTimer = null
 
+const unresolved = computed(() => {
+  const w = warnings.value.map(w => ({ ...w, _key: 'w-' + w.id, _type: 'warning' }))
+  const a = activeAlerts.value.map(a => ({ ...a, _key: 'a-' + a.id, _type: 'alert' }))
+  return [...w, ...a].sort((x, y) => levelSeverity(x.level) - levelSeverity(y.level))
+})
+
+const resolved = computed(() => {
+  return historyAlerts.value.map(a => ({ ...a, _key: 'h-' + a.id }))
+})
+
 async function loadWarnings() {
   try {
-    const data = await api.getWarnings('00106')
-    const warnings = data.warnings || []
-    const alerts = data.alerts || []
-    allItems.value = [...warnings, ...alerts].sort((a, b) =>
-      levelSeverity(a.level) - levelSeverity(b.level)
-    )
-    totalCount.value = allItems.value.length
+    const data = await api.getWarnings(ALL_STATION_CODES)
+    warnings.value = (data.warnings || []).sort((a, b) => levelSeverity(a.level) - levelSeverity(b.level))
 
-    const firstWarn = warnings[0]
+    const firstWarn = warnings.value[0]
     if (firstWarn) {
       try {
         const lv = firstWarn.level
@@ -139,37 +134,24 @@ async function loadWarnings() {
         const wl = isFlow ? 0 : (firstWarn.value != null ? firstWarn.value : 0)
         const vf = isFlow ? (firstWarn.value != null ? firstWarn.value : 0) : 0
         let d
-        try {
-          d = await api.getDisposalAgent(firstWarn.station_code, code, metric, wl, vf)
-        } catch {
-          d = await api.getDisposal(firstWarn.station_code, code, metric)
-        }
+        try { d = await api.getDisposalAgent(firstWarn.station_code, code, metric, wl, vf) }
+        catch { d = await api.getDisposal(firstWarn.station_code, code, metric) }
         suggestions.value = (d.suggestions || []).map(s => ({
           text: typeof s === 'string' ? s : s.text || s,
-          color: 'var(--water)'
         }))
       } catch {
-        suggestions.value = [{ text: '处置建议加载失败', color: 'var(--muted)' }]
+        suggestions.value = []
       }
-    } else if (alerts.length > 0) {
-      suggestions.value = [{ text: '当前存在系统告警，请检查数据缓存和设备状态。', color: 'var(--accent)' }]
     } else {
-      suggestions.value = [{ text: '当前无预警和告警，系统运行正常。', color: 'var(--ok)' }]
+      suggestions.value = []
     }
   } catch (e) {
     console.error('Failed to load warnings:', e)
-    allItems.value = [{ id: 'err', name: '数据加载失败', level: '错误', message: e.message || '未知错误' }]
-    totalCount.value = 1
+    warnings.value = [{ id: 'err', name: '数据加载失败', level: '错误', message: e.message || '未知错误' }]
   }
 }
 
-// ── 历史告警 ──
-const alertLoading = ref(false)
-const activeAlerts = ref([])
-const historyAlerts = ref([])
-
 async function loadAlerts() {
-  alertLoading.value = true
   try {
     const [active, history] = await Promise.all([
       api.getActiveAlerts().catch(() => ({ alerts: [] })),
@@ -180,26 +162,52 @@ async function loadAlerts() {
     historyAlerts.value = (history.alerts || []).filter(a => !activeIds.has(a.id))
   } catch (e) {
     console.error('[warnings] loadAlerts failed', e)
-  } finally {
-    alertLoading.value = false
   }
 }
 
+async function refreshAll() { await Promise.all([loadWarnings(), loadAlerts()]) }
+
 async function ack(id) {
+  processing.value.add(id)
+  feedback.value = { id, text: '' }
   try {
     await api.acknowledgeAlert(id)
+    acknowledgedIds.value.add(id)
+    feedback.value = { id, text: '✓ 已确认' }
+    setTimeout(() => { feedback.value = { id: '', text: '' } }, 1500)
     await loadAlerts()
   } catch (e) {
-    alert('确认失败：' + e.message)
+    feedback.value = { id, text: '确认失败' }
+    setTimeout(() => { feedback.value = { id: '', text: '' } }, 2000)
+  } finally {
+    processing.value.delete(id)
   }
+}
+
+function askConfirm(item) {
+  confirmTarget.value = item
+}
+
+async function doAck() {
+  const item = confirmTarget.value
+  if (!item) return
+  confirmTarget.value = null
+  await ack(item.id)
 }
 
 async function resolve(id) {
+  processing.value.add(id)
+  feedback.value = { id, text: '' }
   try {
     await api.resolveAlert(id, '人工解除')
+    feedback.value = { id, text: '✓ 已解除' }
+    setTimeout(() => { feedback.value = { id: '', text: '' } }, 1500)
     await loadAlerts()
   } catch (e) {
-    alert('解除失败：' + e.message)
+    feedback.value = { id, text: '解除失败' }
+    setTimeout(() => { feedback.value = { id: '', text: '' } }, 2000)
+  } finally {
+    processing.value.delete(id)
   }
 }
 
@@ -209,86 +217,60 @@ function fmtTime(ts) {
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-onMounted(() => {
-  loadWarnings()
-  pollTimer = setInterval(loadWarnings, 30000)
-})
-onUnmounted(() => {
-  if (pollTimer) clearInterval(pollTimer)
-})
+function renderMessage(text) {
+  if (!text) return ''
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+}
+
+onMounted(() => { refreshAll(); pollTimer = setInterval(refreshAll, 30000) })
+onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 </script>
 
 <style scoped>
-.sub-tabs {
-  display: flex;
-  gap: 2px;
-  margin-bottom: var(--gap, 10px);
-  padding: 4px;
-  border: 1px solid var(--edge);
-  border-radius: 4px;
-  clip-path: var(--clip);
-  background: var(--glass);
-  backdrop-filter: blur(14px);
-  background-attachment: fixed;
+.command-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gap, 10px);
+  min-height: 0;
 }
-.sub-tabs button {
-  flex: 1;
-  min-height: 32px;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
+
+.risk-meta {
+  font-family: var(--mono);
+  font-size: 11px;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: .08em;
-  cursor: pointer;
-  transition: all .15s;
-}
-.sub-tabs button:hover { color: #fff; }
-.sub-tabs button.active {
-  color: #fff;
-  background: var(--chip);
-  text-shadow: 0 0 10px rgba(30, 144, 255, .5);
+  flex-shrink: 0;
 }
 
-.suggest-list { display: grid; gap: 14px; }
-.suggest-item { display: flex; align-items: flex-start; gap: 12px; }
-.suggest-dot {
-  flex-shrink: 0; width: 10px; height: 10px; margin-top: 5px;
-  border-radius: 50%; opacity: .85;
-  animation: pulse-dot 2s ease-in-out infinite;
-}
-.suggest-text { color: var(--ink); font-size: 16px; line-height: 1.6; }
-.empty-state { padding: 40px 0; text-align: center; color: var(--muted); font-size: 13px; }
-.welcome-msg { padding: 40px 0; text-align: center; color: var(--muted); font-size: 13px; }
-@keyframes pulse-dot {
-  0%, 100% { box-shadow: 0 0 0 5px rgba(14,165,233,.18); }
-  50% { box-shadow: 0 0 0 10px transparent; }
+.empty-state {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
 }
 
-.postmortem {
-  margin-top: 10px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  background: var(--chip);
-  border-left: 3px solid var(--primary);
-  min-width: 0;
-  overflow-wrap: break-word;
+/* 处置建议（嵌入 risk-item 风格） */
+.suggestion-item {
+  border-left: 3px solid var(--accent);
 }
-.postmortem-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: #fff;
-  text-transform: uppercase;
-  letter-spacing: .06em;
+.suggest-inline {
+  margin: 6px 0 0;
+  padding: 0 0 0 16px;
+  display: grid;
+  gap: 4px;
 }
-.postmortem p {
-  margin: 4px 0 0;
+.suggest-inline li {
   font-size: 12px;
+  color: var(--ink);
   line-height: 1.5;
-  color: var(--ink-2);
-  overflow-wrap: break-word;
 }
+.suggest-inline li::marker {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* 告警操作 */
 .alert-meta {
   display: flex;
   gap: 12px;
@@ -300,29 +282,97 @@ onUnmounted(() => {
 .alert-actions {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 8px;
 }
-.alert-actions .btn {
-  min-height: 28px;
-  padding: 0 12px;
+.btn.sm:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.feedback-flash {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ok);
+  animation: flash-in .25s ease;
+}
+@keyframes flash-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* AI 复盘 */
+.postmortem {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .03);
+  border-left: 3px solid var(--primary);
+}
+.pm-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.postmortem p {
+  margin: 4px 0 0;
   font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-2);
 }
 
-.risk-item.danger { border-left: 4px solid var(--danger); }
-.risk-item.warn { border-left: 4px solid var(--warn); }
-.risk-item.ok { border-left: 4px solid var(--ok); }
+/* 已确认标记 */
+.acked-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ok);
+  padding: 2px 0;
+}
 
-.risk-row b {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* 确认弹窗 */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0, 0, 0, .5);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 40px;
 }
-.risk-row .badge {
-  flex-shrink: 0;
-  white-space: nowrap;
+.confirm-modal {
+  width: 420px;
+  background: var(--glass-deep);
+  backdrop-filter: blur(18px);
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 16px 48px rgba(0,0,0,.3);
 }
-.risk-item > p {
-  overflow-wrap: break-word;
+.confirm-modal h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #fff;
+}
+.confirm-detail {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+.confirm-explain {
+  margin: 14px 0 0;
+  padding: 12px;
+  border-radius: 4px;
+  background: var(--chip);
+  font-size: 12px;
+  color: var(--ink);
+  line-height: 1.7;
+}
+.confirm-explain em { color: var(--accent); font-style: normal; }
+.confirm-explain strong { color: #fff; }
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
 }
 </style>

@@ -1,32 +1,39 @@
 <template>
   <section class="overview-layout">
-    <!-- 左侧：2x2 指标卡 -->
+    <!-- 左侧：4 指标卡纵向堆叠 -->
     <div class="tiles-col">
-      <article class="tile river" @click="openStage('最新监测水位', 'tile')">
+      <article class="tile river" @click="openMonitor('水位')">
+        <span class="station-chip">{{ rotation.current.name }}</span>
         <div class="tile-label">最新监测水位</div>
         <div class="tile-value"><b>{{ waterLevel }}</b><span>m</span></div>
         <div :class="['tile-note', waterLevelNoteClass]">{{ waterLevelNote }}</div>
       </article>
-      <article class="tile" @click="openStage('最新监测流量', 'tile')">
+      <article class="tile" @click="openMonitor('流量')">
+        <span class="station-chip">{{ rotation.current.name }}</span>
         <div class="tile-label">最新监测流量</div>
         <div class="tile-value"><b>{{ waterFlow }}</b><span>m³/s</span></div>
         <div class="tile-note">{{ flowChangeNote }}</div>
       </article>
       <article class="tile moss" @click="openStage('模型可信度', 'tile')">
+        <span class="station-chip">{{ rotation.current.name }}</span>
         <div class="tile-label">模型可信度</div>
         <div class="tile-value"><b>{{ modelConfidence }}</b></div>
         <div class="tile-note ok">Chronos 时序预测</div>
       </article>
-      <article class="tile amber" @click="openStage('待处置预警', 'tile')">
+      <article class="tile amber" @click="goWarnings">
+        <span class="station-chip">全部站点</span>
         <div class="tile-label">待处置预警</div>
         <div class="tile-value"><b>{{ pendingWarnings }}</b><span>项</span></div>
-        <div class="tile-note">{{ warningNote }}</div>
+        <div class="tile-note">点击查看详情</div>
       </article>
     </div>
 
+    <!-- 中间留空：透出 Cesium 3D 地图 -->
+    <div class="map-void"></div>
+
     <!-- 右侧：预警与告警 -->
     <article class="panel">
-      <div class="panel-head"><h2>预警与告警</h2><span>共 {{ displayWarnings.length }} 条</span></div>
+      <div class="panel-head"><span class="station-chip">全部站点</span><h2>预警与告警</h2><span>共 {{ displayWarnings.length }} 条</span></div>
       <div class="panel-body">
         <div v-if="warningInsight" class="forecast-insight warning-insight">
           <span class="insight-label">AI · 预警解读</span>
@@ -35,7 +42,7 @@
         <div class="risk-list">
           <div class="risk-item" v-for="w in displayWarnings" :key="w.id" @click="openDrawer(w)">
             <div class="risk-row"><b>{{ w.name }}</b><span :class="['badge', levelBadgeClass(w.level)]">{{ levelLabel(w.level) }}</span></div>
-            <p>{{ w.message }}</p>
+            <p v-html="renderMessage(w.message)"></p>
           </div>
         </div>
       </div>
@@ -45,7 +52,7 @@
   <!-- 底部：预报图表 -->
   <section class="bottom-grid">
     <article class="panel combined-panel">
-      <div class="panel-head"><h2>历史数据与模型预报联合展示</h2><span>近 24h → 未来 12h</span></div>
+      <div class="panel-head"><span class="station-chip">{{ rotation.current.name }}</span><h2>历史数据与模型预报联合展示</h2><span>近 24h → 未来 12h</span></div>
       <div class="panel-body combined-card">
         <div class="trend-main">
           <div class="chart-wrap">
@@ -73,24 +80,75 @@
     </article>
   </section>
 
+  <!-- 水位/流量监测弹窗 -->
   <Teleport to="body">
-    <div v-if="stageVisible" class="stage-modal" @click.self="closeStage">
-      <div class="stage-card">
-        <div class="stage-head"><h2>{{ stageTitle }}</h2><button class="stage-close" @click="closeStage">关闭</button></div>
-        <div class="stage-body"><p style="color:var(--muted);text-align:center;padding:60px 0;">{{ stageTitle }} — 全屏详情（数据接入后展示完整内容）</p></div>
+    <div v-if="monitorVisible" class="monitor-overlay" @click.self="closeMonitor">
+      <div class="monitor-card">
+        <div class="monitor-head">
+          <h2>{{ rotation.current.name }} · {{ monitorType }}监测</h2>
+          <button class="monitor-close" @click="closeMonitor">关闭</button>
+        </div>
+        <div class="monitor-body">
+          <!-- 视频区 -->
+          <div class="monitor-video">
+            <video v-if="videoUrl" ref="monitorVideoEl" muted autoplay playsinline class="video-frame"></video>
+            <div v-else class="video-placeholder">
+              <span>暂无监测视频画面</span>
+            </div>
+          </div>
+          <!-- 双图：水位 + 流量 10h -->
+          <div class="monitor-charts">
+            <div class="monitor-chart-panel">
+              <div class="mcp-head">
+                <h3>近 10 小时水位过程</h3>
+                <span class="mcp-legend"><i class="leg-hist"></i>实测</span>
+              </div>
+              <div class="mcp-body">
+                <div class="mcp-chart"><TrendChart :history="levelHistory" :forecast="[]" unit="水位 (m)" /></div>
+                <div class="mcp-stats">
+                  <div class="mcp-stat"><span>最大值</span><b>{{ levelMax }}<small> m</small></b></div>
+                  <div class="mcp-stat"><span>最小值</span><b>{{ levelMin }}<small> m</small></b></div>
+                  <div class="mcp-stat current"><span>当前</span><b>{{ waterLevel }}<small> m</small></b></div>
+                </div>
+              </div>
+            </div>
+            <div class="monitor-chart-panel">
+              <div class="mcp-head">
+                <h3>近 10 小时流量过程</h3>
+                <span class="mcp-legend"><i class="leg-hist"></i>实测</span>
+              </div>
+              <div class="mcp-body">
+                <div class="mcp-chart"><TrendChart :history="flowHistory" :forecast="[]" unit="流量 (m³/s)" /></div>
+                <div class="mcp-stats">
+                  <div class="mcp-stat"><span>最大值</span><b>{{ flowMax }}<small> m³/s</small></b></div>
+                  <div class="mcp-stat"><span>最小值</span><b>{{ flowMin }}<small> m³/s</small></b></div>
+                  <div class="mcp-stat current"><span>当前</span><b>{{ waterFlow }}<small> m³/s</small></b></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
+  </Teleport>
 
+  <Teleport to="body">
     <StationDrawer :visible="drawerVisible" :station="drawerStation" @close="closeDrawer" />
   </Teleport>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import flvjs from 'flv.js'
 import TrendChart from '../components/TrendChart.vue'
 import StationDrawer from '../components/StationDrawer.vue'
-import { api } from '../api'
+import { api, ALL_STATION_CODES } from '../api'
+import { useRotationStore } from '../store/rotation'
 import { levelLabel, levelBadgeClass, levelSeverity } from '../utils/warningLevel'
+
+const router = useRouter()
+const rotation = useRotationStore()
 
 const waterLevel = ref('—')
 const waterFlow = ref('—')
@@ -105,8 +163,29 @@ const forecastPeakTime = ref('—')
 const forecastInsight = ref('')
 const historyMaxFlow = ref('—')
 const historyAvgFlow = ref('—')
-const stageVisible = ref(false)
-const stageTitle = ref('')
+
+// ── 监测弹窗 ──
+const monitorVisible = ref(false)
+const monitorType = ref('')
+const videoUrl = ref('')
+const monitorVideoEl = ref(null)
+let monitorPlayer = null
+const levelHistory = ref([])
+const flowHistory = ref([])
+
+const levelMax = computed(() => fmtMax(levelHistory.value, 'm'))
+const levelMin = computed(() => fmtMin(levelHistory.value, 'm'))
+const flowMax = computed(() => fmtMax(flowHistory.value, 'm³/s'))
+const flowMin = computed(() => fmtMin(flowHistory.value, 'm³/s'))
+
+function fmtMax(arr, unit) {
+  const vals = arr.map(d => d.y).filter(v => typeof v === 'number')
+  return vals.length ? Math.max(...vals).toFixed(2) : '—'
+}
+function fmtMin(arr, unit) {
+  const vals = arr.map(d => d.y).filter(v => typeof v === 'number')
+  return vals.length ? Math.min(...vals).toFixed(2) : '—'
+}
 
 const drawerVisible = ref(false)
 const drawerStation = ref({})
@@ -123,6 +202,13 @@ function openDrawer(w) {
   drawerVisible.value = true
 }
 function closeDrawer() { drawerVisible.value = false }
+
+function renderMessage(text) {
+  if (!text) return ''
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+}
 
 const trendHistory = ref([])
 const trendForecast = ref([])
@@ -148,18 +234,24 @@ const warningInsight = computed(() => {
   return `当前共有 ${real.length} 条预警，涉及 ${names}${levelText ? '，级别为 ' + levelText : ''}。建议优先复核最近一条并采取预置处置流程。`
 })
 
-const WARNING_LEVEL = 35.1
+const warningLevel = ref(0)   // 当前站点警戒水位（红色阈值），由 warning-standards 动态获取
 
 let pollTimer = null
 
 async function refreshData() {
   console.log('[overview] refreshData start')
   try {
-    const [flowData, warnData, chartData] = await Promise.all([
-      api.getFlowRaw('00106', 'FD000489923695'),
-      api.getWarnings('00106').catch(() => ({ warnings: [], total: 0 })),
-      api.getAlignedChart('00106', 'virtualFlow').catch(() => ({ history: [], forecast: [] })),
+    const st = rotation.current
+    const [flowData, warnData, chartData, stdData] = await Promise.all([
+      api.getFlowRaw(st.code, st.device),
+      api.getWarnings(ALL_STATION_CODES).catch(() => ({ warnings: [], total: 0 })),
+      api.getAlignedChart(st.code, 'virtualFlow').catch(() => ({ history: [], forecast: [] })),
+      api.getWarningStandards().catch(() => ({})),
     ])
+
+    // 取当前站点警戒水位（红色阈值），驱动"距/超警戒水位"提示
+    const std = stdData?.stations?.[st.code]?.level || stdData?.defaults?.level || {}
+    warningLevel.value = std.red || std.orange || 0
 
     pendingWarnings.value = warnData.total || '0'
     const allWarnings = [...(warnData.warnings || []), ...(warnData.alerts || [])]
@@ -177,9 +269,15 @@ async function refreshData() {
       const level = latestWL?.waterLevel
       if (level !== null && level !== undefined) {
         waterLevel.value = level.toFixed(2)
-        const dist = WARNING_LEVEL - level
-        waterLevelNote.value = dist > 0 ? `距警戒水位 ${dist.toFixed(2)}m` : `超警戒水位 ${Math.abs(dist).toFixed(2)}m`
-        waterLevelNoteClass.value = dist <= 2 ? 'danger' : ''
+        const wl = warningLevel.value
+        if (wl > 0) {
+          const dist = wl - level
+          waterLevelNote.value = dist > 0 ? `距警戒水位 ${dist.toFixed(2)}m` : `超警戒水位 ${Math.abs(dist).toFixed(2)}m`
+          waterLevelNoteClass.value = dist <= 2 ? 'danger' : ''
+        } else {
+          waterLevelNote.value = '阈值未配置'
+          waterLevelNoteClass.value = ''
+        }
       } else {
         waterLevel.value = '—'
         waterLevelNote.value = '暂无水位数据'
@@ -211,7 +309,7 @@ async function refreshData() {
       }
       computeModelConfidence()
 
-      api.getForecastInterpret('00106', 'virtualFlow').then(d => {
+      api.getForecastInterpret(st.code, 'virtualFlow').then(d => {
         forecastInsight.value = d.interpretation || ''
       }).catch(() => {})
 
@@ -280,8 +378,15 @@ onMounted(() => {
   loadCache()
   refreshData()
   pollTimer = setInterval(refreshData, 60000)
+  rotation.start()
+  // 轮播切站时，刷新单站数据（水位/流量/预报图）；汇总数据仍按 60s 轮询
+  watch(() => rotation.current.code, () => refreshData())
 })
-onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); closeStage() })
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
+  rotation.stop()
+  closeMonitor()
+})
 
 function computeModelConfidence() {
   const vals = trendForecast.value.map(d => d.y).filter(v => typeof v === 'number' && !isNaN(v))
@@ -299,34 +404,139 @@ function computeModelConfidence() {
   modelConfidence.value = Math.max(0.5, Math.min(0.99, conf)).toFixed(2)
 }
 
-function openStage(title) {
-  stageTitle.value = title
-  stageVisible.value = true
+function goWarnings() { router.push('/warnings') }
+
+async function openMonitor(type) {
+  monitorType.value = type
+  monitorVisible.value = true
+  const st = rotation.current
+  try {
+    // 视频源
+    const feeds = await api.getVideoFeeds(st.code)
+    const online = (feeds.feeds || []).find(f => f.status === 'online' && f.live_address)
+    videoUrl.value = online?.live_address || ''
+    // 用 flv.js 播放（萤石云返回的是 .flv 实时流，<img>/<video src> 无法直接播放）
+    await nextTick()
+    if (videoUrl.value && monitorVideoEl.value) {
+      if (flvjs.isSupported()) {
+        try {
+          monitorPlayer = flvjs.createPlayer({ type: 'flv', url: videoUrl.value, isLive: true, hasAudio: false })
+          monitorPlayer.on(flvjs.Events.ERROR, () => {})  // 弹窗错误静默，用户可关闭
+          monitorPlayer.attachMediaElement(monitorVideoEl.value)
+          monitorPlayer.load()
+          monitorPlayer.play().catch(() => {})
+        } catch (e) { console.warn('monitor flv:', e) }
+      }
+    }
+  } catch { videoUrl.value = '' }
+
+  // 近 10 小时历史数据
+  try {
+    const end = new Date().toISOString()
+    const begin = new Date(Date.now() - 10 * 3600000).toISOString()
+    const data = await api.getFlowRaw(st.code, st.device, begin, end)
+    const items = data.data || []
+    levelHistory.value = []
+    flowHistory.value = []
+    for (const item of items) {
+      const t = item.time ? new Date(item.time).getTime() : Date.now()
+      if (isNaN(t)) continue
+      if (item.waterLevel != null) levelHistory.value.push({ t, y: item.waterLevel })
+      const vf = item.virtualFlow ?? item.waterFlow
+      if (vf != null) flowHistory.value.push({ t, y: vf })
+    }
+  } catch { levelHistory.value = []; flowHistory.value = [] }
 }
 
-function closeStage() {
-  stageVisible.value = false
+function closeMonitor() {
+  if (monitorPlayer) { try { monitorPlayer.destroy() } catch (e) {}; monitorPlayer = null }
+  monitorVisible.value = false
+  videoUrl.value = ''
+  levelHistory.value = []
+  flowHistory.value = []
 }
 </script>
 
 <style scoped>
+/* 站点标签芯片：单站面板显示当前轮播站名，汇总面板显示"全部站点" */
+.station-chip {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 2;
+  padding: 2px 9px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .03em;
+  color: var(--ink-2);
+  background: var(--chip);
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+/* 面板头内的芯片放到左侧（计数 span 在右侧，对称） */
+.panel-head .station-chip {
+  top: 50%;
+  left: 16px;
+  right: auto;
+  transform: translateY(-50%);
+}
+
 .overview-layout {
   min-height: 0;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--gap, 10px);
+  grid-template-columns: auto 1fr minmax(420px, 500px);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 28px;
 }
 
 .tiles-col {
   display: grid;
-  grid-template-columns: repeat(2, 152px);
-  grid-template-rows: 1fr 1fr;
-  gap: var(--gap, 10px);
+  grid-template-columns: 302px;
+  grid-template-rows: repeat(4, auto);
+  gap: 0;
+  align-content: space-between;
   min-height: 0;
+  height: 100%;
 }
 
 .tiles-col .tile {
   min-height: 0;
+  /* 左面板：右侧（近中心）透明 → 左侧（远中心）渐变不透明 */
+  background: linear-gradient(to left,
+    rgba(14, 42, 78, .00) 0%,
+    rgba(14, 42, 78, .10) 22%,
+    rgba(14, 42, 78, .35) 52%,
+    rgba(14, 42, 78, .65) 78%,
+    rgba(14, 42, 78, .88) 100%);
+}
+
+.map-void {
+  min-height: 0;
+  /* 透明 — 透出 Cesium 3D 地图 */
+}
+
+.overview-layout > .panel {
+  height: 100%;
+  min-height: 0;
+  /* 右面板：左侧（近中心）透明 → 右侧（远中心）渐变不透明 */
+  background: linear-gradient(to right,
+    rgba(14, 42, 78, .00) 0%,
+    rgba(14, 42, 78, .10) 22%,
+    rgba(14, 42, 78, .35) 52%,
+    rgba(14, 42, 78, .65) 78%,
+    rgba(14, 42, 78, .88) 100%);
+}
+
+/* 底部预报面板：上侧（近中心）透明 → 下侧（远中心）渐变不透明 */
+.bottom-grid .panel {
+  background: linear-gradient(to bottom,
+    rgba(14, 42, 78, .00) 0%,
+    rgba(14, 42, 78, .10) 22%,
+    rgba(14, 42, 78, .35) 52%,
+    rgba(14, 42, 78, .65) 78%,
+    rgba(14, 42, 78, .88) 100%);
 }
 
 .forecast-insight {
@@ -411,4 +621,108 @@ function closeStage() {
 .legend-fc { background: var(--accent); background-image: repeating-linear-gradient(90deg, var(--accent) 0 5px, transparent 5px 9px); }
 .legend-now { background: var(--accent); opacity: .5; }
 .mini-stat.peak b { color: #fff; }
+
+/* ===== 监测视频弹窗 ===== */
+.monitor-overlay {
+  position: fixed; inset: 0; z-index: 150;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 40px;
+}
+.monitor-card {
+  width: min(960px, calc(100vw - 80px));
+  max-height: 90vh;
+  background: var(--glass-deep);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,.4);
+}
+.monitor-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.monitor-head h2 { margin: 0; font-size: 16px; color: #fff; }
+.monitor-close {
+  min-height: 28px; padding: 0 14px;
+  border: 1px solid var(--edge); border-radius: 4px;
+  background: transparent; color: var(--muted);
+  font-size: 12px; cursor: pointer; transition: all .15s;
+}
+.monitor-close:hover { color: #fff; border-color: var(--ink-2); }
+
+.monitor-body {
+  flex: 1; overflow-y: auto; min-height: 0;
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 16px 20px;
+}
+.monitor-video {
+  flex-shrink: 0;
+  aspect-ratio: 16/9;
+  background: #000;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.video-frame { width: 100%; height: 100%; object-fit: contain; }
+.video-placeholder {
+  color: var(--muted); font-size: 14px;
+}
+.monitor-charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+}
+.monitor-chart-panel {
+  min-height: 0;
+  display: flex; flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: rgba(0,0,0,.15);
+  overflow: hidden;
+}
+.mcp-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.mcp-head h3 { margin: 0; font-size: 12px; font-weight: 600; color: var(--ink); }
+.mcp-legend {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--ink);
+}
+.mcp-legend i { width: 14px; height: 3px; border-radius: 2px; }
+.leg-hist { background: var(--water); }
+.mcp-body {
+  flex: 1; min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 86px;
+  gap: 8px;
+  padding: 8px 10px;
+}
+.mcp-chart { min-height: 0; min-width: 0; }
+.mcp-chart :deep(.trend-chart-wrap) { min-height: 140px; }
+.mcp-stats {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+.mcp-stat {
+  padding: 5px 7px;
+  border-radius: 3px;
+  background: var(--chip);
+}
+.mcp-stat span { display: block; font-size: 10px; color: var(--muted); }
+.mcp-stat b { font-size: 13px; color: var(--ink-2); }
+.mcp-stat b small { font-size: 10px; color: var(--muted); margin-left: 2px; }
+.mcp-stat.current b { color: #fff; }
+.mcp-stat.current { background: var(--chip-strong); }
 </style>

@@ -139,16 +139,16 @@ function render() {
   for (let i = 0; i <= 4; i++) {
     const v = vMin + (vMax - vMin) * (i / 4)
     const y = Y(v)
-    g += `<line x1="${margin.left}" y1="${y.toFixed(1)}" x2="${(margin.left + pw).toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(15,23,42,.14)" stroke-dasharray="4 7"/>`
-    g += `<text x="${margin.left - 8}" y="${(y + 3).toFixed(1)}" font-family="var(--mono)" font-size="10" fill="#334155" text-anchor="end">${Math.round(v)}</text>`
+    g += `<line x1="${margin.left}" y1="${y.toFixed(1)}" x2="${(margin.left + pw).toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(0,0,0,.12)" stroke-dasharray="4 7"/>`
+    g += `<text x="${margin.left - 8}" y="${(y + 3).toFixed(1)}" font-family="var(--mono)" font-size="10" fill="#000" text-anchor="end">${Math.round(v)}</text>`
   }
 
   // X ticks
   const { fmt, ticks } = axisTicks(tMin, tMax, pw)
   for (const tt of ticks) {
     const x = X(tt)
-    g += `<line x1="${x.toFixed(1)}" y1="${margin.top}" x2="${x.toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(15,23,42,.10)"/>`
-    g += `<text x="${x.toFixed(1)}" y="${(margin.top + ph + 15).toFixed(1)}" font-family="var(--mono)" font-size="10" fill="#334155" text-anchor="middle">${fmtLabel(tt, fmt)}</text>`
+    g += `<line x1="${x.toFixed(1)}" y1="${margin.top}" x2="${x.toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(0,0,0,.08)"/>`
+    g += `<text x="${x.toFixed(1)}" y="${(margin.top + ph + 15).toFixed(1)}" font-family="var(--mono)" font-size="10" fill="#000" text-anchor="middle">${fmtLabel(tt, fmt)}</text>`
   }
 
   const hPts = historyPoints.value
@@ -164,6 +164,13 @@ function render() {
     ? `<circle cx="${nowX.toFixed(1)}" cy="${Y(nowPoint.value.y).toFixed(1)}" r="4" fill="${historyColor}" stroke="#fff" stroke-width="1.5"/>`
     : ''
 
+  // 数据点圆点（始终显示）
+  let dots = ''
+  for (let i = 0; i < hPts.length; i++) {
+    const p = hPts[i]
+    dots += `<circle cx="${X(p._t).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="2.5" fill="${historyColor}" stroke="#fff" stroke-width="1"/>`
+  }
+
   svg.value.innerHTML = `
     <defs>
       <linearGradient id="hA" x1="0" x2="0" y1="0" y2="1">
@@ -176,16 +183,69 @@ function render() {
       </linearGradient>
     </defs>
     ${g}
-    <text transform="translate(16 ${cy.toFixed(1)}) rotate(-90)" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#475569">${escHtml(props.unit)}</text>
-    <line x1="${margin.left}" y1="${(margin.top + ph).toFixed(1)}" x2="${(margin.left + pw).toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(15,23,42,.24)"/>
-    <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(15,23,42,.24)"/>
+    <text transform="translate(16 ${cy.toFixed(1)}) rotate(-90)" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#000">${escHtml(props.unit)}</text>
+    <line x1="${margin.left}" y1="${(margin.top + ph).toFixed(1)}" x2="${(margin.left + pw).toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(0,0,0,.25)"/>
+    <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(0,0,0,.25)"/>
     ${nowX != null ? `<line x1="${nowX.toFixed(1)}" y1="${margin.top}" x2="${nowX.toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="${forecastColor}" stroke-width="1" stroke-dasharray="5 5" opacity=".55"/>` : ''}
     ${hArea ? `<path d="${hArea}" fill="url(#hA)"/>` : ''}
     ${hPath ? `<path d="${hPath}" fill="none" stroke="${historyColor}" stroke-width="2.5"/>` : ''}
     ${fArea ? `<path d="${fArea}" fill="url(#fA)"/>` : ''}
     ${fPath ? `<path d="${fPath}" fill="none" stroke="${forecastColor}" stroke-width="3" stroke-dasharray="8 6"/>` : ''}
+    ${dots}
     ${nowDot}
+    <rect id="hit-area" x="${margin.left}" y="${margin.top}" width="${pw}" height="${ph}" fill="transparent" pointer-events="all"/>
+    <g id="tooltip" visibility="hidden">
+      <rect id="tip-bg" x="0" y="0" width="10" height="32" rx="4" fill="rgba(8,47,73,.94)" stroke="${historyColor}" stroke-width="1"/>
+      <text id="tip-val" x="0" y="0" font-family="var(--mono)" font-size="11" font-weight="700" fill="#fff" text-anchor="middle"/>
+      <text id="tip-time" x="0" y="0" font-family="var(--mono)" font-size="9" fill="#94A3B8" text-anchor="middle"/>
+    </g>
   `
+
+  // 鼠标悬停 tooltip
+  const hitArea = svg.value.querySelector('#hit-area')
+  const tooltip = svg.value.querySelector('#tooltip')
+  const tipBg = svg.value.querySelector('#tip-bg')
+  const tipVal = svg.value.querySelector('#tip-val')
+  const tipTime = svg.value.querySelector('#tip-time')
+  if (hitArea && tooltip && hPts.length) {
+    const svgEl = svg.value
+    hitArea.onmousemove = (e) => {
+      const pt = svgEl.createSVGPoint()
+      pt.x = e.clientX; pt.y = e.clientY
+      const svgPt = pt.matrixTransform(svgEl.getScreenCTM().inverse())
+      let best = null; let bestDist = Infinity
+      for (const p of hPts) {
+        const dx = X(p._t) - svgPt.x
+        const dy = Y(p.y) - svgPt.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        if (dist < bestDist) { bestDist = dist; best = p }
+      }
+      const threshold = pw / Math.max(1, hPts.length) * 3
+      if (best && bestDist < threshold) {
+        const val = typeof best.y === 'number' ? (Number.isInteger(best.y) ? best.y : best.y.toFixed(1)) : best.y
+        const timeStr = fmtLabel(best._t, 'dhm')
+        const valStr = String(val)
+        const timeW = timeStr.length * 5.5
+        const valW = valStr.length * 7
+        const bw = Math.max(valW, timeW) + 16
+        const tx = X(best._t)
+        const ty = Y(best.y) - 22
+        tipVal.textContent = valStr
+        tipTime.textContent = timeStr
+        tipBg.setAttribute('x', (tx - bw / 2).toFixed(1))
+        tipBg.setAttribute('y', (ty - 10).toFixed(1))
+        tipBg.setAttribute('width', bw.toFixed(1))
+        tipVal.setAttribute('x', tx.toFixed(1))
+        tipVal.setAttribute('y', (ty + 2).toFixed(1))
+        tipTime.setAttribute('x', tx.toFixed(1))
+        tipTime.setAttribute('y', (ty + 15).toFixed(1))
+        tooltip.setAttribute('visibility', 'visible')
+      } else {
+        tooltip.setAttribute('visibility', 'hidden')
+      }
+    }
+    hitArea.onmouseleave = () => { tooltip.setAttribute('visibility', 'hidden') }
+  }
 }
 
 function schedule() {

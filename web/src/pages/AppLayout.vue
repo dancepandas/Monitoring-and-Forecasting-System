@@ -2,25 +2,29 @@
   <div class="app-layout">
     <CesiumMap />
     <header class="app-banner">
-      <span class="banner-side left"></span>
-      <h1 class="banner-title">水文监测预报指挥中心</h1>
-      <span class="banner-side right"></span>
       <TabBar />
       <div class="banner-spacer"></div>
-      <span class="system-status" :class="statusClass" :title="statusTitle">
-        <i class="status-dot"></i>
-        <span class="status-text">{{ statusLabel }}</span>
-      </span>
-      <button v-if="isAdmin" class="admin-gear" @click="showAdminMenu = !showAdminMenu" title="管理">
-        ⚙
-        <transition name="admin-pop">
-          <div v-if="showAdminMenu" class="admin-menu" @click.stop>
-            <router-link to="/admin/users" class="admin-link" @click="showAdminMenu = false">用户管理</router-link>
-            <router-link to="/admin/settings" class="admin-link" @click="showAdminMenu = false">系统设置</router-link>
-          </div>
-        </transition>
-      </button>
-      <button class="logout-btn" @click="handleLogout">退出</button>
+      <div class="trapezoid-title">
+        <h1 class="banner-title">郴州水文监测预报智慧平台</h1>
+      </div>
+      <div class="banner-spacer"></div>
+      <div class="banner-right">
+        <button class="logout-btn" @click="handleLogout">退出</button>
+        <button v-if="isAdmin" class="admin-gear" @click="showAdminMenu = !showAdminMenu" title="管理">
+          ⚙
+          <transition name="admin-pop">
+            <div v-if="showAdminMenu" class="admin-menu" @click.stop>
+              <router-link to="/admin/users" class="admin-link" @click="showAdminMenu = false">用户管理</router-link>
+              <router-link to="/admin/settings" class="admin-link" @click="showAdminMenu = false">系统设置</router-link>
+            </div>
+          </transition>
+        </button>
+        <span class="system-status" :class="statusClass" :title="statusTitle">
+          <i class="status-dot"></i>
+          <span class="status-text">{{ statusLabel }}</span>
+        </span>
+        <span class="banner-account">{{ auth.user?.username || '—' }}</span>
+      </div>
     </header>
     <main class="workspace" :data-page="$route.name">
       <router-view />

@@ -25,25 +25,29 @@
       </article>
 
       <article class="panel">
-        <div class="panel-head"><h2>预警标准</h2></div>
+        <div class="panel-head"><h2>预警标准</h2><span>每站独立配置</span></div>
         <div class="panel-body">
-          <div class="risk-list">
-            <div class="risk-item">
-              <div class="risk-row"><b>水位预警阈值（示例）</b></div>
+          <div v-if="loading" class="risk-item"><p>加载中...</p></div>
+          <div class="risk-list" v-else>
+            <div class="risk-item" v-for="(s, code) in stationThresholds" :key="code">
+              <div class="risk-row"><b>{{ s.name }}</b><span class="risk-meta">{{ code }}</span></div>
               <div class="thresholds">
-                <span class="threshold-tag">蓝 34.0m</span>
-                <span class="threshold-tag">黄 35.0m</span>
-                <span class="threshold-tag">橙 35.5m</span>
-                <span class="threshold-tag">红 36.0m</span>
+                <span class="threshold-tag level" v-for="(v, lv) in s.level" :key="'wl-'+lv">
+                  {{ levelLabel(lv) }} {{ v }}m
+                </span>
+              </div>
+              <div class="thresholds" style="margin-top:4px">
+                <span class="threshold-tag flow" v-for="(v, lv) in s.flow" :key="'vf-'+lv">
+                  {{ levelLabel(lv) }} {{ v }} m³/s
+                </span>
               </div>
             </div>
-            <div class="risk-item">
-              <div class="risk-row"><b>流量预警阈值（示例）</b></div>
+            <div class="risk-item" style="opacity:.6">
+              <div class="risk-row"><b>默认值（新站点回退）</b></div>
               <div class="thresholds">
-                <span class="threshold-tag">蓝 5000</span>
-                <span class="threshold-tag">黄 8000</span>
-                <span class="threshold-tag">橙 12000</span>
-                <span class="threshold-tag">红 18000 m³/s</span>
+                <span class="threshold-tag" v-for="(v, lv) in defaults.level" :key="'def-wl-'+lv">
+                  {{ levelLabel(lv) }} {{ v }}m
+                </span>
               </div>
             </div>
           </div>
@@ -58,12 +62,28 @@ import Topbar from '../components/Topbar.vue'
 import { api } from '../api'
 
 const tasks = ref([])
+const stationThresholds = ref({})
+const defaults = ref({ level: {}, flow: {} })
+const loading = ref(true)
+
+const LEVEL_NAMES = { blue: '蓝', yellow: '黄', orange: '橙', red: '红' }
+function levelLabel(lv) { return LEVEL_NAMES[lv] || lv }
 
 onMounted(async () => {
   try {
     const data = await api.getScheduledTasks()
     tasks.value = data.tasks || []
   } catch { /* no tasks yet */ }
+
+  try {
+    const data = await api.getWarningStandards()
+    stationThresholds.value = data.stations || {}
+    defaults.value = data.defaults || { level: {}, flow: {} }
+  } catch (e) {
+    console.error('load warning standards failed:', e)
+  } finally {
+    loading.value = false
+  }
 })
 </script>
 <style scoped>
@@ -102,4 +122,6 @@ onMounted(async () => {
   color: var(--ink-2);
   background: var(--glass-strong);
 }
+.threshold-tag.level { border-color: rgba(0,150,255,.25); }
+.threshold-tag.flow { border-color: rgba(255,150,50,.25); }
 </style>

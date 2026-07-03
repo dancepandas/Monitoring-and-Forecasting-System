@@ -35,10 +35,13 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import Topbar from '../components/Topbar.vue'
-import { api } from '../api'
+import { api, ALL_STATION_CODES } from '../api'
 
 const STATIONS = [
-  { code: '00106', name: '湖北-仙桃', deviceCode: 'FD000489923695' },
+  { code: '00125', name: '郴州', deviceCode: 'FD000848891909' },
+  { code: '00230', name: '郴州-坳上', deviceCode: 'FD000696565714' },
+  { code: '00231', name: '郴州-鸡嘴桥下游', deviceCode: 'FD000445060600' },
+  { code: '00234', name: '郴州-燕泉河', deviceCode: 'FD000823998862' },
 ]
 
 const stations = ref([])
@@ -51,7 +54,7 @@ const deviceStats = ref([
 onMounted(async () => {
   try {
     // 设备统计
-    const stats = await api.getDeviceStats('00106')
+    const stats = await api.getDeviceStats(ALL_STATION_CODES)
     deviceStats.value = [
       { label: '在线', value: `${stats.online}` },
       { label: '离线', value: `${stats.offline}` },

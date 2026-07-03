@@ -38,22 +38,6 @@
 .tile.moss::before { background: var(--ok); }
 .tile.amber::before { background: var(--orange); }
 
-.tile::after {
-  content: "";
-  position: absolute;
-  right: -40px;
-  top: -40px;
-  width: 130px;
-  height: 130px;
-  border-radius: 50%;
-  background: var(--primary-soft);
-  pointer-events: none;
-}
-
-.tile.river::after { background: var(--water-soft); }
-.tile.moss::after { background: var(--ok-soft); }
-.tile.amber::after { background: var(--orange-soft); }
-
 .tile-label {
   color: var(--muted);
   font-size: 11px;
@@ -396,6 +380,36 @@
   border-radius: 14px;
 }
 
+.video-error {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(10, 14, 22, .82);
+  backdrop-filter: blur(2px);
+  border-radius: 14px;
+  color: var(--muted, #aab);
+  font-size: 12px;
+}
+.video-error .ve-icon { font-size: 22px; }
+.video-error .ve-text { letter-spacing: .02em; }
+.video-error .ve-retry {
+  margin-top: 4px;
+  padding: 4px 14px;
+  border: 1px solid var(--primary, #1E90FF);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--primary, #1E90FF);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.video-error .ve-retry:hover { background: rgba(30, 144, 255, .15); }
+
 .video-meta {
   position: absolute;
   bottom: 0; left: 0; right: 0;
@@ -647,18 +661,13 @@
 
 .login-card .btn.primary { width: 100%; min-height: 44px; font-size: 15px; }
 
+.login-toggle { margin: 16px 0 0; text-align: center; font-size: 13px; }
+.login-toggle a { color: var(--primary); text-decoration: none; }
+.login-toggle a:hover { text-decoration: underline; }
+
 /* ===== Responsive ===== */
 @media (max-width: 720px) {
   .stage-modal { padding: 10px; }
   .stage-head h2 { font-size: 22px; }
   .map-wrap { min-height: 520px; }
-}
-
-/* ===== 页面级径向透明 =====
-   所有页面面板共用同一"以视口中心为原点"的径向渐变(--glass/--glass-strong)。
-   background-attachment:fixed 让每块面板只渲染自己所在视口位置的那一片：
-   靠近页面中心 → 切到透明区(露出地图)；远离中心 → 切到实区(成框)。 */
-.panel, .tile, .video-card, .video-panel,
-.sidebar, .topbar, .app-banner {
-  background-attachment: fixed;
 }

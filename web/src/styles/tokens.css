@@ -6,26 +6,11 @@
   /* ── 主蓝：道奇蓝 #1E90FF 贯穿玻璃 / 边线 / 辉光 ── */
   --primary: #1E90FF;
   --primary-600: #1577D8;
-  --primary-soft: rgba(30, 144, 255, .16);
+  --primary-soft: rgba(0, 0, 128, .16);
 
-  /* ── 玻璃面板：径向蓝玻璃 —— 中心实、四边渐淡（不到 0，配合亮边保留清晰轮廓） ── */
-  /* 页面级径向透明 —— 以"整个页面中心"为原点：
-     面板越靠近页面中心越透(露出地图)、越远离越实。靠 background-attachment:fixed
-     让每块面板只切出自己所在视口位置的渐变片，从而形成跨越全页的径向透明(非单面板内部方向)。 */
-  --glass:
-    radial-gradient(circle at 50% 52%,
-      rgba(14, 42, 78, .12) 0%,
-      rgba(14, 42, 78, .22) 24%,
-      rgba(14, 42, 78, .42) 52%,
-      rgba(14, 42, 78, .74) 82%,
-      rgba(16, 46, 86, .86) 100%);
-  --glass-strong:
-    radial-gradient(circle at 50% 52%,
-      rgba(14, 42, 78, .12) 0%,
-      rgba(14, 42, 78, .22) 24%,
-      rgba(14, 42, 78, .42) 52%,
-      rgba(14, 42, 78, .74) 82%,
-      rgba(16, 46, 86, .86) 100%);
+  /* ── 玻璃面板底色（纯色，各面板按位置叠加方向渐变）── */
+  --glass: rgba(14, 42, 78, .75);
+  --glass-strong: rgba(14, 42, 78, .82);
   /* 弹窗 / 登录 / 全屏详情：实底，不参与页面径向 */
   --glass-deep:
     rgba(12, 36, 68, .86);
@@ -48,8 +33,8 @@
   /* ── 线条 / 描边 —— 冷光化；--edge 不再透明，给面板一道亮边 ── */
   --line: rgba(80, 160, 240, .16);
   --line-strong: rgba(80, 160, 240, .28);
-  --edge: rgba(30, 144, 255, .34);
-  --edge-glow: rgba(30, 144, 255, .42);
+  --edge: rgba(255, 255, 255, .15);
+  --edge-glow: rgba(0, 0, 128, .42);
 
   /* ── 斜切角（科技大屏八角形）── */
   --clip: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px);
@@ -58,7 +43,7 @@
   --accent: #4FC3F7;
   --accent-soft: rgba(79, 195, 247, .14);
   --water: #1E90FF;
-  --water-soft: rgba(30, 144, 255, .16);
+  --water-soft: rgba(0, 0, 128, .16);
 
   /* ── 状态 / 水利四级预警（深底提亮）── */
   --danger: #FB7185;
@@ -76,7 +61,7 @@
   --shadow: 0 28px 70px rgba(0, 0, 0, .50);
   --shadow-soft: 0 12px 34px rgba(0, 0, 0, .42);
   --shadow-panel: 0 14px 40px rgba(0, 8, 20, .50), inset 0 1px 0 rgba(130, 200, 255, .24);
-  --ring: 0 0 0 3px rgba(30, 144, 255, .32);
+  --ring: 0 0 0 3px rgba(0, 0, 128, .32);
 
   /* ── 半径（收紧：大屏工业感）── */
   --radius-xl: 8px;
@@ -133,6 +118,36 @@ body::after {
 
 button, input { font: inherit; }
 button { color: inherit; }
+
+/* ═══════════════════════════════════════════════════════
+   滚动条：全局无痕 —— 看不见但能滚动
+   ═══════════════════════════════════════════════════════ */
+/* Webkit (Chrome / Edge / Safari) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb:active {
+  background: transparent;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
+}
 
 #app {
   position: relative;
