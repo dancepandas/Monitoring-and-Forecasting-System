@@ -19,6 +19,7 @@ from .routes import auth, data, forecast, agent, reports, system, notify, alerts
 from .services import scheduler
 from .services.monitor_engine import get_engine as get_monitor_engine
 from .services.agent_alert_dispatcher import init_dispatcher
+from .services.system_events import init_db
 
 _COLLECTOR_LOG = Path(__file__).parent / "data" / "collector.log"
 
@@ -29,6 +30,8 @@ async def lifespan(app: FastAPI):
     if settings.jwt_secret == "change-me":
         logger.critical("SECURITY: jwt_secret is default 'change-me'. Set JWT_SECRET in environment!")
     seed()
+    init_db()
+    logger.info("system_events.db initialized")
     sched = None
     try:
         scheduler.init_scheduler(app)

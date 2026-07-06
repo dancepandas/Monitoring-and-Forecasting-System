@@ -6,6 +6,8 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
+from .system_events import write_event
+
 logger = logging.getLogger(__name__)
 
 STATUS_FILE = Path(__file__).parent.parent / "data" / "system_status.json"
@@ -60,3 +62,7 @@ def update_status(trigger: str, diagnosis: str, summary: str, stations: list, is
     with _lock:
         _save(data)
     logger.info("system_status updated: trigger=%s diagnosis=%s issues=%d", trigger, diagnosis, len(issues))
+    severity = {"healthy": "info", "warning": "warning", "critical": "critical"}.get(diagnosis, "info")
+    write_event("diagnosis", "diagnosis_completed",
+        f"系统诊断: {diagnosis} — {summary}（{len(issues)} 个问题）",
+        severity=severity, new_value=json.dumps(data, ensure_ascii=False, default=str))

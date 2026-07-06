@@ -9,6 +9,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from .system_events import write_event
+
 logger = logging.getLogger(__name__)
 
 _ALERTS_FILE = Path(__file__).parent.parent / "data" / "active_alerts.json"
@@ -140,30 +142,10 @@ class AlertTracker:
             )
             self._alerts[alert_id] = event
             await self._save()
-            return event, True
-
-    async def escalate(self, alert_id: str, new_level: str, new_title: str, new_message: str, metric: Optional[dict] = None) -> tuple[AlertEvent, bool]:
-        """升级告警：关闭旧事件，创建新级别事件。"""
-        now = time.time()
-        async with self._lock:
-            old = self._alerts.get(alert_id)
-            if old and old.resolved_at is None:
-                old.resolved_at = now
-                old.resolution = f"升级为 {new_level} 告警"
-
-            new_id = self._alert_id(old.station_code if old else "", old.alert_type if old else alert_id, new_level)
-            event = AlertEvent(
-                id=new_id,
-                station_code=old.station_code if old else "",
-                alert_type=old.alert_type if old else alert_id,
-                level=new_level,
-                title=new_title,
-                message=new_message,
-                metric=metric or (old.metric if old else {}),
-                triggered_at=now,
-            )
-            self._alerts[new_id] = event
-            await self._save()
+            write_event("alert", "alert_triggered",
+                f"{station_code} {alert_type} {level} — {title}",
+                station_code=station_code, severity=level,
+                new_value=json.dumps(metric or {}, ensure_ascii=False))
             return event, True
 
     async def resolve(self, alert_id: str, resolution: str = "人工解除", by: str = "") -> Optional[AlertEvent]:
@@ -176,6 +158,9 @@ class AlertTracker:
             event.acknowledged = True
             event.acknowledged_by = by
             await self._save()
+            write_event("alert", "alert_resolved",
+                f"{event.station_code} {event.alert_type} 已解除 — {resolution}",
+                station_code=event.station_code, session_id=by)
             return event
 
     async def acknowledge(self, alert_id: str, by: str = "") -> Optional[AlertEvent]:
@@ -186,6 +171,9 @@ class AlertTracker:
             event.acknowledged = True
             event.acknowledged_by = by
             await self._save()
+            write_event("alert", "alert_acknowledged",
+                f"{event.station_code} {event.alert_type} 已确认",
+                station_code=event.station_code, session_id=by)
             return event
 
     async def mark_notified(self, alert_id: str, channels: list[str]):
@@ -197,6 +185,9 @@ class AlertTracker:
             event.last_notify_at = time.time()
             event.push_channels = list(set(event.push_channels + channels))
             await self._save()
+            write_event("alert", "alert_notified",
+                f"{event.station_code} 第{event.notify_count}次推送 → {', '.join(channels)}",
+                station_code=event.station_code)
 
     async def list_active(self, station_code: Optional[str] = None, level: Optional[str] = None) -> list[AlertEvent]:
         async with self._lock:
@@ -226,3 +217,5 @@ class AlertTracker:
             if to_remove:
                 await self._save()
                 logger.info("cleaned up %d resolved alerts", len(to_remove))
+                write_event("alert", "alert_cleanedup",
+                    f"清理 {len(to_remove)} 条过期告警（已解除超 {max_age_days} 天）")

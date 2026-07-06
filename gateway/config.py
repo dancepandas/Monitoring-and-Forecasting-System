@@ -11,7 +11,6 @@ class Settings(BaseSettings):
     aiflow_base_url: str = "https://aiflow2.dashuiyun.cn:9999/prod-api"
     jwt_secret: str = "change-me"
     jwt_expire_hours: int = 24
-    chronos_url: str = "http://localhost:15001"
     # floodmind_url 已废弃，系统直接运行 FastAPI 网关，不再需要代理
 
     # Agent LLM (DashScope / OpenAI-compatible)

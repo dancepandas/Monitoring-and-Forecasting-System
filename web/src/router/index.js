@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '../store/auth'
 
 const routes = [
   { path: '/login', name: 'Login', component: () => import('../pages/LoginPage.vue') },
@@ -30,6 +31,12 @@ router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
   if (to.name !== 'Login' && !token) return next('/login')
   if (to.name === 'Login' && token) return next('/')
+  // Admin role check — only enforce when role is known (not empty/fresh reload)
+  if (to.meta.role) {
+    const role = useAuthStore().role
+    if (role && role !== 'super_admin' && to.meta.role === 'super_admin') return next('/')
+    if (role && role !== 'super_admin' && role !== 'admin' && to.meta.role === 'admin') return next('/')
+  }
   next()
 })
 

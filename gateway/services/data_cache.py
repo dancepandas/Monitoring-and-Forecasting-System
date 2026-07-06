@@ -658,7 +658,7 @@ async def all_keys() -> list:
         data = _load_full()
         keys = []
         for station, types in data.get("raw", {}).items():
-            dev = station_names.station_device(station) or _DEVICE_CODE
+            dev = station_names.resolve_device_code(station)
             for dtype in types:
                 keys.append(f"aiflow:{dtype}:{station}:{dev}")
         return keys

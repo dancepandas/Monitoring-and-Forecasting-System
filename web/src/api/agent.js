@@ -54,26 +54,6 @@ export const agentApi = {
     return streamRequest(`/stream/resume?session_id=${encodeURIComponent(sessionId)}&after_index=${afterIndex}`)
   },
 
-  fetchSessionStatus(sessionId) {
-    return streamRequest(`/session/status?session_id=${encodeURIComponent(sessionId)}`).then(r => r.json())
-  },
-
-  pauseSession(sessionId) {
-    return streamRequest('/session/pause', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId })
-    })
-  },
-
-  resumeSession(sessionId) {
-    return streamRequest('/session/resume', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId })
-    })
-  },
-
   respondPermission(askId, approved, sessionId) {
     return streamRequest('/permission/respond', {
       method: 'POST',

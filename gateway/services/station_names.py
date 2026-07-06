@@ -44,3 +44,13 @@ def all_codes() -> list:
 def codes_str() -> str:
     """逗号分隔的全部站点编码（供配置默认值）。"""
     return ",".join(STATIONS.keys())
+
+
+# ── 模块级常量 ──
+ALL_CODES = tuple(STATIONS.keys())  # 所有站点编码元组，不可变
+
+
+def resolve_device_code(code: str) -> str:
+    """解析设备码：先查站点专属设备，无则回退默认。"""
+    from ..config import settings
+    return station_device(code) or settings.default_device_code

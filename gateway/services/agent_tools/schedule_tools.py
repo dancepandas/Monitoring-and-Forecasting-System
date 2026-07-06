@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 class CreateScheduledTaskArgs(BaseModel):
-    task_type: str = Field(..., description="任务类型：generate_report / run_forecast / check_warnings")
+    task_type: str = Field(..., description="任务类型：generate_report / run_forecast")
     cron: str = Field(..., description="cron 表达式，如 0 9 * * *")
     params: dict = Field(default_factory=dict, description="任务参数 JSON")
 

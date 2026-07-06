@@ -1,6 +1,6 @@
 // ── 郴州四站配置（与后端 station_names.STATIONS 保持一致）──
-export const PRIMARY_STATION = '00125'
-export const ALL_STATION_CODES = '00125,00230,00231,00234'
+import { STATIONS } from '../stations.js'
+export const ALL_STATION_CODES = STATIONS.map(s => s.code).join(',')
 
 import { apiRequest } from './client.js'
 
@@ -16,26 +16,11 @@ export const api = {
   getLatest: (stationCodes = ALL_STATION_CODES) =>
     request(`/data/latest?station_codes=${encodeURIComponent(stationCodes)}`),
 
-  getLevel: (stationCode, begin = '', end = '', count = 200) => {
-    const p = new URLSearchParams({ station_code: stationCode, begin_time: begin, end_time: end, count })
-    return request(`/data/level?${p}`)
-  },
-
-  getFlow: (stationCode, begin = '', end = '', count = 200) => {
-    const p = new URLSearchParams({ station_code: stationCode, begin_time: begin, end_time: end, count })
-    return request(`/data/flow?${p}`)
-  },
-
   getFlowRaw: (stationCode, deviceCode, begin = '', end = '', count = 200) => {
     const p = new URLSearchParams({ station_code: stationCode, device_code: deviceCode, begin_time: begin, end_time: end, count })
     return request(`/data/flow-raw?${p}`)
   },
 
-  runForecast: (data) =>
-    request('/forecast/run', { method: 'POST', body: JSON.stringify(data) }),
-
-  getForecastResult: (stationCode) =>
-    request(`/forecast/result?station_code=${encodeURIComponent(stationCode)}`),
 
   getForecastInterpret: (stationCode, field = 'virtualFlow') =>
     request(`/forecast/interpret?station_code=${encodeURIComponent(stationCode)}&field=${encodeURIComponent(field)}`),
@@ -85,9 +70,6 @@ export const api = {
 
   getAlignedChart: (stationCode, field = 'virtualFlow') =>
     request(`/data/aligned/chart?station_code=${encodeURIComponent(stationCode)}&field=${encodeURIComponent(field)}`),
-
-  getStats: (stationCode, field = 'virtualFlow') =>
-    request(`/data/stats?station_code=${encodeURIComponent(stationCode)}&field=${encodeURIComponent(field)}`),
 
   getActiveAlerts: (stationCode = '', level = '') => {
     const p = new URLSearchParams()

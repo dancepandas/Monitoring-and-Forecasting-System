@@ -9,7 +9,7 @@ from . import data_cache, aiflow_client, station_names
 
 logger = logging.getLogger(__name__)
 
-_STATION_CODES = [s.strip() for s in settings.station_codes.split(",")]
+_STATION_CODES = list(station_names.ALL_CODES)
 _INTERVAL = settings.collector_interval
 
 
@@ -60,7 +60,7 @@ async def collect_all():
         pass
 
     for code in _STATION_CODES:
-        device = station_names.station_device(code) or settings.default_device_code
+        device = station_names.resolve_device_code(code)
         try:
             resp = await asyncio.wait_for(
                 aiflow_client.get_flow_original_data(code, device, begin_time, end_time, count=200),

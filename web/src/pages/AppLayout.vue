@@ -28,7 +28,7 @@
     </header>
     <main class="workspace" :data-page="$route.name">
       <router-view />
-      <ContextMenu v-if="$route.name !== 'agent'" />
+      <ContextMenu v-if="$route.name !== 'Agent'" />
     </main>
     <VoiceAssistant />
   </div>
