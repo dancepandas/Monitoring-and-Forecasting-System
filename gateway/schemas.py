@@ -22,13 +22,6 @@ class TokenResponse(BaseModel):
     token: str
     user: UserResponse
 
-class DataQuery(BaseModel):
-    station_code: str
-    begin_time: str = ""
-    end_time: str = ""
-    count: int = 200
-    device_code: Optional[str] = None
-
 class ForecastRequest(BaseModel):
     station_code: str
     prediction_length: int = 72

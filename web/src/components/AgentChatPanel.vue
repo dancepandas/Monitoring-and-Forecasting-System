@@ -85,11 +85,10 @@ import { agentApi } from '../api/agent.js'
 import { marked } from 'marked'
 import VoiceButton from './VoiceButton.vue'
 import { useVoice } from '../composables/useVoice.js'
+import { uid, fmtNum, truncate } from '../shared/utils.js'
 marked.setOptions({ breaks: true, gfm: true })
 
 const props = defineProps({ sessionId: { type: String, required: true } })
-
-function uid() { try { return crypto.randomUUID() } catch { return Date.now().toString(36) + Math.random().toString(36).slice(2, 10) } }
 
 const msgs = reactive([])
 const input = ref('')
@@ -114,8 +113,6 @@ const { status: voiceStatus, muted: voiceMuted, canRecord: voiceCanRecord, error
 let stepCounter = 0; let blockId = 0
 function bId() { return 'b' + (++blockId) }
 function scroll() { nextTick(() => { const el = scrollRef.value; if (el) el.scrollTop = el.scrollHeight }) }
-function fmtNum(n) { if (!n) return '0'; return n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'K' : String(n) }
-function truncate(s, n) { s = String(s||''); return s.length > n ? s.slice(0, n) + '...' : s }
 function toolIcon(b) { if (b.status === 'running') return '◌'; if (b.status === 'done') return '✓'; if (b.status === 'error') return '✗'; return '○' }
 function renderMd(text) { return marked.parse(text || '') }
 

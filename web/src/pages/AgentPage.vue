@@ -215,12 +215,9 @@ import { reactive, ref, onMounted, onUnmounted, nextTick } from 'vue'
 import Topbar from '../components/Topbar.vue'
 import { agentApi } from '../api/agent.js'
 import { marked } from 'marked'
+import { uid, withTime, fmtNum, truncate } from '../shared/utils.js'
 
 marked.setOptions({ breaks: true, gfm: true })
-
-function uid() {
-  try { return crypto.randomUUID() } catch { return Date.now().toString(36) + Math.random().toString(36).slice(2, 10) }
-}
 
 function stripInternalPrefix(text) {
   if (!text) return text
@@ -300,12 +297,7 @@ const quickTasks = [
   }
 ]
 
-function withTime(text) {
-  const now = new Date()
-  const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
-  return `[当前系统时间: ${ts}]\n\n${text}`
-}
-
+let stepCounter = 0
 function runQuickTask(t) {
   if (streaming.value) return
   msgs.push({ id: uid(), role: 'user', content: t.label })
@@ -325,13 +317,10 @@ const scrollRef = ref(null)
 const inputRef = ref(null)
 const fileInput = ref(null)
 
-let stepCounter = 0
 let blockId = 0
 function bId() { return 'b' + (++blockId) }
 function scroll() { nextTick(() => { const el = scrollRef.value; if (el) el.scrollTop = el.scrollHeight }) }
-function fmtNum(n) { if (!n) return '0'; return n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'K' : String(n) }
 function fmtTs(ts) { if (!ts) return ''; const d = new Date(ts); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }
-function truncate(s, n) { s = String(s||''); return s.length > n ? s.slice(0, n) + '...' : s }
 
 // ── CoT grouping ──
 function buildGroups(msg) {

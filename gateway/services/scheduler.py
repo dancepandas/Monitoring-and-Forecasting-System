@@ -11,6 +11,7 @@ from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 
 from ..config import settings
 from . import data_cache, system_status, station_names
+from .system_events import write_event
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,8 @@ def create_task(task_type: str, cron: str, params: dict) -> str:
         replace_existing=True,
         kwargs={"task_type": task_type, "params": params},
     )
+    write_event("schedule", "schedule_created",
+        f"定时任务已创建: {task_type}（{cron}）", new_value=json.dumps(params, ensure_ascii=False))
     return job.id
 
 
@@ -74,6 +77,7 @@ def cancel_task(task_id: str) -> bool:
         return False
     try:
         _scheduler.remove_job(task_id)
+        write_event("schedule", "schedule_cancelled", f"定时任务已取消: {task_id}")
         return True
     except Exception:
         return False
@@ -150,8 +154,6 @@ async def _execute_task(task_type: str, params: dict) -> None:
                 logger.info("scheduled forecast: aligned rebuilt for %s", station)
             except Exception as e:
                 logger.exception("scheduled forecast failed for %s: %s", station, e)
-        elif task_type == "check_warnings":
-            logger.info("check_warnings: placeholder – no action yet")
         else:
             logger.warning(f"Unknown task_type: {task_type}")
     except Exception as e:
@@ -173,11 +175,8 @@ async def _retry(fn, name, max_retries=2, delay=30):
                 raise
 
 
-STATIONS = [s.strip() for s in settings.station_codes.split(",")]
+STATIONS = list(station_names.ALL_CODES)
 
-
-def _device(code: str) -> str:
-    return station_names.station_device(code) or settings.default_device_code
 
 
 async def _run_agent_daily_report(params: dict):
@@ -281,6 +280,7 @@ async def _run_agent_weekly_report(params: dict):
     _save_llm_docx(reports_dir / filename, "水文监测周报",
                    f"周期: {week_start} ~ {week_end}　|　覆盖站点: {', '.join(STATIONS)}", report_body)
     logger.info(f"weekly report saved: {filename}")
+    write_event("report", "report_generated", f"周报已生成: {filename}")
 
 
 async def _run_system_check(params: dict):
@@ -293,7 +293,7 @@ async def _run_system_check(params: dict):
 
     for code in STATIONS:
         level_ok = await data_cache.get(f"aiflow:level:{code}", max_age=600)
-        flow_raw = await data_cache.get(f"aiflow:flow_raw:{code}:{_device(code)}", max_age=600)
+        flow_raw = await data_cache.get(f"aiflow:flow_raw:{code}:{station_names.resolve_device_code(code)}", max_age=600)
         flow_items = (flow_raw.get("data", []) or []) if flow_raw else []
         level_items = (level_ok.get("data", []) or []) if level_ok else []
 

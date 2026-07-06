@@ -17,8 +17,6 @@ logger = logging.getLogger(__name__)
 _HEARTBEAT_FILE = Path(__file__).parent.parent / "data" / "collector_heartbeat.txt"
 
 
-def _device(code: str) -> str:
-    return station_names.station_device(code) or settings.default_device_code
 
 
 def _parse_wl_values(level_data, flow_data):
@@ -63,7 +61,7 @@ async def collect_station_data(code: str):
 
     返回: dict with code, name, device, level_items, flow_items, wl_vals, flow_vals
     """
-    device = _device(code)
+    device = station_names.resolve_device_code(code)
     level_data = await data_cache.get(f"aiflow:level:{code}", max_age=600)
     flow_data = await data_cache.get(f"aiflow:flow_raw:{code}:{device}", max_age=600)
     level_items = (level_data.get("data", []) or []) if level_data else []
@@ -112,7 +110,7 @@ async def collect_device_stats() -> dict:
     online = 0
     total = 0
     for code in codes:
-        device = _device(code)
+        device = station_names.resolve_device_code(code)
         data = await data_cache.get(f"aiflow:flow_raw:{code}:{device}", max_age=600)
         if not data:
             data = await data_cache.get(f"aiflow:level:{code}", max_age=600)

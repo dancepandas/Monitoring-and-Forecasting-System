@@ -58,6 +58,7 @@ import { marked } from 'marked'
 import { useVoice } from '../composables/useVoice.js'
 import { agentApi } from '../api/agent.js'
 import { voiceApi } from '../api/voice.js'
+import { uid, withTime } from '../shared/utils.js'
 
 const SID = 'global-voice-assistant'
 
@@ -243,13 +244,6 @@ async function askAgent(text) {
     // 静音或无内容可念 → 回待机；否则等播报结束 watch 把 speaking→idle
     if (!spoke) mode.value = 'idle'
   }
-}
-
-function uid() { try { return crypto.randomUUID() } catch { return Date.now().toString(36) + Math.random().toString(36).slice(2, 10) } }
-function withTime(text) {
-  const n = new Date()
-  const p = x => String(x).padStart(2, '0')
-  return `[当前系统时间: ${n.getFullYear()}-${p(n.getMonth() + 1)}-${p(n.getDate())} ${p(n.getHours())}:${p(n.getMinutes())}]\n\n${text}`
 }
 
 onMounted(() => { agentApi.initSession(SID).catch(() => {}) })

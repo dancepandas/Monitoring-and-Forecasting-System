@@ -25,11 +25,6 @@ logger = logging.getLogger(__name__)
 
 # ── 钉钉 ──
 
-async def send_dingtalk_text(webhook_url: str, content: str, secret: Optional[str] = None, at_mobiles: Optional[list[str]] = None) -> dict:
-    """通过钉钉群机器人发送 text 消息。"""
-    return await _send_dingtalk(webhook_url, {"msgtype": "text", "text": {"content": content}, "at": {"atMobiles": at_mobiles or []}}, secret)
-
-
 async def send_dingtalk_markdown(webhook_url: str, title: str, text: str, secret: Optional[str] = None) -> dict:
     """通过钉钉群机器人发送 markdown 消息。"""
     return await _send_dingtalk(webhook_url, {"msgtype": "markdown", "markdown": {"title": title, "text": text}}, secret)
@@ -64,14 +59,6 @@ async def _send_dingtalk(webhook_url: str, payload: dict, secret: Optional[str] 
 
 
 # ── 企业微信 ──
-
-async def send_wecom_text(webhook_url: str, content: str, mentioned_list: Optional[list[str]] = None) -> dict:
-    """通过企业微信机器人发送 text 消息。"""
-    if not webhook_url:
-        return {"ok": False, "error": "webhook_url 为空"}
-    payload = {"msgtype": "text", "text": {"content": content, "mentioned_list": mentioned_list or []}}
-    return await _post_json(webhook_url, payload, channel="wecom")
-
 
 async def send_wecom_markdown(webhook_url: str, content: str) -> dict:
     """通过企业微信机器人发送 markdown 消息。"""

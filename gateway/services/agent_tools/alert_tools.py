@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from ._helpers import _safe_sync
 from ..notifier import push_alert
 from ..monitor_engine import get_engine
+from ..system_events import write_event
 # 辅助函数
 # ---------------------------------------------------------------------------
 
@@ -46,6 +47,10 @@ def send_notification(**kwargs) -> dict:
                 _safe_sync(get_engine()._tracker.mark_notified(alert_id, [channel]))
             except Exception as mark_err:
                 logger.warning("mark_notified failed: %s", mark_err)
+        if result.get("ok"):
+            write_event("notification", "notification_sent",
+                f"告警推送: {channel} — {title[:80]}",
+                station_code=station_code, severity=level)
         return {"code": 200 if result.get("ok") else 500, "data": result}
     except Exception as e:
         return {"code": 500, "error": str(e)}

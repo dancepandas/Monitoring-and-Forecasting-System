@@ -7,6 +7,7 @@ __all__ = ["TOOLS_REGISTRY", "TOOL_DESCRIPTIONS",
 from ._helpers import _safe_sync, _get_cached_records, _filter_by_time
 from . import data_tools, warning_tools, forecast_tools, report_tools
 from . import file_tools, schedule_tools, system_tools, alert_tools
+from . import system_state_tools
 
 # ── 工具注册表（供 AgentService 使用） ──
 
@@ -53,6 +54,12 @@ TOOLS_REGISTRY = {
     "list_active_alerts": (alert_tools.ListActiveAlertsArgs, alert_tools.list_active_alerts),
     "acknowledge_alert": (alert_tools.AcknowledgeAlertArgs, alert_tools.acknowledge_alert),
     "resolve_alert": (alert_tools.ResolveAlertArgs, alert_tools.resolve_alert),
+
+    # 系统历史查询 (4)
+    "list_alert_history": (system_state_tools.ListAlertHistoryInput, system_state_tools.list_alert_history),
+    "get_threshold_changes": (system_state_tools.GetThresholdChangesInput, system_state_tools.get_threshold_changes),
+    "get_system_diagnosis": (system_state_tools.GetSystemDiagnosisInput, system_state_tools.get_system_diagnosis),
+    "get_recent_events": (system_state_tools.GetRecentEventsInput, system_state_tools.get_recent_events),
 }
 
 TOOL_DESCRIPTIONS = {
@@ -110,4 +117,12 @@ TOOL_DESCRIPTIONS = {
         "确认一条告警（表示已收到并正在处理）。",
     "resolve_alert":
         "解除一条告警并记录处置结果。",
+    "list_alert_history":
+        "查询历史告警记录（含已解除、已确认），可按小时数和站点过滤。回答'之前有过什么告警'类问题前务必调用。",
+    "get_threshold_changes":
+        "查询阈值变更日志，包含站点阈值和全局默认值的修改记录、变更前后的值、操作者。回答'阈值什么时候改的'类问题前务必调用。",
+    "get_system_diagnosis":
+        "获取最近的系统健康诊断记录（采集器、缓存、API、Chronos 状态）。回答'系统最近怎么样'类问题前务必调用。",
+    "get_recent_events":
+        "查询最近 N 小时内的所有系统事件（全类别时间线），可按类别过滤。回答需要系统状态全景的问题时调用。",
 }

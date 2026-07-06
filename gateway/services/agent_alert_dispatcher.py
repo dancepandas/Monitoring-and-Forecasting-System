@@ -13,6 +13,7 @@ from .alert_tracker import AlertEvent, AlertTracker
 from .notifier import push_alert
 from ..config import settings
 from . import warning_config
+from .system_events import write_event
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +67,8 @@ class AgentAlertDispatcher:
 
     async def _handle(self, event: AlertEvent):
         try:
-            session_id = f"alert-{event.id}-{int(time.time())}"
-            svc = AgentService.get_or_create_alert_agent(session_id)
+            session_id = "system-guardian"
+            svc = AgentService.get_or_create_agent(session_id)
 
             prompt = self._build_prompt(event)
             logger.info("[alert-dispatch] start alert agent for %s", event.id)
@@ -128,6 +129,9 @@ class AgentAlertDispatcher:
             )
             await self._tracker.mark_notified(event.id)
             logger.info("[alert-dispatch] fallback push success for %s", event.id)
+            write_event("notification", "notification_fallback",
+                f"兜底推送: {event.level} — {event.title[:80]}",
+                station_code=event.station_code, severity=event.level)
         except Exception as e:
             logger.exception("[alert-dispatch] fallback push failed: %s", e)
 
@@ -148,7 +152,7 @@ class AgentAlertDispatcher:
 - 描述：{event.message}{metric_text}
 
 ## 你的任务
-1. 先调用相关工具核实情况（如 diagnose_system、query_latest、query_video_status、list_warnings、query_flow 等）。
+1. 先调用相关工具核实情况（如 diagnose_system、query_latest、query_video_status、list_active_alerts、query_flow 等）。
 2. 判断这是真实险情、设备故障、数据异常，还是可忽略的波动。
 3. 如果需要推送，调用 send_notification 时**必须传入 alert_id="{event.id}"**，并发送一条清晰、专业的告警消息。
 4. 如果判断为误报或无需立即处理，则只输出结论，不要推送。

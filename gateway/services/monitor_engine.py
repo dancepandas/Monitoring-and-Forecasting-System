@@ -15,8 +15,10 @@ from apscheduler.triggers.cron import CronTrigger
 from ..config import settings
 from . import data_cache, warning_config
 from .alert_tracker import AlertEvent, AlertTracker
+from . import station_names
 from .station_names import station_name
 from .time_utils import parse_ts
+from .system_events import write_event
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +55,7 @@ class MonitorEngine:
         self._tracker = AlertTracker(dedup_window_seconds=1800)
         self._tick_job_id = "monitor_tick"
         self._cleanup_job_id = "monitor_cleanup"
-        self._stations = [s.strip() for s in settings.station_codes.split(",") if s.strip()]
+        self._stations = list(station_names.ALL_CODES)
         self._device = settings.default_device_code
 
     @classmethod
@@ -439,6 +441,9 @@ class MonitorEngine:
             if event.alert_type == alert_type and event.resolved_at is None:
                 await self._tracker.resolve(event.id, reason)
                 logger.info("[monitor] auto resolved %s: %s", event.id, reason)
+                write_event("alert", "alert_autoresolved",
+                    f"{event.station_code} {event.alert_type} 自动解除（{reason}）",
+                    station_code=event.station_code)
 
     @staticmethod
     def _parse_dt_str(t) -> Optional[datetime]:

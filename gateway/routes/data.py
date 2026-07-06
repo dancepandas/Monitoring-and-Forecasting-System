@@ -251,7 +251,7 @@ async def get_video_feeds(station_codes: str = settings.station_codes, user: dic
     codes = [c.strip() for c in station_codes.split(",")]
     feeds = []
     for code in codes:
-        device = station_names.station_device(code) or settings.default_device_code
+        device = station_names.resolve_device_code(code)
         try:
             # 先尝试调 deviceCamera 获取真实摄像头列表
             cam_resp = await aiflow_client.get_camera_info(device)

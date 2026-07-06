@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from gateway.config import settings
 from gateway.services import data_cache, station_names, station_collector
+from gateway.services.system_events import write_event
 from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -24,7 +25,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-ALL_STATIONS = [s.strip() for s in settings.station_codes.split(",") if s.strip()]
+ALL_STATIONS = list(station_names.ALL_CODES)
 
 
 # ─────────────────────────── LLM 叙述（不可用回退原始数据） ───────────────────────────
@@ -176,6 +177,7 @@ async def _gen_daily(date_str: str, station_code=None) -> dict:
     doc.add_heading("四、关注要点", level=1)
     doc.add_paragraph(notes)
     doc.save(filepath)
+    write_event("report", "report_generated", f"日报已生成: {filename}（{filepath.stat().st_size} bytes）")
 
     summary = f"{date_str} {len(stations_to_report)} 站 · 水位 {total_wl_count} 条 · 流量 {total_flow_count} 条"
     return {"path": str(filepath), "filename": filename, "size": filepath.stat().st_size, "summary": summary}
@@ -259,6 +261,7 @@ async def _gen_review(date_str: str) -> dict:
     doc.add_heading("四、关注要点", level=1)
     doc.add_paragraph(notes)
     doc.save(filepath)
+    write_event("report", "report_generated", f"{'复盘' if 'review' in filename else '设备' if 'device' in filename else '模型'}日报已生成: {filename}（{filepath.stat().st_size} bytes）")
 
     return {"path": str(filepath), "filename": filename, "size": filepath.stat().st_size,
             "summary": f"{date_str} 告警 {len(day_alerts)} · 已处置 {len(disposed)} · 未解除 {len(unresolved)}"}
@@ -313,6 +316,7 @@ async def _gen_device(date_str: str) -> dict:
     doc.add_heading("四、关注要点", level=1)
     doc.add_paragraph(notes)
     doc.save(filepath)
+    write_event("report", "report_generated", f"{'复盘' if 'review' in filename else '设备' if 'device' in filename else '模型'}日报已生成: {filename}（{filepath.stat().st_size} bytes）")
 
     return {"path": str(filepath), "filename": filename, "size": filepath.stat().st_size,
             "summary": f"{date_str} 设备在线 {stats['online']}/{stats['total']}（{rate:.0f}%）采集器{collector_str}"}
@@ -365,6 +369,7 @@ async def _gen_model(date_str: str) -> dict:
     doc.add_heading("四、关注要点", level=1)
     doc.add_paragraph(notes)
     doc.save(filepath)
+    write_event("report", "report_generated", f"{'复盘' if 'review' in filename else '设备' if 'device' in filename else '模型'}日报已生成: {filename}（{filepath.stat().st_size} bytes）")
 
     return {"path": str(filepath), "filename": filename, "size": filepath.stat().st_size,
             "summary": f"{date_str} 预报成功 {health.get('successes', 0)}/失败 {health.get('failures', 0)} · 填补 {total_fill} 点"}

@@ -107,7 +107,7 @@ def query_devices(**kwargs) -> dict:
     # 从缓存读最新设备状态
     items = _safe_sync(_get_cached_records(args.station_code, max_age=600))
     device_state = "unknown"
-    device_code = station_names.station_device(args.station_code) or _DEVICE_CODE
+    device_code = station_names.resolve_device_code(args.station_code)
     if items:
         device_code = items[0].get("deviceCode") or device_code
         ps = items[0].get("programState")
@@ -130,7 +130,7 @@ class QueryVideoStatusArgs(BaseModel):
 
 def query_video_status(**kwargs) -> dict:
     args = QueryVideoStatusArgs(**kwargs)
-    device = station_names.station_device(args.station_code) or _DEVICE_CODE
+    device = station_names.resolve_device_code(args.station_code)
     try:
         resp = _safe_sync(aiflow_client.get_camera_info(device))
         cameras = resp.get("data", []) or []

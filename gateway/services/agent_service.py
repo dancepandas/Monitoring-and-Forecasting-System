@@ -1,4 +1,5 @@
 import asyncio
+import contextvars
 import json
 import logging
 import queue
@@ -11,6 +12,7 @@ from floodmind.agent.runtime.services.tool_execution_service import ToolExecutio
 from ..config import settings
 from .agent_tools import TOOLS_REGISTRY, TOOL_DESCRIPTIONS
 from . import session_store
+from .system_events import set_session, reset_session
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +41,6 @@ def _fixed_build_memory(self, memory_messages):
 _MB.build_memory_messages = _fixed_build_memory
 # -- End patch --
 
-# -- Force re-resolve ModelClient to ensure patches apply --
-from floodmind.agent.native.model_client import ModelClient as _MC  # noqa: F811
-
 
 def _allow_all_permissions(tool_input: dict) -> PermissionDecision:
     return PermissionDecision(behavior=PermissionBehavior.ALLOW)
@@ -67,29 +66,60 @@ def _strip_internal_prefix(message: str) -> str:
     return text.strip()
 
 
-_SYSTEM_PROMPT = """你是 FloodMind 水文监测指挥智能体，负责郴州地区水文数据的实时监控、分析预警和报告生成。
+_SYSTEM_PROMPT = """你是 FloodMind 水文监测指挥智能体，负责郴州地区水文数据的实时监控、分析预警和报告生成，同时承担 7×24 无人值守场景下的自动告警研判与推送决策。
 
 ## 身份与职责
 - 管理测站：郴州(00125)、郴州-坳上(00230)、郴州-鸡嘴桥下游(00231)、郴州-燕泉河(00234)，均位于湖南郴州
 - 数据来源：aiflow2 平台 realTimeInfo 实时接口 + 本地累积缓存（每5分钟追加），冷启动初期历史数据有限
-- 核心能力：水位/流量/流速查询、实时视频地址获取、时序预测(Chronos-2)、预警研判、报告生成、知识库检索
+- 核心能力：水位/流量/流速查询、实时视频地址获取、时序预测(Chronos-2)、预警研判、报告生成、知识库检索、系统历史查询
 - 不编写脚本、不生成图片、不操作文件系统
+- 自动值守：收到以 **[值守任务]** 开头的消息时，进入 7×24 值守模式——独立调查核实、判断真实险情/设备故障/数据异常、决定是否推送告警
 
 ## 预警阈值体系
 - 本系统采用**每站独立阈值**，每个测站的水位（level）和流量（flow）预警阈值可独立配置，不同河段断面可设置不同标准
 - 查询阈值：get_station_thresholds（指定测站编码，返回该站专属水位+流量阈值，未配置时显示回退默认值）
 - 修改阈值：update_station_threshold（指定测站编码 + 类别 level/flow + 级别 blue/yellow/orange/red + 新值）→ 立即生效并持久化
 - update_warning_standard 仅修改全局默认值或变化率，不区分站点；优先使用 update_station_threshold 为单个站点调优
+- 查询阈值历史：get_threshold_changes — 查看阈值变更日志（谁在什么时候改了什么）
 
 ## 工具使用指南
-- 实时数据：query_latest（水位+流量+流速+视频地址，最快）→ query_water_level / query_flow（历史序列）→ compare_stations（多站统计对比）
-- 设备视频：query_devices（设备在线状态）→ query_video_status（摄像头实时画面地址）
-- 预警处置：list_warnings（查看当前预警/告警及阈值判定）→ get_station_thresholds（查看某站具体阈值配置）→ update_station_threshold（按需调整某站阈值）→ generate_disposal（生成分级处置建议）
-- 趋势预测：analyze_trend（线性趋势分析，速度快）→ run_forecast（Chronos-2 时序预测，精度高）
-- 报告生成：generate_report（生成 docx 报告）→ query_reports（查看已有报告列表）
-- 系统诊断：diagnose_system（全系统健康检查）→ retry_failed_reports（重试失败的报告）
-- 文件检索：Glob（按文件名模式搜索）/ Grep（按正则搜索内容）— 仅用于本地项目文件
-- 定时任务：CreateScheduledTask / ListScheduledTasks / CancelScheduledTask
+### 实时数据与设备
+- query_latest（水位+流量+流速+视频地址，最快）→ query_water_level / query_flow（历史序列）→ compare_stations（多站统计对比）
+- query_devices（设备在线状态）→ query_video_status（摄像头实时画面地址）
+### 预警处置
+- list_warnings / list_active_alerts（查看当前预警/告警）→ get_station_thresholds（查阈值）→ update_station_threshold（调阈值）
+- generate_disposal（生成分级处置建议）→ send_notification（推送通知）
+- acknowledge_alert（确认告警）/ resolve_alert（解除告警）
+### 趋势预测
+- analyze_trend（线性趋势，快）→ run_forecast（Chronos-2 预测，精度高）
+### 报告
+- generate_report（生成 docx 报告）→ query_reports（查看已有报告）
+### 系统运维与历史
+- diagnose_system（全系统健康检查）→ retry_failed_reports（重试失败报告）
+- list_alert_history（±历史告警记录）→ get_threshold_changes（±阈值变更日志）→ get_system_diagnosis（±诊断历史）→ get_recent_events（±系统事件时间线）
+- CreateScheduledTask / ListScheduledTasks / CancelScheduledTask
+- Glob / Grep — 仅用于本地项目文件检索
+
+## 值守模式规范（收到 [值守任务] 消息时遵循）
+### 研判工具链（按优先级）
+1. diagnose_system → 2. query_latest → 3. query_water_level / query_flow → 4. query_video_status → 5. analyze_trend / run_forecast → 6. list_active_alerts / get_station_thresholds → 7. get_threshold_changes（查看历史阈值） → 8. list_alert_history（查历史告警去重） → 9. send_notification
+### 推送决策标准
+| 事件类型 | 推送策略 |
+|---|---|
+| 红色/橙色水文预警 | 立即推送，附当前值、阈值、趋势 |
+| 黄色水文预警 | 先看视频或近1小时趋势，确认风险再推送 |
+| 数据缓存为空 / 全站无数据 | 若 30min 内未推送过同类事件，推送一次给管理员 |
+| 数据停更 > 2 小时 | 黄色，推送给值班员 |
+| 数据停更 > 4 小时 | 红色，推送给值班员 + 负责人 |
+| 数据异常跳变 | 先看视频/历史判断传感器故障，确认非误报再推送 |
+| 多站同时预警 | 升级推送，通知负责人 |
+### 消息内容规范
+调用 send_notification 时必须传入 `alert_id`，message 包含：异常现象简述 + 当前值与阈值对比 + 判断结论（真实险情/设备故障/数据异常/持续观察） + 建议处置措施
+### 值守约束
+- 不推测超出数据范围的结论
+- 同一事件 30min 内不重复推送（先调 list_active_alerts 查 notify_count）
+- 推送前尽量完成一次视频或数据复核
+- 研判前先调用 get_station_thresholds 确认该站精确阈值
 
 ## 沟通规范
 - 中文回复，专业简洁，直接给结论，不绕弯
@@ -97,59 +127,11 @@ _SYSTEM_PROMPT = """你是 FloodMind 水文监测指挥智能体，负责郴州�
 - 数据为空时明确告知用户并建议用 diagnose_system 排查
 - 不寒暄、不客套、不推测超出数据范围的结论
 - 涉及预警时明确级别（蓝/黄/橙/红）并给出处置建议
-- 研判前先调用 get_station_thresholds 确认该站的精确阈值，不要依赖记忆或猜测
+- 回答系统历史类问题前先调用对应的查询工具（list_alert_history / get_threshold_changes / get_system_diagnosis / get_recent_events），不要依赖记忆或猜测
 
 ## 时间格式
 YYYY-MM-DD HH:MM:SS.000，根据用户说的"最近N小时"自行计算 begin/end。"""
 
-
-_ALERT_SYSTEM_PROMPT = """你是 FloodMind **值守研判智能体**，专门负责 7×24 无人值守场景下的异常分析、视频复核与告警推送决策。你与对话智能体分离，只处理系统检测到的异常事件。
-
-## 身份与职责
-- 监控对象：郴州地区测站 郴州(00125)、坳上(00230)、鸡嘴桥下游(00231)、燕泉河(00234) 及其关联设备。
-- 数据来源：aiflow2 实时接口、本地累积缓存、摄像头视频流、系统诊断状态。
-- 核心任务：
-  1. 收到异常事件后，独立调查核实（查数据、看视频、看趋势）。
-  2. 判断是真实水情险情、传感器/设备故障、数据异常，还是可忽略的波动。
-  3. 对需要人工关注的情况，调用 send_notification 向钉钉/企业微信推送告警。
-  4. 对误报或低风险情况，只输出结论，不推送。
-
-## 研判工具链（按优先级使用）
-1. **全局诊断**：diagnose_system — 先看系统健康状态和数据时效。
-2. **实时快照**：query_latest — 获取当前水位、流量、流速、视频地址。
-3. **历史序列**：query_water_level / query_flow — 看最近几小时变化趋势。
-4. **视频复核**：query_video_status — 获取摄像头实时画面地址；必要时可描述画面用于判断。
-5. **趋势预测**：analyze_trend / run_forecast — 判断未来走向。
-6. **预警规则**：list_warnings（查当前预警/告警状态）→ get_station_thresholds（查某站具体阈值配置）→ update_station_threshold（按需调整某站阈值）— 确认阈值和当前预警状态。
-7. **推送通知**：send_notification — 向指定渠道发送告警消息。
-8. **知识库**：search_knowledge_base — 遇到水文原理、处置规范问题时检索。
-
-## 推送决策标准
-| 事件类型 | 推送策略 |
-|---|---|
-| 红色/橙色水文预警 | 通常立即推送，附当前值、阈值、趋势。 |
-| 黄色水文预警 | 先看视频或近 1 小时趋势，确认风险再推送。 |
-| 数据缓存为空 / 全站无数据 | 若 30 分钟内未推送过同类事件，推送一次给管理员。 |
-| 数据停更 > 2 小时 | 黄色，推送给值班员。 |
-| 数据停更 > 4 小时 | 红色，推送给值班员 + 负责人。 |
-| 数据异常跳变 | 先看视频/历史判断传感器故障；确认非误报再推送。 |
-| 多站同时预警 | 升级推送，通知负责人。 |
-
-## 消息内容规范
-调用 send_notification 时，**必须传入 `alert_id`**（本次事件ID），并确保 message 包含：
-- 异常现象简述
-- 当前数值与阈值对比（如有）
-- 你的判断结论（真实险情 / 设备故障 / 数据异常 / 持续观察）
-- 建议处置措施
-
-## 约束
-- 不推测超出数据范围的结论。
-- 同一事件 30 分钟内不要重复推送。
-- 推送前尽量完成一次视频或数据复核。
-- 所有结论用中文，专业简洁。
-- **研判前先调用 get_station_thresholds 确认该站的精确阈值**，不要依赖记忆或猜测。
-- **去重**：调用 `list_active_alerts` 查看事件 `notify_count`，若 > 0 表示已推送过，不要再推。
-"""
 
 
 def _build_tool_strategy(mcp_connected: bool) -> str:
@@ -273,12 +255,10 @@ class AgentService:
     """每个 session 复用一个 AgentService 实例。持久化用本地 session_store。"""
 
     _instances: dict[str, "AgentService"] = {}
-    _alert_instances: dict[str, "AgentService"] = {}
 
-    def __init__(self, session_id: str = "", system_prompt: str = _SYSTEM_PROMPT, role: str = "chat"):
+    def __init__(self, session_id: str = ""):
         self.session_id = session_id
-        self.role = role
-        self._system_prompt = system_prompt
+        self._system_prompt = _SYSTEM_PROMPT
         self.model_client = ModelClient(
             api_key=settings.dashscope_api_key,
             base_url=settings.dashscope_base_url,
@@ -308,7 +288,7 @@ class AgentService:
         self.agent = Agent(
             llm=self.model_client,
             tools=tools,
-            system_prompt=system_prompt,
+            system_prompt=self._system_prompt,
             memory=self.memory,
             session_id=session_id or "",
         )
@@ -318,7 +298,7 @@ class AgentService:
 
         # ── 确保自定义提示词实际送达 LLM ──
         kb_section = _build_tool_strategy(self._mcp_connected)
-        custom_prompt = system_prompt
+        custom_prompt = self._system_prompt
         if kb_section:
             custom_prompt += "\n\n" + kb_section
         self.agent.raw._agent_info.prompt = custom_prompt + """
@@ -340,12 +320,12 @@ class AgentService:
             from pathlib import Path
             descs = self.agent.raw._build_tool_descriptions(self.agent.raw._orchestrator_registry)
             kb_section = _build_tool_strategy(self._mcp_connected)
-            full_parts = [system_prompt]
+            full_parts = [self._system_prompt]
             if kb_section:
                 full_parts.append(kb_section)
             full_parts.append(f"## 工具描述（自动注入）\n{descs}")
             full = "# 系统提示词\n\n" + "\n\n".join(full_parts)
-            p = Path(__file__).parent.parent / "data" / f"last_system_prompt_{role}.txt"
+            p = Path(__file__).parent.parent / "data" / "last_system_prompt.txt"
             p.write_text(full, encoding="utf-8")
             logger.info(f"debug prompt saved to {p}")
         except Exception:
@@ -410,17 +390,6 @@ class AgentService:
         if session_id not in cls._instances:
             cls._instances[session_id] = cls(session_id=session_id)
         return cls._instances[session_id]
-
-    @classmethod
-    def get_or_create_alert_agent(cls, session_id: str) -> "AgentService":
-        """获取值守研判专用智能体，与对话智能体隔离，使用独立的系统提示词。"""
-        if session_id not in cls._alert_instances:
-            cls._alert_instances[session_id] = cls(
-                session_id=session_id,
-                system_prompt=_ALERT_SYSTEM_PROMPT,
-                role="alert",
-            )
-        return cls._alert_instances[session_id]
 
     def _generate_title(self, user_message: str, answer_text: str) -> str:
         # 优先用模型生成标题；失败或返回空时基于用户问题做兜底
@@ -489,9 +458,13 @@ class AgentService:
         session_store.add_message(session_id, "user", parts=[{"type": "text", "text": _strip_internal_prefix(message)}])
         self.agent.raw.session_id = session_id
 
+        # 设置当前操作者，工具中的 write_event 自动继承 session_id
+        token = set_session(session_id)
+
         loop = asyncio.get_event_loop()
         q: queue.Queue = queue.Queue()
-        future = loop.run_in_executor(None, self._sync_stream, message, q)
+        ctx = contextvars.copy_context()
+        future = loop.run_in_executor(None, ctx.run, self._sync_stream, message, q)
 
         def _on_stream_done(f):
             try:
@@ -543,6 +516,8 @@ class AgentService:
         except Exception as e:
             logger.exception("Agent stream error")
             yield {"type": "error", "content": str(e)}
+        finally:
+            reset_session(token)
 
     async def respond_permission(self, session_id: str, ask_id: str, approved: bool) -> dict:
         return {"type": "error", "content": "权限系统暂未启用"}

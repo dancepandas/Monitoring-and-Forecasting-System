@@ -19,6 +19,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from .system_events import write_event
+
 logger = logging.getLogger(__name__)
 
 _CONFIG_PATH = Path(__file__).parent.parent / "data" / "warning_standards.json"
@@ -244,12 +246,18 @@ def update_station_threshold(station_code: str, category: str, level: str, value
     stations = standards.setdefault("stations", {})
     station_cfg = stations.setdefault(station_code, {})
     cat_cfg = station_cfg.setdefault(category, {})
+    old_val = cat_cfg.get(level, "未设置")
     cat_cfg[level] = float(value)
     station_cfg[category] = cat_cfg
     stations[station_code] = station_cfg
     standards["stations"] = stations
 
     save_standards(standards)
+    write_event("threshold", "threshold_updated",
+        f"站点阈值变更: {station_code} {category}/{level} {old_val} → {value}",
+        station_code=station_code,
+        old_value=json.dumps({category: {level: str(old_val)}}, ensure_ascii=False),
+        new_value=json.dumps({category: {level: str(value)}}, ensure_ascii=False))
     return standards
 
 
@@ -265,8 +273,13 @@ def update_standard(category: str, level: str, value: float) -> dict:
     if not isinstance(cat, dict):
         cat = {}
         standards[category] = cat
+    old_val = cat.get(level, "未设置")
     cat[level] = value
     save_standards(standards)
+    write_event("threshold", "threshold_updated",
+        f"全局默认阈值变更: {category}/{level} {old_val} → {value}",
+        old_value=json.dumps({category: {level: str(old_val)}}, ensure_ascii=False),
+        new_value=json.dumps({category: {level: str(value)}}, ensure_ascii=False))
     return standards
 
 
