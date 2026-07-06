@@ -4,6 +4,7 @@ import json
 import logging
 import queue
 import re
+from typing import Optional
 from floodmind import Agent, ModelClient, build_agent_tool
 from floodmind.agent.runtime.contracts.messages import Message, MessageStore
 from floodmind.agent.runtime.contracts.permissions import PermissionBehavior, PermissionDecision
