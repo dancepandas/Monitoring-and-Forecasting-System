@@ -140,3 +140,81 @@ def compute_vertex_colors(heights, water_mask):
     colors = COLOR_LOW * (1 - t) + COLOR_HIGH * t  # [H,W,3]
     colors[water_mask] = COLOR_WATER
     return colors.astype(np.uint8)
+
+
+def build_mesh(heights, colors, aoi, exaggeration):
+    """构建 trimesh。顶点 (x=经度-中心, y=纬度-中心, z=高程×夸张)。
+    行0=北 → 翻转 y 使纬度增大方向为 +y。"""
+    import trimesh
+    H, W = heights.shape
+    cx = (aoi['west'] + aoi['east']) / 2
+    cy = (aoi['south'] + aoi['north']) / 2
+    lon = np.linspace(aoi['west'], aoi['east'], W) - cx
+    lat = np.linspace(aoi['north'], aoi['south'], H) - cy  # 行0=北(lat大)
+    gx, gy = np.meshgrid(lon, lat)  # [H,W]
+    z = np.where(np.isfinite(heights), heights, 0.0) * exaggeration
+    # 3×3 均值平滑让山势更顺 (numpy, 兼容 float)
+    zp = np.pad(z, 1, mode='edge')
+    z = (zp[:-2, :-2] + zp[:-2, 1:-1] + zp[:-2, 2:] +
+         zp[1:-1, :-2] + zp[1:-1, 1:-1] + zp[1:-1, 2:] +
+         zp[2:, :-2] + zp[2:, 1:-1] + zp[2:, 2:]) / 9.0
+    verts = np.stack([gx, gy, z], axis=-1).reshape(-1, 3).astype(np.float32)
+    vert_colors = colors.reshape(-1, 3)
+    # 面: 每 cell 2 三角形
+    faces = []
+    for r in range(H - 1):
+        base = r * W
+        base_next = (r + 1) * W
+        c0 = np.arange(W - 1)
+        v00 = base + c0
+        v01 = base + c0 + 1
+        v10 = base_next + c0
+        v11 = base_next + c0 + 1
+        t1 = np.stack([v00, v10, v11], axis=1)
+        t2 = np.stack([v00, v11, v01], axis=1)
+        faces.append(t1); faces.append(t2)
+    faces = np.vstack(faces).astype(np.int32)
+    mesh = trimesh.Trimesh(vertices=verts, faces=faces, vertex_colors=vert_colors, process=False)
+    return mesh
+
+
+def write_meta(path, aoi, grid_size, exaggeration, heights):
+    """写 meta JSON。heights 顶点高度数组(未夸张, 米)供前端查站点贴地高度。"""
+    meta = {
+        'west': aoi['west'], 'east': aoi['east'],
+        'south': aoi['south'], 'north': aoi['north'],
+        'center_lon': (aoi['west'] + aoi['east']) / 2,
+        'center_lat': (aoi['south'] + aoi['north']) / 2,
+        'grid_size': grid_size,
+        'exaggeration': exaggeration,
+        'heights_meters': np.where(np.isfinite(heights), heights, 0.0).round(2).tolist(),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(meta, f)
+
+
+def main():
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    print('[1/5] 读 DEM mosaic ...')
+    mosaic, mb = load_dem_mosaic()
+    print('[2/5] 裁剪 AOI + 降采样 ...')
+    aoi_arr = crop_aoi(mosaic, mb, AOI)
+    heights = downsample(aoi_arr, GRID_SIZE)
+    print(f'      高程 {np.nanmin(heights):.0f}~{np.nanmax(heights):.0f} m')
+    print('[3/5] 光栅化水系 ...')
+    water_mask = rasterize_waterways(GRID_SIZE, AOI)
+    print(f'      河道顶点 {int(water_mask.sum())} 个')
+    print('[4/5] 顶点着色 + 构建 mesh + 导出 GLB ...')
+    colors = compute_vertex_colors(heights, water_mask)
+    mesh = build_mesh(heights, colors, AOI, EXAGGERATION)
+    mesh.export(str(OUT_GLB))
+    print(f'      导出 {OUT_GLB} ({OUT_GLB.stat().st_size/1024/1024:.1f} MB)')
+    print('[5/5] 写 meta ...')
+    write_meta(OUT_META, AOI, GRID_SIZE, EXAGGERATION, heights)
+    print(f'      {OUT_META} ({OUT_META.stat().st_size/1024/1024:.1f} MB)')
+    print('完成')
+
+
+if __name__ == '__main__':
+    main()
