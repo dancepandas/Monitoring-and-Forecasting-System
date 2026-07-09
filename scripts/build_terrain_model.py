@@ -149,16 +149,21 @@ def build_mesh(heights, colors, aoi, exaggeration):
     H, W = heights.shape
     cx = (aoi['west'] + aoi['east']) / 2
     cy = (aoi['south'] + aoi['north']) / 2
-    lon = np.linspace(aoi['west'], aoi['east'], W) - cx
-    lat = np.linspace(aoi['north'], aoi['south'], H) - cy  # 行0=北(lat大)
+    cos_lat = np.cos(np.radians(cy))
+    M_PER_DEG = 111320.0
+    lon = np.linspace(aoi['west'], aoi['east'], W)
+    lat = np.linspace(aoi['north'], aoi['south'], H)  # 行0=北
     gx, gy = np.meshgrid(lon, lat)  # [H,W]
+    # XY 统一成米 (与 Z 米同单位), 否则模型相对水平被极度拉伸
+    x = (gx - cx) * M_PER_DEG * cos_lat
+    y = (gy - cy) * M_PER_DEG
     z = np.where(np.isfinite(heights), heights, 0.0) * exaggeration
     # 3×3 均值平滑让山势更顺 (numpy, 兼容 float)
     zp = np.pad(z, 1, mode='edge')
     z = (zp[:-2, :-2] + zp[:-2, 1:-1] + zp[:-2, 2:] +
          zp[1:-1, :-2] + zp[1:-1, 1:-1] + zp[1:-1, 2:] +
          zp[2:, :-2] + zp[2:, 1:-1] + zp[2:, 2:]) / 9.0
-    verts = np.stack([gx, gy, z], axis=-1).reshape(-1, 3).astype(np.float32)
+    verts = np.stack([x, y, z], axis=-1).reshape(-1, 3).astype(np.float32)
     vert_colors = colors.reshape(-1, 3)
     # 面: 每 cell 2 三角形
     faces = []
