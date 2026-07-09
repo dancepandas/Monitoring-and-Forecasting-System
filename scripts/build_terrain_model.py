@@ -71,3 +71,72 @@ def downsample(arr, size):
     img = Image.fromarray(arr.astype(np.float32), mode='F')
     img = img.resize((size, size), Image.NEAREST)
     return np.array(img, dtype=np.float32)
+
+
+def _line_cells(x0, y0, x1, y1):
+    """Bresenham, 返回 (x0,y0)->(x1,y1) 经过的网格单元列表。"""
+    cells = []
+    dx = abs(x1 - x0); dy = abs(y1 - y0)
+    sx = 1 if x0 < x1 else -1
+    sy = 1 if y0 < y1 else -1
+    err = dx - dy
+    x, y = x0, y0
+    while True:
+        cells.append((x, y))
+        if x == x1 and y == y1:
+            break
+        e2 = 2 * err
+        if e2 > -dy:
+            err -= dy; x += sx
+        if e2 < dx:
+            err += dx; y += sy
+    return cells
+
+
+def rasterize_waterways(grid_size, aoi):
+    """OSM 水系 LineString 光栅化到 grid_size×grid_size mask。
+    返回 bool[H,W] (行0=北)。河道膨胀 1 邻域防止细河断线。"""
+    mask = np.zeros((grid_size, grid_size), dtype=bool)
+    with open(WATER_GEOJSON, encoding='utf-8') as f:
+        gj = json.load(f)
+    lon_span = aoi['east'] - aoi['west']
+    lat_span = aoi['north'] - aoi['south']
+    for feat in gj.get('features', []):
+        geom = feat.get('geometry') or {}
+        if geom.get('type') != 'LineString':
+            continue
+        coords = geom['coordinates']
+        prev = None
+        for lonlat in coords:
+            lon, lat = lonlat[0], lonlat[1]
+            if not (aoi['west'] <= lon <= aoi['east'] and aoi['south'] <= lat <= aoi['north']):
+                prev = None
+                continue
+            # 经纬度 → 网格 (行0=北)
+            gx = int((lon - aoi['west']) / lon_span * (grid_size - 1))
+            gy = int((aoi['north'] - lat) / lat_span * (grid_size - 1))
+            if prev is not None:
+                for cx, cy in _line_cells(prev[0], prev[1], gx, gy):
+                    if 0 <= cx < grid_size and 0 <= cy < grid_size:
+                        mask[cy, cx] = True
+            prev = (gx, gy)
+    # 膨胀 1 像素 (4 邻域) 让细河连续
+    dilated = mask.copy()
+    dilated[1:, :] |= mask[:-1, :]
+    dilated[:-1, :] |= mask[1:, :]
+    dilated[:, 1:] |= mask[:, :-1]
+    dilated[:, :-1] |= mask[:, 1:]
+    return dilated
+
+
+def compute_vertex_colors(heights, water_mask):
+    """高程渐变 + 河道蓝。heights[H,W] 米, water_mask[H,W] bool。
+    返回 uint8[H,W,3] RGB。"""
+    h_min = float(np.nanmin(heights))
+    h_max = float(np.nanmax(heights))
+    rng = max(h_max - h_min, 1.0)
+    t = np.clip((heights - h_min) / rng, 0, 1)  # [H,W] 0~1
+    t = t[..., None]  # [H,W,1]
+    colors = COLOR_LOW * (1 - t) + COLOR_HIGH * t  # [H,W,3]
+    colors[water_mask] = COLOR_WATER
+    return colors.astype(np.uint8)
