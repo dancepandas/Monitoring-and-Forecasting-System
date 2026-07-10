@@ -5,6 +5,9 @@
       光栅化水系 → 顶点着色(高程渐变+河道蓝) → trimesh 导出 GLB + meta。
 """
 import json
+import shutil
+import subprocess
+import sys
 import numpy as np
 from PIL import Image
 from pathlib import Path
@@ -199,6 +202,27 @@ def write_meta(path, aoi, grid_size, exaggeration, heights):
         json.dump(meta, f)
 
 
+def compress_glb(input_path, output_path):
+    """使用 gltf-transform CLI 对 GLB 进行 Draco 压缩。"""
+    gltf_transform = shutil.which('gltf-transform') or str(ROOT / 'web' / 'node_modules' / '.bin' / 'gltf-transform')
+    # Windows 下 .bin 入口是 shell 脚本，实际可执行的是 .cmd
+    if sys.platform == 'win32':
+        cmd_path = Path(gltf_transform).with_suffix('.cmd')
+        if cmd_path.exists():
+            gltf_transform = str(cmd_path)
+    if not Path(gltf_transform).exists() and not shutil.which('gltf-transform'):
+        raise RuntimeError(
+            '未找到 gltf-transform CLI。请先运行: cd web && npm install --save-dev @gltf-transform/cli'
+        )
+    cmd = [
+        gltf_transform, 'optimize',
+        str(input_path), str(output_path),
+        '--compress', 'draco',
+    ]
+    subprocess.run(cmd, check=True)
+    print(f'      Draco 压缩完成: {output_path} ({Path(output_path).stat().st_size/1024/1024:.1f} MB)')
+
+
 def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     print('[1/5] 读 DEM mosaic ...')
@@ -213,7 +237,10 @@ def main():
     print('[4/5] 顶点着色 + 构建 mesh + 导出 GLB ...')
     colors = compute_vertex_colors(heights, water_mask)
     mesh = build_mesh(heights, colors, AOI, EXAGGERATION)
-    mesh.export(str(OUT_GLB))
+    raw_glb = OUT_GLB.with_suffix('.raw.glb')
+    mesh.export(str(raw_glb))
+    compress_glb(raw_glb, OUT_GLB)
+    raw_glb.unlink(missing_ok=True)
     print(f'      导出 {OUT_GLB} ({OUT_GLB.stat().st_size/1024/1024:.1f} MB)')
     print('[5/5] 写 meta ...')
     write_meta(OUT_META, AOI, GRID_SIZE, EXAGGERATION, heights)

@@ -1,4 +1,5 @@
 import numpy as np
+from pathlib import Path
 from build_terrain_model import (
     load_dem_mosaic, crop_aoi, downsample, AOI,
     rasterize_waterways, compute_vertex_colors, GRID_SIZE,
@@ -45,3 +46,10 @@ def test_compute_vertex_colors():
     assert tuple(colors[0, 0]) == (0x3b, 0x82, 0xf6)
     # 低处比高处暗 (R 通道)
     assert colors[0, 1, 0] <= colors[1, 1, 0]
+
+
+def test_terrain_glb_exists_and_small():
+    glb = Path(__file__).resolve().parent.parent / 'web' / 'public' / 'models' / 'terrain.glb'
+    assert glb.exists(), 'terrain.glb 未生成'
+    mb = glb.stat().st_size / 1024 / 1024
+    assert mb < 10, f'terrain.glb 体积 {mb:.1f}MB，超过 10MB 目标'
