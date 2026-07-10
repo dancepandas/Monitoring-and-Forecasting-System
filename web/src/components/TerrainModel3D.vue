@@ -13,6 +13,7 @@ import { api, ALL_STATION_CODES } from '../api'
 
 const container = ref(null)
 let renderer, scene, camera, controls, model, animateId
+let dracoLoader = null
 let meta = null
 const stationGroups = []
 const stationDataSprites = {}
@@ -176,7 +177,7 @@ onMounted(() => {
   controls.target.set(0, 0, MODEL_Z)
   controls.update()
 
-  const dracoLoader = new DRACOLoader()
+  dracoLoader = new DRACOLoader()
   dracoLoader.setDecoderPath('/draco/')
   const loader = new GLTFLoader()
   loader.setDRACOLoader(dracoLoader)
@@ -198,12 +199,17 @@ onMounted(() => {
       })
       scene.add(model)
       fitCameraToModel(model)
-      const resp = await fetch('/models/terrain_meta.json')
-      meta = await resp.json()
-      buildStations()
-      fetchAndUpdateData()
-      dataTimer = setInterval(fetchAndUpdateData, 60000)
-      console.log('[Terrain3D] 模型+站点就绪, 站点', stationGroups.length)
+      try {
+        const resp = await fetch('/models/terrain_meta.json')
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+        meta = await resp.json()
+        buildStations()
+        fetchAndUpdateData()
+        dataTimer = setInterval(fetchAndUpdateData, 60000)
+        console.log('[Terrain3D] 模型+站点就绪, 站点', stationGroups.length)
+      } catch (e) {
+        console.error('[Terrain3D] 元数据加载失败:', e.message)
+      }
     },
     undefined,
     (err) => console.error('[Terrain3D] 模型加载失败:', err)
@@ -232,6 +238,7 @@ onUnmounted(() => {
   if (dataTimer) clearInterval(dataTimer)
   if (animateId) cancelAnimationFrame(animateId)
   if (controls) controls.dispose()
+  if (dracoLoader) dracoLoader.dispose()
   if (renderer) { renderer.dispose(); renderer.domElement.remove() }
 })
 </script>
