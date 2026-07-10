@@ -10,7 +10,9 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { STATIONS } from '../stations'
 import { api, ALL_STATION_CODES } from '../api'
+import { useRotationStore } from '../store/rotation'
 
+const rotation = useRotationStore()
 const container = ref(null)
 let renderer, scene, camera, controls, model, animateId
 let dracoLoader = null
@@ -20,6 +22,8 @@ const stationDataSprites = {}
 const stationPulseMeshes = {}
 const stationPillars = {}
 let dataTimer = null
+let onPointerMoveHandler = null
+let onClickHandler = null
 const MODEL_Z = 15500
 
 function lonlatToModel(lon, lat) {
@@ -192,6 +196,46 @@ function buildStations() {
   })
 }
 
+function getAlertLevel(level, warning, danger) {
+  if (danger != null && level >= danger) return 2
+  if (warning != null && level >= warning) return 1
+  return 0
+}
+
+function setStationAlert(code, level) {
+  const p = stationPulseMeshes[code]
+  const pillar = stationPillars[code]
+  if (!p) return
+  if (level === 2) {
+    p.frames = pulseTexturesRed
+    p.interval = 0.25
+    if (pillar) pillar.material.color.setHex(0xEF4444)
+  } else if (level === 1) {
+    p.frames = pulseTexturesOrange
+    p.interval = 0.40
+    if (pillar) pillar.material.color.setHex(0xF97316)
+  } else {
+    p.frames = pulseTexturesCyan
+    p.interval = 0.60
+    if (pillar) pillar.material.color.setHex(0xFFFFFF)
+  }
+  p.mesh.material.map = p.frames[p.frame]
+}
+
+function flashSprite(sprite) {
+  let t = 0
+  const duration = 0.3
+  const baseOpacity = sprite.material.opacity
+  function step() {
+    t += 0.016
+    const p = Math.sin((t / duration) * Math.PI)
+    sprite.material.opacity = baseOpacity + p * 0.4
+    if (t < duration) requestAnimationFrame(step)
+    else sprite.material.opacity = baseOpacity
+  }
+  step()
+}
+
 async function fetchAndUpdateData() {
   try {
     const data = await api.getLatest(ALL_STATION_CODES)
@@ -201,14 +245,21 @@ async function fetchAndUpdateData() {
       if (!sprites) continue
       const wl = item.water_level ?? item.waterLevel
       const flow = item.virtual_flow ?? item.virtualFlow ?? item.water_flow ?? item.waterFlow
+      const warning = item.warning_level ?? item.warningLevel
+      const danger = item.danger_level ?? item.dangerLevel
+      const alert = getAlertLevel(wl ?? -Infinity, warning, danger)
+
       if (wl != null) {
-        sprites.level.material.map = makeDataTexture('水位', Number(wl).toFixed(2), 'm', 0)
+        sprites.level.material.map = makeDataTexture('水位', Number(wl).toFixed(2), 'm', alert)
         sprites.level.material.needsUpdate = true
+        flashSprite(sprites.level)
       }
       if (flow != null) {
-        sprites.flow.material.map = makeDataTexture('流量', Number(flow).toFixed(0), 'm³/s', 0)
+        sprites.flow.material.map = makeDataTexture('流量', Number(flow).toFixed(0), 'm³/s', alert)
         sprites.flow.material.needsUpdate = true
+        flashSprite(sprites.flow)
       }
+      setStationAlert(item.station_code, alert)
     }
   } catch (e) {
     console.warn('[Terrain3D] 站点数据获取失败:', e.message)
@@ -256,6 +307,55 @@ onMounted(() => {
   controls.autoRotateSpeed = 0.4
   controls.target.set(0, 0, MODEL_Z)
   controls.update()
+
+  const raycaster = new THREE.Raycaster()
+  const pointer = new THREE.Vector2()
+  let hoveredCode = null
+  let resumeTimer = null
+
+  function setStationHover(code, hovered) {
+    const pillar = stationPillars[code]
+    if (pillar) pillar.material.opacity = hovered ? 0.95 : 0.75
+  }
+
+  function onPointerMove(e) {
+    const rect = renderer.domElement.getBoundingClientRect()
+    pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+    pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+    raycaster.setFromCamera(pointer, camera)
+    const targets = []
+    stationGroups.forEach(g => g.children.forEach(c => targets.push(c)))
+    const hits = raycaster.intersectObjects(targets, false)
+    const newCode = hits.length > 0 ? hits[0].object.parent?.userData?.code : null
+    if (newCode !== hoveredCode) {
+      if (hoveredCode) setStationHover(hoveredCode, false)
+      hoveredCode = newCode
+      if (hoveredCode) setStationHover(hoveredCode, true)
+      renderer.domElement.style.cursor = hoveredCode ? 'pointer' : 'default'
+    }
+  }
+
+  function onClick(e) {
+    if (!hoveredCode) return
+    rotation.pinStation(hoveredCode)
+    controls.autoRotate = false
+    clearTimeout(resumeTimer)
+    resumeTimer = setTimeout(() => { controls.autoRotate = true }, 8000)
+  }
+
+  onPointerMoveHandler = onPointerMove
+  onClickHandler = onClick
+  renderer.domElement.addEventListener('pointermove', onPointerMoveHandler)
+  renderer.domElement.addEventListener('click', onClickHandler)
+
+  controls.addEventListener('start', () => {
+    controls.autoRotate = false
+    clearTimeout(resumeTimer)
+  })
+  controls.addEventListener('end', () => {
+    clearTimeout(resumeTimer)
+    resumeTimer = setTimeout(() => { controls.autoRotate = true }, 3000)
+  })
 
   dracoLoader = new DRACOLoader()
   dracoLoader.setDecoderPath('/draco/')
@@ -323,6 +423,10 @@ function onResize() {
 
 onUnmounted(() => {
   window.removeEventListener('resize', onResize)
+  if (renderer?.domElement) {
+    renderer.domElement.removeEventListener('pointermove', onPointerMoveHandler)
+    renderer.domElement.removeEventListener('click', onClickHandler)
+  }
   if (dataTimer) clearInterval(dataTimer)
   if (animateId) cancelAnimationFrame(animateId)
   if (controls) controls.dispose()
