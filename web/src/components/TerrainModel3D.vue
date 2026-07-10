@@ -204,7 +204,6 @@ onMounted(() => {
         }
       })
       scene.add(model)
-      fitCameraToModel(model)
       try {
         const resp = await fetch('/models/terrain_meta.json')
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
