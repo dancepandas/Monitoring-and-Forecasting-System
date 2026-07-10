@@ -41,7 +41,7 @@ function fitCameraToModel(obj) {
   const sphere = new THREE.Sphere()
   box.getBoundingSphere(sphere)
   const target = new THREE.Vector3(0, 0, MODEL_Z)
-  const dir = new THREE.Vector3(-12000, 18000, 32000).sub(target).normalize()
+  const dir = new THREE.Vector3(-25000, 35000, 45000).sub(target).normalize()
   const fovRad = (camera.fov * Math.PI) / 180
   const distance = (sphere.radius / Math.sin(fovRad / 2)) * 1.12
   camera.position.copy(target).add(dir.multiplyScalar(distance))
