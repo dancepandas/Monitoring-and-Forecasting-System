@@ -1,5 +1,10 @@
 <template>
-  <div ref="container" class="terrain-bg"></div>
+  <div ref="container" class="terrain-bg">
+    <div v-if="isLoading" class="terrain-loading">
+      <span class="terrain-loading-spinner"></span>
+      <span class="terrain-loading-text">加载 3D 地形模型...</span>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -14,6 +19,7 @@ import { useRotationStore } from '../store/rotation'
 
 const rotation = useRotationStore()
 const container = ref(null)
+const isLoading = ref(true)
 let renderer, scene, camera, controls, model, animateId
 let dracoLoader = null
 let meta = null
@@ -388,6 +394,7 @@ onMounted(() => {
   loader.setDRACOLoader(dracoLoader)
   loader.load('/models/terrain.glb',
     async (gltf) => {
+      isLoading.value = false
       model = gltf.scene
       model.scale.set(1.15, 1.15, 0.22)
       model.position.z = MODEL_Z
@@ -415,7 +422,10 @@ onMounted(() => {
       }
     },
     undefined,
-    (err) => console.error('[Terrain3D] 模型加载失败:', err)
+    (err) => {
+      isLoading.value = false
+      console.error('[Terrain3D] 模型加载失败:', err)
+    }
   )
 
   const animate = () => {
@@ -469,5 +479,38 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.terrain-bg { width: 100%; height: 100%; }
+.terrain-bg { width: 100%; height: 100%; position: relative; }
+
+.terrain-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #06141D;
+  color: #94A3B8;
+  font-family: var(--sans);
+  font-size: 13px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.terrain-loading-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(148, 163, 184, 0.25);
+  border-top-color: #22D3EE;
+  border-radius: 50%;
+  animation: terrain-spin 0.9s linear infinite;
+}
+
+.terrain-loading-text {
+  letter-spacing: 0.02em;
+}
+
+@keyframes terrain-spin {
+  to { transform: rotate(360deg); }
+}
 </style>

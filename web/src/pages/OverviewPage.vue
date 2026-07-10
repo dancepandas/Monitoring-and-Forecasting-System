@@ -283,6 +283,22 @@ function openDrawer(w) {
 }
 function closeDrawer() { drawerVisible.value = false }
 
+watch(() => rotation.mode, (mode) => {
+  if (mode === 'pinned') {
+    const st = rotation.current
+    drawerStation.value = {
+      name: st.name,
+      code: st.code,
+      level: '',
+      flow: '',
+      status: '—',
+      badgeClass: '',
+      detail: '',
+    }
+    drawerVisible.value = true
+  }
+})
+
 function renderMessage(text) {
   if (!text) return ''
   return text
