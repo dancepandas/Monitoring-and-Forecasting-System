@@ -150,30 +150,37 @@ onMounted(() => {
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.setSize(w, h)
-  renderer.setClearColor(0xFFFFFF, 1)
+  renderer.setClearColor(0x06141D, 1)
   el.appendChild(renderer.domElement)
 
   scene = new THREE.Scene()
-  scene.background = new THREE.Color('#FFFFFF')
+  scene.background = new THREE.Color('#06141D')
+  scene.fog = new THREE.Fog('#06141D', 25000, 90000)
 
   camera = new THREE.PerspectiveCamera(45, w / h, 1, 200000)
   camera.up.set(0, 0, 1)
-  camera.position.set(-12000, 18000, 32000)
+  camera.position.set(-25000, 35000, 45000)
 
-  scene.add(new THREE.AmbientLight(0xffffff, 2.0))
-  const dir = new THREE.DirectionalLight(0xffffff, 2.8)
+  scene.add(new THREE.AmbientLight(0x335566, 0.5))
+  const dir = new THREE.DirectionalLight(0xaaccdd, 0.9)
   dir.position.set(30000, -40000, 50000)
   scene.add(dir)
-  const fill = new THREE.DirectionalLight(0xDBEAFE, 1.0)
+  const fill = new THREE.DirectionalLight(0x1e3a4c, 0.3)
   fill.position.set(-30000, 30000, 20000)
   scene.add(fill)
-  scene.add(new THREE.HemisphereLight(0xFFFFFF, 0xE2E8F0, 1.0))
 
   controls = new OrbitControls(camera, renderer.domElement)
-  controls.enableDamping = false
-  controls.enableRotate = false
-  controls.enableZoom = false
-  controls.enablePan = false
+  controls.enableDamping = true
+  controls.dampingFactor = 0.06
+  controls.enableRotate = true
+  controls.enableZoom = true
+  controls.enablePan = true
+  controls.minPolarAngle = 0
+  controls.maxPolarAngle = Math.PI / 2.2
+  controls.minDistance = 8000
+  controls.maxDistance = 70000
+  controls.autoRotate = true
+  controls.autoRotateSpeed = 0.4
   controls.target.set(0, 0, MODEL_Z)
   controls.update()
 
@@ -190,10 +197,9 @@ onMounted(() => {
         if (child.isMesh) {
           child.material = new THREE.MeshStandardMaterial({
             vertexColors: true,
-            roughness: 0.82,
-            metalness: 0.04,
-            emissive: 0x94A3B8,
-            emissiveIntensity: 0.06,
+            roughness: 0.6,
+            metalness: 0.08,
+            emissive: 0x000000,
           })
         }
       })
