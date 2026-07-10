@@ -17,6 +17,8 @@ let dracoLoader = null
 let meta = null
 const stationGroups = []
 const stationDataSprites = {}
+const stationPulseMeshes = {}
+const stationPillars = {}
 let dataTimer = null
 const MODEL_Z = 15500
 
@@ -49,27 +51,71 @@ function fitCameraToModel(obj) {
   controls.update()
 }
 
-function makeLabelTexture(text) {
+function makeGradientPillarTexture() {
   const c = document.createElement('canvas')
-  c.width = 360; c.height = 90
+  c.width = 64; c.height = 512
   const ctx = c.getContext('2d')
-  ctx.font = 'bold 40px "Roboto", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif'
-  ctx.fillStyle = '#0F172A'
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.fillText(text, 180, 45)
+  const grad = ctx.createLinearGradient(0, c.height, 0, 0)
+  grad.addColorStop(0, 'rgba(34, 211, 238, 0.20)')
+  grad.addColorStop(1, 'rgba(103, 232, 249, 0.90)')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, c.width, c.height)
   const tex = new THREE.CanvasTexture(c)
   tex.minFilter = THREE.LinearFilter
   return tex
 }
 
-function makeDataTexture(text) {
+const pillarTexture = makeGradientPillarTexture()
+
+function makePulseTextures(color = 'rgba(34, 211, 238, 0.8)') {
+  const frames = []
+  const size = 128
+  for (let f = 0; f < 8; f++) {
+    const c = document.createElement('canvas')
+    c.width = size; c.height = size
+    const ctx = c.getContext('2d')
+    const r = (f / 7) * (size / 2 - 6) + 6
+    ctx.clearRect(0, 0, size, size)
+    ctx.beginPath()
+    ctx.arc(size/2, size/2, r, 0, Math.PI * 2)
+    ctx.lineWidth = 4
+    ctx.strokeStyle = color
+    ctx.stroke()
+    const tex = new THREE.CanvasTexture(c)
+    tex.minFilter = THREE.LinearFilter
+    frames.push(tex)
+  }
+  return frames
+}
+
+const pulseTexturesCyan = makePulseTextures('rgba(34, 211, 238, 0.8)')
+const pulseTexturesOrange = makePulseTextures('rgba(249, 115, 22, 0.8)')
+const pulseTexturesRed = makePulseTextures('rgba(239, 68, 68, 0.8)')
+
+function makeNameTexture(name) {
   const c = document.createElement('canvas')
-  c.width = 380; c.height = 54
+  c.width = 360; c.height = 90
+  const ctx = c.getContext('2d')
+  ctx.font = 'bold 40px "Roboto", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif'
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.strokeStyle = '#020D14'; ctx.lineWidth = 6
+  ctx.strokeText(name, 180, 45)
+  ctx.fillStyle = '#E0FBFC'
+  ctx.fillText(name, 180, 45)
+  const tex = new THREE.CanvasTexture(c)
+  tex.minFilter = THREE.LinearFilter
+  return tex
+}
+
+function makeDataTexture(label, value, unit, alert = 0) {
+  const c = document.createElement('canvas')
+  c.width = 420; c.height = 54
   const ctx = c.getContext('2d')
   ctx.font = '600 28px "Roboto", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif'
-  ctx.fillStyle = '#1E293B'
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.fillText(text, 190, 27)
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
+  const color = alert === 2 ? '#EF4444' : alert === 1 ? '#F97316' : '#E0FBFC'
+  ctx.fillStyle = color
+  ctx.fillText(`${label}: ${value} ${unit}`, 10, 27)
   const tex = new THREE.CanvasTexture(c)
   tex.minFilter = THREE.LinearFilter
   return tex
@@ -81,40 +127,66 @@ function buildStations() {
     const z = heightAt(s.lon, s.lat) + MODEL_Z
     const g = new THREE.Group()
     g.position.set(x, y, z)
-    g.userData = { code: s.code }
+    g.userData = { code: s.code, name: s.name }
 
+    // 脉冲底座环
+    const pulse = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: pulseTexturesCyan[0],
+      transparent: true,
+      opacity: 0.9,
+      depthTest: false,
+    }))
+    pulse.scale.set(2400, 2400, 1)
+    pulse.position.set(0, 0, -50)
+    g.add(pulse)
+    stationPulseMeshes[s.code] = { mesh: pulse, frames: pulseTexturesCyan, frame: 0, interval: 0.6 }
+
+    // 渐变光柱
     const pillarH = 1800
     const pillar = new THREE.Mesh(
-      new THREE.CylinderGeometry(70, 70, pillarH, 8),
-      new THREE.MeshBasicMaterial({ color: 0x2563EB, transparent: true, opacity: 0.85 })
+      new THREE.CylinderGeometry(60, 60, pillarH, 16, 1, true),
+      new THREE.MeshBasicMaterial({
+        map: pillarTexture,
+        transparent: true,
+        opacity: 0.75,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      })
     )
     pillar.rotation.x = Math.PI / 2
     pillar.position.set(0, 0, pillarH / 2)
     g.add(pillar)
+    stationPillars[s.code] = pillar
 
+    // 顶部光球
     const top = new THREE.Mesh(
-      new THREE.SphereGeometry(180, 12, 12),
-      new THREE.MeshBasicMaterial({ color: 0x3B82F6 })
+      new THREE.SphereGeometry(160, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0x67E8F9 })
     )
     top.position.set(0, 0, pillarH)
     g.add(top)
 
-    const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeLabelTexture(s.name.split('-').pop()) }))
-    label.position.set(0, 0, pillarH + 320)
+    // 站名标签
+    const label = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeNameTexture(s.name.split('-').pop()),
+      transparent: true,
+    }))
+    label.position.set(0, 0, pillarH + 350)
     label.scale.set(3000, 750, 1)
     g.add(label)
 
-    const dataLevel = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeDataTexture('水位: -- m') }))
-    dataLevel.position.set(0, 0, pillarH + 800)
-    dataLevel.scale.set(3000, 425, 1)
-    g.add(dataLevel)
+    // 数据飘带
+    const level = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeDataTexture('水位', '--', 'm'), transparent: true }))
+    level.position.set(0, 0, pillarH + 750)
+    level.scale.set(3000, 385, 1)
+    g.add(level)
 
-    const dataFlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeDataTexture('流量: -- m³/s') }))
-    dataFlow.position.set(0, 0, pillarH + 1120)
-    dataFlow.scale.set(3000, 425, 1)
-    g.add(dataFlow)
+    const flow = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeDataTexture('流量', '--', 'm³/s'), transparent: true }))
+    flow.position.set(0, 0, pillarH + 1080)
+    flow.scale.set(3000, 385, 1)
+    g.add(flow)
 
-    stationDataSprites[s.code] = { level: dataLevel, flow: dataFlow }
+    stationDataSprites[s.code] = { level, flow }
     scene.add(g)
     stationGroups.push(g)
   })
@@ -130,11 +202,11 @@ async function fetchAndUpdateData() {
       const wl = item.water_level ?? item.waterLevel
       const flow = item.virtual_flow ?? item.virtualFlow ?? item.water_flow ?? item.waterFlow
       if (wl != null) {
-        sprites.level.material.map = makeDataTexture(`水位: ${Number(wl).toFixed(2)} m`)
+        sprites.level.material.map = makeDataTexture('水位', Number(wl).toFixed(2), 'm', 0)
         sprites.level.material.needsUpdate = true
       }
       if (flow != null) {
-        sprites.flow.material.map = makeDataTexture(`流量: ${Number(flow).toFixed(0)} m³/s`)
+        sprites.flow.material.map = makeDataTexture('流量', Number(flow).toFixed(0), 'm³/s', 0)
         sprites.flow.material.needsUpdate = true
       }
     }
@@ -144,6 +216,7 @@ async function fetchAndUpdateData() {
 }
 
 onMounted(() => {
+  const clock = new THREE.Clock()
   const el = container.value
   const w = el.clientWidth, h = el.clientHeight
 
@@ -222,6 +295,16 @@ onMounted(() => {
 
   const animate = () => {
     animateId = requestAnimationFrame(animate)
+    const dt = clock.getDelta()
+    Object.values(stationPulseMeshes).forEach((p) => {
+      p.timer = (p.timer || 0) + dt
+      if (p.timer >= p.interval) {
+        p.timer = 0
+        p.frame = (p.frame + 1) % p.frames.length
+        p.mesh.material.map = p.frames[p.frame]
+        p.mesh.material.needsUpdate = true
+      }
+    })
     controls.update()
     renderer.render(scene, camera)
   }
