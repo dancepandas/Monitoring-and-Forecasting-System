@@ -59,6 +59,15 @@ function fitCameraToModel(obj) {
   controls.update()
 }
 
+function flyToOverview() {
+  if (!camera || !controls) return
+  camera.position.set(-25000, 35000, 45000)
+  controls.target.set(0, 0, MODEL_Z)
+  controls.update()
+}
+
+defineExpose({ flyToOverview })
+
 function makeGradientPillarTexture() {
   const c = document.createElement('canvas')
   c.width = 64; c.height = 512
