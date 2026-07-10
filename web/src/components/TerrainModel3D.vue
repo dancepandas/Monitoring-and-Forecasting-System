@@ -22,8 +22,12 @@ const stationDataSprites = {}
 const stationPulseMeshes = {}
 const stationPillars = {}
 let dataTimer = null
+let resumeTimer = null
 let onPointerMoveHandler = null
 let onClickHandler = null
+let onControlsStart = null
+let onControlsEnd = null
+const activeFlashes = new Map()
 const MODEL_Z = 15500
 
 function lonlatToModel(lon, lat) {
@@ -143,7 +147,7 @@ function buildStations() {
     pulse.scale.set(2400, 2400, 1)
     pulse.position.set(0, 0, -50)
     g.add(pulse)
-    stationPulseMeshes[s.code] = { mesh: pulse, frames: pulseTexturesCyan, frame: 0, interval: 0.6 }
+    stationPulseMeshes[s.code] = { mesh: pulse, frames: pulseTexturesCyan, frame: 0, interval: 0.6, paused: false }
 
     // 渐变光柱
     const pillarH = 1800
@@ -219,6 +223,7 @@ function setStationAlert(code, level) {
     p.interval = 0.60
     if (pillar) pillar.material.color.setHex(0xFFFFFF)
   }
+  p.frame = Math.min(p.frame, p.frames.length - 1)
   p.mesh.material.map = p.frames[p.frame]
 }
 
@@ -226,14 +231,20 @@ function flashSprite(sprite) {
   let t = 0
   const duration = 0.3
   const baseOpacity = sprite.material.opacity
+  const prev = activeFlashes.get(sprite)
+  if (prev) cancelAnimationFrame(prev)
   function step() {
     t += 0.016
     const p = Math.sin((t / duration) * Math.PI)
     sprite.material.opacity = baseOpacity + p * 0.4
-    if (t < duration) requestAnimationFrame(step)
-    else sprite.material.opacity = baseOpacity
+    if (t < duration) {
+      activeFlashes.set(sprite, requestAnimationFrame(step))
+    } else {
+      sprite.material.opacity = baseOpacity
+      activeFlashes.delete(sprite)
+    }
   }
-  step()
+  activeFlashes.set(sprite, requestAnimationFrame(step))
 }
 
 async function fetchAndUpdateData() {
@@ -311,11 +322,14 @@ onMounted(() => {
   const raycaster = new THREE.Raycaster()
   const pointer = new THREE.Vector2()
   let hoveredCode = null
-  let resumeTimer = null
 
   function setStationHover(code, hovered) {
     const pillar = stationPillars[code]
     if (pillar) pillar.material.opacity = hovered ? 0.95 : 0.75
+    const p = stationPulseMeshes[code]
+    if (!p) return
+    p.paused = hovered
+    p.mesh.material.opacity = hovered ? 1.0 : 0.9
   }
 
   function onPointerMove(e) {
@@ -348,14 +362,16 @@ onMounted(() => {
   renderer.domElement.addEventListener('pointermove', onPointerMoveHandler)
   renderer.domElement.addEventListener('click', onClickHandler)
 
-  controls.addEventListener('start', () => {
+  onControlsStart = () => {
     controls.autoRotate = false
     clearTimeout(resumeTimer)
-  })
-  controls.addEventListener('end', () => {
+  }
+  onControlsEnd = () => {
     clearTimeout(resumeTimer)
     resumeTimer = setTimeout(() => { controls.autoRotate = true }, 3000)
-  })
+  }
+  controls.addEventListener('start', onControlsStart)
+  controls.addEventListener('end', onControlsEnd)
 
   dracoLoader = new DRACOLoader()
   dracoLoader.setDecoderPath('/draco/')
@@ -397,6 +413,7 @@ onMounted(() => {
     animateId = requestAnimationFrame(animate)
     const dt = clock.getDelta()
     Object.values(stationPulseMeshes).forEach((p) => {
+      if (p.paused) return
       p.timer = (p.timer || 0) + dt
       if (p.timer >= p.interval) {
         p.timer = 0
@@ -428,8 +445,15 @@ onUnmounted(() => {
     renderer.domElement.removeEventListener('click', onClickHandler)
   }
   if (dataTimer) clearInterval(dataTimer)
+  if (resumeTimer) clearTimeout(resumeTimer)
+  activeFlashes.forEach((id) => { if (id) cancelAnimationFrame(id) })
+  activeFlashes.clear()
   if (animateId) cancelAnimationFrame(animateId)
-  if (controls) controls.dispose()
+  if (controls) {
+    controls.removeEventListener('start', onControlsStart)
+    controls.removeEventListener('end', onControlsEnd)
+    controls.dispose()
+  }
   if (dracoLoader) dracoLoader.dispose()
   if (renderer) { renderer.dispose(); renderer.domElement.remove() }
 })
