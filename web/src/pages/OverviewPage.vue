@@ -1,17 +1,20 @@
 <template>
   <section class="overview-hud">
-    <!-- 中心 3D 模型背景 -->
+    <!-- 中心：水系地图 -->
     <div class="hud-bg">
-      <TerrainModel3D ref="terrainRef" />
+      <HydroMap
+        :station-level="stationLevel"
+        :station-data="stationData"
+        :active-code="rotation.current.code"
+        @station-click="onMapStationClick"
+        @background-click="onMapBackgroundClick"
+      />
     </div>
-
-    <!-- 3D 地形控制面板 -->
-    <TerrainPanel @reset-view="terrainRef?.flyToOverview()" />
 
     <!-- 左上：当前站点 / 平台标识 -->
     <div class="hud-corner hud-top-left">
       <div class="hud-id">
-        <span class="hud-id-code">STATION // {{ rotation.current.code || 'CHENZHOU' }}</span>
+        <span class="hud-id-code">当前站点</span>
         <h1 class="hud-id-name">{{ rotation.current.name || '郴州水文监测' }}</h1>
         <span class="hud-id-meta">实时监测中 · {{ currentTime }}</span>
       </div>
@@ -21,7 +24,7 @@
     <div class="hud-col hud-left">
       <article class="hud-card river" @click="openMonitor('水位')">
         <i class="hud-card-icon"></i>
-        <span class="hud-card-label">LATEST WATER LEVEL</span>
+        <span class="hud-card-label">实时水位</span>
         <div class="hud-card-value">
           <b>{{ waterLevel }}</b>
           <span class="unit">m</span>
@@ -32,7 +35,7 @@
 
       <article class="hud-card" @click="openMonitor('流量')">
         <i class="hud-card-icon flow"></i>
-        <span class="hud-card-label">LATEST DISCHARGE</span>
+        <span class="hud-card-label">实时流量</span>
         <div class="hud-card-value">
           <b>{{ waterFlow }}</b>
           <span class="unit">m³/s</span>
@@ -43,7 +46,7 @@
 
       <article class="hud-card moss" @click="openStage('模型可信度', 'tile')">
         <i class="hud-card-icon model"></i>
-        <span class="hud-card-label">MODEL CONFIDENCE</span>
+        <span class="hud-card-label">模型可信度</span>
         <div class="hud-card-value">
           <b>{{ modelConfidence }}</b>
         </div>
@@ -53,7 +56,7 @@
 
       <article class="hud-card amber" @click="goWarnings">
         <i class="hud-card-icon alert"></i>
-        <span class="hud-card-label">PENDING ALERTS</span>
+        <span class="hud-card-label">待处置预警</span>
         <div class="hud-card-value">
           <b>{{ pendingWarnings }}</b>
           <span class="unit">项</span>
@@ -67,9 +70,9 @@
     <div class="hud-col hud-right">
       <article class="hud-panel">
         <div class="hud-panel-head">
-          <span class="hud-panel-code">WARN // {{ displayWarnings.length }}</span>
+          <span class="hud-panel-code">预警 {{ displayWarnings.length }} 条</span>
           <h2>预警与告警</h2>
-          <span class="hud-panel-status">ACTIVE</span>
+          <span class="hud-panel-status">实时</span>
         </div>
         <div class="hud-panel-body">
           <div v-if="warningInsight" class="hud-insight warning-insight">
@@ -93,7 +96,7 @@
     <div class="hud-bottom">
       <article class="hud-panel wide">
         <div class="hud-panel-head">
-          <span class="hud-panel-code">FCST // {{ rotation.current.code || 'CHENZHOU' }}</span>
+          <span class="hud-panel-code">预报分析</span>
           <h2>历史数据与模型预报联合展示</h2>
           <span class="hud-panel-status">近24h → 未来12h</span>
         </div>
@@ -141,7 +144,7 @@
       <div class="monitor-card">
         <div class="monitor-head">
           <div class="monitor-title">
-            <span class="monitor-code">MONITOR // {{ rotation.current.code }}</span>
+            <span class="monitor-code">实时监测</span>
             <h2>{{ rotation.current.name }} · {{ monitorType }}监测</h2>
           </div>
           <button class="monitor-close" @click="closeMonitor">关闭</button>
@@ -156,7 +159,7 @@
           <div class="monitor-charts">
             <div class="monitor-chart-panel">
               <div class="mcp-head">
-                <span class="mcp-code">LVL // 10H</span>
+                <span class="mcp-code">近 10 小时水位</span>
                 <h3>近 10 小时水位过程</h3>
                 <span class="mcp-legend"><i class="leg-hist"></i>实测</span>
               </div>
@@ -171,7 +174,7 @@
             </div>
             <div class="monitor-chart-panel">
               <div class="mcp-head">
-                <span class="mcp-code">Q // 10H</span>
+                <span class="mcp-code">近 10 小时流量</span>
                 <h3>近 10 小时流量过程</h3>
                 <span class="mcp-legend"><i class="leg-hist"></i>实测</span>
               </div>
@@ -184,6 +187,9 @@
                 </div>
               </div>
             </div>
+          </div>
+          <div v-if="monitorLoading" class="monitor-loading">
+            <span class="m-spinner"></span><span>正在加载监测数据…</span>
           </div>
         </div>
       </div>
@@ -201,16 +207,76 @@ import { useRouter } from 'vue-router'
 import flvjs from 'flv.js'
 import TrendChart from '../components/TrendChart.vue'
 import StationDrawer from '../components/StationDrawer.vue'
-import TerrainModel3D from '../components/TerrainModel3D.vue'
-import TerrainPanel from '../components/TerrainPanel.vue'
+import HydroMap from '../components/HydroMap.vue'
 import { api, ALL_STATION_CODES } from '../api'
 import { useRotationStore } from '../store/rotation'
 import { levelLabel, levelBadgeClass, levelSeverity } from '../utils/warningLevel'
+import { STATIONS } from '../stations'
 
 const router = useRouter()
 const rotation = useRotationStore()
 
-const terrainRef = ref(null)
+// 站点预警级别（供地图着色）：code -> 'ok'|'warn'|'danger'
+const stationLevel = ref({})
+// 每站实时水位/流量（供地图悬浮卡 + 角标）：code -> {level, flow, time}
+const stationData = ref({})
+function onMapStationClick(s) {
+  // 点击地图站点 → pin 到该站、关闭监测弹窗、打开详情抽屉并拉取实时数据
+  if (!s?.code) return
+  closeMonitor()
+  rotation.pinStation(s.code)
+  drawerStation.value = {
+    name: s.name,
+    code: s.code,
+    level: '—',
+    flow: '—',
+    status: '加载中…',
+    badgeClass: '',
+    detail: '正在获取该站实时数据…',
+  }
+  drawerVisible.value = true
+  loadStationDetail(s.code, s.name)
+}
+
+function onMapBackgroundClick() {
+  // 点地图空白处 → 取消钉选、关抽屉，恢复轮播
+  rotation.unpinStation()
+  closeDrawer()
+}
+
+// 拉取单站实时水位/流量/预警，填充详情抽屉（点击站点 / 预警项时调用）
+async function loadStationDetail(code, nameHint) {
+  const st = STATIONS.find(s => s.code === code) || {}
+  let level = '—', flow = '—', status = '正常', badgeClass = 'ok', detail = '该站当前运行正常，无活跃预警。'
+  try {
+    const data = await api.getFlowRaw(code, st.device)
+    const items = data?.data || []
+    const latestWL = items.find(i => i.waterLevel != null)
+    const latestFlow = items.find(i => i.virtualFlow != null || i.waterFlow != null)
+    if (latestWL?.waterLevel != null) level = latestWL.waterLevel.toFixed(2)
+    const fv = latestFlow?.virtualFlow ?? latestFlow?.waterFlow
+    if (fv != null) flow = fv.toFixed(0)
+  } catch (e) {
+    detail = '实时数据获取失败：' + (e.message || e)
+  }
+  try {
+    const wd = await api.getWarnings(code)
+    const all = [...(wd.warnings || []), ...(wd.alerts || [])]
+    if (all.length) {
+      const top = all[0]
+      const lv = top.level || top.level_name || ''
+      status = levelLabel(lv) || '预警'
+      badgeClass = levelBadgeClass(lv)
+      detail = top.message || detail
+    }
+  } catch (e) { /* 预警查询失败不阻塞主流程 */ }
+  drawerStation.value = {
+    ...drawerStation.value,
+    name: nameHint || drawerStation.value?.name || st.name,
+    code,
+    level, flow, status, badgeClass, detail,
+  }
+}
 
 const waterLevel = ref('—')
 const waterFlow = ref('—')
@@ -235,6 +301,7 @@ function updateClock() {
 
 // ── 监测弹窗 ──
 const monitorVisible = ref(false)
+const monitorLoading = ref(false)
 const monitorType = ref('')
 const videoUrl = ref('')
 const monitorVideoEl = ref(null)
@@ -270,34 +337,24 @@ const flowPct = computed(() => {
 const drawerVisible = ref(false)
 const drawerStation = ref({})
 function openDrawer(w) {
+  closeMonitor()
+  const code = w.code || w.id || ''
   drawerStation.value = {
     name: w.name,
-    code: w.code || w.id || '',
-    level: w.level,
-    flow: w.flow,
-    status: w.level ? levelLabel(w.level) : '—',
+    code,
+    level: '—',
+    flow: '—',
+    status: w.level ? levelLabel(w.level) : '加载中…',
     badgeClass: levelBadgeClass(w.level),
-    detail: w.message || '',
+    detail: w.message || '正在获取该站实时数据…',
   }
   drawerVisible.value = true
+  if (code) loadStationDetail(code, w.name)
 }
 function closeDrawer() { drawerVisible.value = false }
 
-watch(() => rotation.mode, (mode) => {
-  if (mode === 'pinned') {
-    const st = rotation.current
-    drawerStation.value = {
-      name: st.name,
-      code: st.code,
-      level: '',
-      flow: '',
-      status: '—',
-      badgeClass: '',
-      detail: '',
-    }
-    drawerVisible.value = true
-  }
-})
+// 注：原 watch(rotation.mode) 会在 pin 后把抽屉数据覆盖成空，已移除。
+// 站点点击 / 预警点击均由 onMapStationClick / openDrawer 直接拉取数据填充。
 
 function renderMessage(text) {
   if (!text) return ''
@@ -337,12 +394,25 @@ async function refreshData() {
   console.log('[overview] refreshData start')
   try {
     const st = rotation.current
-    const [flowData, warnData, chartData, stdData] = await Promise.all([
+    const [flowData, warnData, chartData, stdData, latestAll] = await Promise.all([
       api.getFlowRaw(st.code, st.device),
       api.getWarnings(ALL_STATION_CODES).catch(() => ({ warnings: [], total: 0 })),
       api.getAlignedChart(st.code, 'virtualFlow').catch(() => ({ history: [], forecast: [] })),
       api.getWarningStandards().catch(() => ({})),
+      api.getLatest(ALL_STATION_CODES).catch(() => ({ stations: {} })),
     ])
+
+    // 每站实时水位/流量 → 喂给地图悬浮卡与角标
+    const sd = {}
+    for (const [code, v] of Object.entries(latestAll?.stations || {})) {
+      const it = v && v.level
+      sd[code] = it ? {
+        level: it.waterLevel,
+        flow: it.virtualFlow ?? it.waterFlow,
+        time: it.time,
+      } : null
+    }
+    stationData.value = sd
 
     const std = stdData?.stations?.[st.code]?.level || stdData?.defaults?.level || {}
     warningLevel.value = std.red || std.orange || 0
@@ -356,6 +426,20 @@ async function refreshData() {
       warnings.value = [{ id: 'ok', name: '系统运行正常', level: '正常', message: '所有站点数据正常，无预警信息。' }]
       warningNote.value = '系统运行正常'
     }
+
+    // 地图站点着色：按预警级别映射 station_code -> 'ok'|'warn'|'danger'
+    const sevOf = tag => tag === 'danger' ? 3 : tag === 'warn' ? 1 : 0
+    const lvlMap = {}
+    for (const w of allWarnings) {
+      const code = w.station_code || w.code || ''
+      if (!code) continue
+      const sev = levelSeverity(w.level || w.level_name || '')
+      const tag = sev >= 3 ? 'danger' : sev >= 1 ? 'warn' : 'ok'
+      if (!lvlMap[code] || sevOf(lvlMap[code]) < sev) lvlMap[code] = tag
+    }
+    // 默认全 ok
+    for (const s of STATIONS) if (!lvlMap[s.code]) lvlMap[s.code] = 'ok'
+    stationLevel.value = lvlMap
 
     const items = flowData?.data || []
     if (items.length > 0) {
@@ -408,6 +492,10 @@ async function refreshData() {
       }).catch(() => {})
 
       saveCache()
+    }
+    // 详情抽屉若正打开且就是当前站，顺带同步水位/流量
+    if (drawerVisible.value && drawerStation.value?.code === st.code) {
+      drawerStation.value = { ...drawerStation.value, level: waterLevel.value, flow: waterFlow.value }
     }
     console.log('[overview] refreshData done')
   } catch (e) {
@@ -503,13 +591,27 @@ function computeModelConfidence() {
 function goWarnings() { router.push('/warnings') }
 
 async function openMonitor(type) {
+  closeDrawer()
   monitorType.value = type
   monitorVisible.value = true
+  monitorLoading.value = true
   const st = rotation.current
   try {
-    const feeds = await api.getVideoFeeds(st.code)
-    const online = (feeds.feeds || []).find(f => f.status === 'online' && f.live_address)
-    videoUrl.value = online?.live_address || ''
+    // 直播地址优先取「视频巡检同款 snapshots」（采集器定时缓存，地址稳定可播）；
+    // 取不到再回退实时 video-feeds（调 deviceCamera，常返回 offline/空地址）。
+    let url = ''
+    try {
+      const snap = await api.getVideoSnapshots(st.code, 5)
+      const list = (snap && snap.snapshots) || []
+      const hit = list.find(s => s && s.live_address)
+      url = hit ? hit.live_address : ''
+    } catch { url = '' }
+    if (!url) {
+      const feeds = await api.getVideoFeeds(st.code)
+      const online = (feeds.feeds || []).find(f => f.status === 'online' && f.live_address)
+      url = online ? online.live_address : ''
+    }
+    videoUrl.value = url
     await nextTick()
     if (videoUrl.value && monitorVideoEl.value) {
       if (flvjs.isSupported()) {
@@ -539,6 +641,7 @@ async function openMonitor(type) {
       if (vf != null) flowHistory.value.push({ t, y: vf })
     }
   } catch { levelHistory.value = []; flowHistory.value = [] }
+  monitorLoading.value = false
 }
 
 function closeMonitor() {
@@ -556,60 +659,49 @@ function openStage(title, from) {
 </script>
 
 <style scoped>
-/* ─────────────────────────────────────────────────────────
-   3D 模型仪表盘容器（Material Design 浅色）
-   ───────────────────────────────────────────────────────── */
+/* ── Overview 业务布局：地图居中 + 左右信息栏 ── */
 .overview-hud {
   position: relative;
   width: 100%;
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-columns: 300px 1fr 340px;
+  grid-template-columns: 290px 1fr 330px;
   grid-template-rows: auto 1fr auto;
   grid-template-areas:
-    "top    .      right"
-    "left   .      right"
+    "top    center right"
+    "left   center right"
     "bottom bottom bottom";
-  gap: 16px;
-  padding: 16px;
+  gap: 14px;
+  padding: 14px;
   pointer-events: none;
   overflow: hidden;
 }
 .overview-hud > * { pointer-events: auto; }
 
-/* ── 3D 模型背景层 ── */
+/* ── 中心水系地图容器 ── */
 .hud-bg {
-  position: absolute;
-  inset: 0;
+  grid-area: center;
+  position: relative;
+  min-height: 0;
   z-index: 0;
   pointer-events: auto;
-}
-.hud-bg :deep(.terrain-bg) {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-panel);
+  background: var(--bg-3);
 }
 
-/* ── Material 卡片 / 面板 ── */
+/* ── 卡片 / 面板（业务白卡） ── */
 .hud-card,
 .hud-panel {
   position: relative;
   border: 1px solid var(--line);
   border-radius: var(--radius-xl);
   background: var(--bg-2);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--shadow-panel);
   overflow: hidden;
-  animation: hud-in .45s ease both;
-}
-.hud-card::before,
-.hud-panel::before {
-  content: "";
-  position: absolute;
-  left: 0; top: 0; right: 0;
-  height: 3px;
-  background: var(--primary);
 }
 
 @keyframes hud-in {
@@ -627,25 +719,26 @@ function openStage(title, from) {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--bg-2);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--shadow-panel);
   position: relative;
 }
 .hud-id::before {
   content: "";
   position: absolute;
   left: 0; top: 0; bottom: 0;
-  width: 4px;
+  width: 3px;
   border-radius: var(--radius-lg) 0 0 var(--radius-lg);
   background: var(--primary);
 }
 .hud-id-code {
   display: block;
-  font-family: var(--sans);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: .04em;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .06em;
   color: var(--primary);
   margin-bottom: 4px;
+  text-transform: uppercase;
 }
 .hud-id-name {
   margin: 0;
@@ -653,12 +746,13 @@ function openStage(title, from) {
   font-size: 20px;
   font-weight: 600;
   color: var(--ink);
+  letter-spacing: .01em;
 }
 .hud-id-meta {
   display: block;
   margin-top: 4px;
-  font-family: var(--sans);
-  font-size: 12px;
+  font-family: var(--mono);
+  font-size: 11.5px;
   color: var(--muted);
 }
 
@@ -670,28 +764,33 @@ function openStage(title, from) {
   min-height: 0;
 }
 .hud-left { grid-area: left; }
-.hud-right { grid-area: right; align-content: start; }
+.hud-right {
+  grid-area: right;
+  display: grid;
+  align-content: stretch;
+  gap: 14px;
+  min-height: 0;
+}
 
-/* 指标卡 */
+/* 指标卡 —— 收紧内距/行距/字号，确保 4 张卡在左列高度内完整显示 */
 .hud-card {
   display: grid;
   grid-template-columns: 1fr auto;
   grid-template-rows: auto auto auto;
-  gap: 6px 12px;
-  padding: 16px 18px;
+  gap: 3px 12px;
+  padding: 11px 14px;
   cursor: pointer;
-  transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+  transition: box-shadow .18s var(--ease-soft), border-color .18s var(--ease-soft);
 }
 .hud-card:hover {
-  transform: translateY(-2px);
-  background: var(--bg-3);
+  border-color: var(--line-strong);
   box-shadow: var(--shadow-2);
 }
 .hud-card-icon {
   grid-column: 2;
   grid-row: 1 / 4;
   align-self: center;
-  width: 10px; height: 42px;
+  width: 4px; height: 30px;
   border-radius: var(--radius-sm);
   background: var(--primary);
 }
@@ -702,10 +801,10 @@ function openStage(title, from) {
 .hud-card-label {
   grid-column: 1;
   font-family: var(--sans);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
-  letter-spacing: .02em;
   color: var(--muted);
+  letter-spacing: 0;
 }
 .hud-card-value {
   grid-column: 1;
@@ -715,9 +814,9 @@ function openStage(title, from) {
 }
 .hud-card-value b {
   font-family: var(--display);
-  font-size: 32px;
+  font-size: 26px;
   line-height: 1;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--ink);
 }
 .hud-card-value .unit {
@@ -736,7 +835,7 @@ function openStage(title, from) {
 .hud-card-bar {
   grid-column: 1 / -1;
   height: 4px;
-  margin-top: 8px;
+  margin-top: 6px;
   border-radius: var(--radius-sm);
   background: var(--bg-4);
   overflow: hidden;
@@ -747,7 +846,7 @@ function openStage(title, from) {
   width: 0%;
   background: var(--primary);
   border-radius: var(--radius-sm);
-  transition: width .8s ease;
+  transition: width .6s var(--ease-soft);
 }
 .hud-card-bar.flow-bar i { background: var(--water); }
 .hud-card-bar.conf-bar i { background: var(--ok); }
@@ -759,13 +858,16 @@ function openStage(title, from) {
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
 }
-.hud-panel.wide { grid-area: bottom; max-height: 34vh; }
-.hud-right .hud-panel { max-height: 86vh; }
+.hud-panel.wide { grid-area: bottom; max-height: 30vh; }
+/* 底部面板不滚动：让 combined-chart 的 flex:1 收缩去给 AI 解读让位，
+   这样解读高度被计入，图+图例+解读+统计列在同一高度内全部可见。 */
+.hud-panel.wide .hud-panel-body { overflow: hidden; }
+.hud-right .hud-panel { height: 100%; max-height: none; }
 
 .hud-panel-head {
   position: relative;
-  min-height: 46px;
-  padding: 10px 16px;
+  min-height: 40px;
+  padding: 9px 14px;
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
@@ -780,39 +882,43 @@ function openStage(title, from) {
   font-weight: 600;
   color: var(--ink);
   white-space: nowrap;
+  letter-spacing: .04em;
 }
 .hud-panel-code,
 .hud-panel-status {
-  font-family: var(--sans);
-  font-size: 11px;
+  font-family: var(--mono);
+  font-size: 10px;
   color: var(--muted);
+  letter-spacing: .04em;
+  text-transform: uppercase;
 }
-.hud-panel-status { color: var(--primary); font-weight: 500; }
+.hud-panel-status { color: var(--primary); font-weight: 600; }
 
 .hud-panel-body {
   min-height: 0;
   overflow-y: auto;
-  padding: 12px;
-  background: var(--bg-2);
+  padding: 10px;
+  background: transparent;
 }
 
 /* 预报解读 */
 .hud-insight {
   display: block;
-  padding: 12px 14px;
+  padding: 8px 12px;
   border-radius: var(--radius-md);
-  background: var(--bg-3);
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
-  margin-bottom: 10px;
+  margin-bottom: 9px;
 }
-.hud-insight.warning-insight { border-left-color: var(--primary); }
+.hud-insight.warning-insight { border-left-color: var(--primary); background: var(--primary-soft); }
 .hud-insight .insight-label {
   display: block;
-  font-family: var(--sans);
+  font-family: var(--mono);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--accent);
-  letter-spacing: .04em;
+  letter-spacing: .06em;
   text-transform: uppercase;
   margin-bottom: 6px;
 }
@@ -820,10 +926,28 @@ function openStage(title, from) {
 .hud-insight p {
   margin: 0;
   font-size: 12px;
-  line-height: 1.55;
+  line-height: 1.6;
   color: var(--ink-2);
 }
-.hud-insight.insight-above-chart { flex-shrink: 0; }
+/* 图表上方解读：紧凑横条，最多 2 行，不撑高面板 */
+.hud-insight.insight-above-chart {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 5px 12px;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+.hud-insight.insight-above-chart .insight-label { margin-bottom: 0; flex-shrink: 0; padding-top: 1px; }
+.hud-insight.insight-above-chart p {
+  font-size: 11.5px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 /* 告警列表 */
 .hud-risk-list {
@@ -833,12 +957,12 @@ function openStage(title, from) {
 }
 .hud-risk-item {
   position: relative;
-  border: 0;
+  border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  padding: 12px 14px;
-  background: var(--bg-3);
+  padding: 9px 12px;
+  background: var(--bg-2);
   cursor: pointer;
-  transition: background .15s ease, transform .15s ease;
+  transition: background .15s var(--ease-soft), border-color .15s var(--ease-soft);
 }
 .hud-risk-item::before {
   content: "";
@@ -849,8 +973,8 @@ function openStage(title, from) {
   background: var(--primary);
 }
 .hud-risk-item:hover {
-  background: var(--bg-4);
-  transform: translateX(2px);
+  background: var(--bg-3);
+  border-color: var(--line-strong);
 }
 .hud-risk-item.level-danger::before { background: var(--danger); }
 .hud-risk-item.level-orange::before { background: var(--orange); }
@@ -859,7 +983,7 @@ function openStage(title, from) {
 .hud-risk-item .risk-row {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 4px;
+  margin-bottom: 5px;
   gap: 8px;
   min-width: 0;
 }
@@ -876,16 +1000,16 @@ function openStage(title, from) {
   margin: 0;
   color: var(--muted);
   font-size: 11px;
-  line-height: 1.5;
+  line-height: 1.55;
   overflow-wrap: break-word;
 }
 .badge {
   border-radius: var(--radius-sm);
   padding: 3px 8px;
   font-size: 10px;
-  font-weight: 600;
-  font-family: var(--sans);
-  color: var(--ink-dark);
+  font-weight: 700;
+  font-family: var(--mono);
+  color: #FFFFFF;
   background: var(--primary);
   flex-shrink: 0;
   white-space: nowrap;
@@ -902,8 +1026,8 @@ function openStage(title, from) {
 }
 .chart-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 140px;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) 128px;
+  gap: 12px;
   min-height: 0;
 }
 .chart-main {
@@ -916,12 +1040,14 @@ function openStage(title, from) {
   min-height: 0;
   border-radius: var(--radius-md);
   background: var(--bg-3);
+  border: 1px solid var(--line);
 }
 .chart-legend {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding-top: 8px;
+  gap: 18px;
+  padding-top: 6px;
+  flex-shrink: 0;
 }
 .chart-legend span {
   display: inline-flex;
@@ -945,98 +1071,123 @@ function openStage(title, from) {
 
 .chart-stats {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   align-content: start;
 }
 .hud-mini-stat {
+  border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  padding: 10px 12px;
-  background: var(--bg-3);
-  transition: background .15s ease, transform .15s ease;
+  padding: 8px 11px;
+  background: var(--bg-2);
+  transition: background .15s var(--ease-soft), border-color .15s var(--ease-soft);
 }
-.hud-mini-stat:hover { background: var(--bg-4); transform: translateY(-1px); }
+.hud-mini-stat:hover { background: var(--bg-3); border-color: var(--line-strong); }
 .hud-mini-stat span {
   display: block;
   color: var(--muted);
   font-size: 10px;
   font-weight: 500;
-  letter-spacing: .02em;
+  letter-spacing: .04em;
 }
 .hud-mini-stat b {
   display: block;
-  margin-top: 6px;
+  margin-top: 3px;
   font-family: var(--display);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--ink);
 }
 .hud-mini-stat b small { color: var(--muted); font-size: 11px; font-weight: 500; }
-.hud-mini-stat.peak b { color: var(--accent); }
+.hud-mini-stat.peak b { color: var(--primary); }
 
-/* ===== 监测视频弹窗（Material Dialog） ===== */
+/* ===== 监测视频弹窗（Abyss Dialog） ===== */
 .monitor-overlay {
-  position: fixed; inset: 0; z-index: 150;
-  background: rgba(0,0,0,.55);
-  backdrop-filter: blur(6px);
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: flex; align-items: center; justify-content: center;
   padding: 40px;
 }
 .monitor-card {
-  width: min(1040px, calc(100vw - 80px));
+  width: min(1080px, calc(100vw - 80px));
   max-height: 92vh;
-  background: var(--bg-2);
+  background: var(--glass-strong);
+  border: 1px solid var(--line);
   border-radius: var(--radius-xl);
   display: flex; flex-direction: column;
   overflow: hidden;
-  box-shadow: var(--shadow-4);
+  box-shadow: var(--shadow-4), 0 0 40px rgba(14, 165, 233, 0.08);
 }
 
 .monitor-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 20px;
+  padding: 14px 20px;
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
-  background: var(--bg-3);
+  background: var(--bg-2);
 }
-.monitor-title { display: grid; gap: 4px; }
+.monitor-title { display: grid; gap: 5px; }
 .monitor-code {
-  font-family: var(--sans);
-  font-size: 11px;
-  font-weight: 500;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
   color: var(--primary);
+  letter-spacing: .06em;
+  text-transform: uppercase;
 }
-.monitor-head h2 { margin: 0; font-family: var(--display); font-size: 16px; font-weight: 600; color: var(--ink); }
+.monitor-head h2 { margin: 0; font-family: var(--display); font-size: 17px; font-weight: 600; color: var(--ink); letter-spacing: .03em; }
 .monitor-close {
-  min-height: 32px; padding: 0 16px;
-  border: 0; border-radius: var(--radius-sm);
-  background: var(--bg-4); color: var(--ink);
+  min-height: 34px; padding: 0 16px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--bg-3); color: var(--ink);
   font-family: var(--sans); font-size: 13px; font-weight: 500;
   cursor: pointer;
-  transition: background .15s;
+  transition: all .18s ease;
 }
-.monitor-close:hover { background: var(--primary); color: #fff; }
+.monitor-close:hover { background: var(--primary); color: #FFFFFF; border-color: var(--primary); box-shadow: 0 0 14px var(--primary-glow); }
 
 .monitor-body {
   flex: 1; overflow-y: auto; min-height: 0;
+  position: relative;
   display: flex;
-  flex-direction: column; gap: 14px;
-  padding: 16px 20px;
+  flex-direction: column; gap: 12px;
+  padding: 14px 18px;
 }
 .monitor-video {
   flex-shrink: 0;
   aspect-ratio: 16/9;
+  max-height: 40vh;
   background: #000;
   border-radius: var(--radius-md);
   overflow: hidden;
   display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line);
 }
 .video-frame { width: 100%; height: 100%; object-fit: contain; }
 .video-placeholder { color: var(--muted); font-size: 13px; }
 
+.monitor-loading {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: rgba(255, 255, 255, .72);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  color: var(--ink-2); font-size: 13px;
+}
+.m-spinner {
+  width: 16px; height: 16px;
+  border: 2px solid var(--bg-4);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: mspin .6s linear infinite;
+}
+@keyframes mspin { to { transform: rotate(360deg); } }
+
 .monitor-charts {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 16px;
   min-height: 0;
   flex: 1;
 }
@@ -1044,50 +1195,52 @@ function openStage(title, from) {
   min-height: 0;
   display: flex; flex-direction: column;
   border-radius: var(--radius-md);
-  background: var(--bg-3);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
   overflow: hidden;
 }
 .mcp-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 14px;
+  padding: 9px 14px;
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
   gap: 8px;
 }
 .mcp-code {
-  font-family: var(--sans); font-size: 11px; font-weight: 500; color: var(--primary);
+  font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--primary); letter-spacing: .06em; text-transform: uppercase;
 }
-.mcp-head h3 { margin: 0; font-family: var(--display); font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.mcp-head h3 { margin: 0; font-family: var(--display); font-size: 13px; font-weight: 600; color: var(--ink-2); letter-spacing: .03em; }
 .mcp-legend {
   display: inline-flex; align-items: center; gap: 6px;
   font-family: var(--sans); font-size: 11px; color: var(--muted);
 }
 .mcp-legend i { width: 14px; height: 3px; border-radius: 2px; }
-.leg-hist { background: var(--water); }
+.leg-hist { background: var(--water); box-shadow: 0 0 6px rgba(14, 165, 233, 0.35); }
 .mcp-body {
   flex: 1; min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 90px;
+  grid-template-columns: minmax(0, 1fr) 95px;
   gap: 10px;
   padding: 10px 12px;
 }
 .mcp-chart { min-height: 0; min-width: 0; }
-.mcp-chart :deep(.trend-chart-wrap) { min-height: 140px; }
+.mcp-chart :deep(.trend-chart-wrap) { min-height: 110px; }
 .mcp-stats {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   align-content: start;
 }
 .mcp-stat {
-  padding: 7px 9px;
+  padding: 6px 9px;
   border-radius: var(--radius-sm);
-  background: var(--bg-4);
+  background: rgba(241, 245, 249, 0.5);
+  border: 1px solid var(--line);
 }
 .mcp-stat span { display: block; font-family: var(--sans); font-size: 10px; color: var(--muted); }
 .mcp-stat b { font-size: 15px; font-weight: 600; color: var(--ink-2); }
 .mcp-stat b small { font-size: 11px; color: var(--muted); margin-left: 2px; }
 .mcp-stat.current b { color: var(--primary); }
-.mcp-stat.current { background: var(--chip); }
+.mcp-stat.current { background: rgba(14, 165, 233, 0.08); border-color: var(--edge); }
 
 @media (max-width: 1180px) {
   .overview-hud {
@@ -1099,7 +1252,7 @@ function openStage(title, from) {
       "left right"
       "bottom bottom";
   }
-  .hud-bg { display: none; }
+  .hud-bg { min-height: 320px; }
 }
 @media (max-width: 900px) {
   .overview-hud {
