@@ -43,6 +43,10 @@ def main():
 
     # ── 1. 后端网关 ──
     print("[1/2] 启动后端网关 (端口 15002)...")
+    # 清理旧进程残留的心跳文件，避免看门狗误报
+    hb = ROOT / "gateway" / "data" / "collector_heartbeat.txt"
+    if hb.exists():
+        hb.unlink()
     subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "gateway.server:app", "--host", "0.0.0.0", "--port", "15002"],
         cwd=str(ROOT),
