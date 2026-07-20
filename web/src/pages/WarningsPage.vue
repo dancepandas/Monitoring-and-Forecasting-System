@@ -21,7 +21,7 @@
             </div>
             <p v-html="renderMessage(item.message)"></p>
             <div v-if="item._type === 'alert'" class="alert-meta">
-              <span>站点 {{ item.station_code || '—' }}</span>
+              <span>站点 {{ stationName(item.station_code) }}</span>
               <span>触发 {{ fmtTime(item.triggered_at) }}</span>
               <span v-if="item.notify_count > 0">已推送 {{ item.notify_count }} 次</span>
             </div>
@@ -60,7 +60,7 @@
             </div>
             <p v-html="renderMessage(item.message)"></p>
             <div class="alert-meta">
-              <span>站点 {{ item.station_code || '—' }}</span>
+              <span>站点 {{ stationName(item.station_code) }}</span>
               <span>触发 {{ fmtTime(item.triggered_at) }}</span>
             </div>
             <div v-if="item.postmortem" class="postmortem">
@@ -96,6 +96,13 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import Topbar from '../components/Topbar.vue'
 import { api, ALL_STATION_CODES } from '../api'
 import { levelLabel, levelBadgeClass, levelSeverity } from '../utils/warningLevel'
+import { STATIONS } from '../stations'
+
+const stationNameByCode = Object.fromEntries(STATIONS.map(s => [s.code, s.name]))
+
+function stationName(code) {
+  return stationNameByCode[code] || code || '—'
+}
 
 const warnings = ref([])
 const suggestions = ref([])
@@ -303,9 +310,10 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 /* AI 复盘 */
 .postmortem {
   margin-top: 8px;
-  padding: 8px 12px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, .03);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(14, 165, 233, 0.06);
+  border: 1px solid var(--line);
   border-left: 3px solid var(--primary);
 }
 .pm-label {
@@ -333,27 +341,31 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 /* 确认弹窗 */
 .modal-overlay {
   position: fixed; inset: 0; z-index: 200;
-  background: rgba(0, 0, 0, .5);
-  backdrop-filter: blur(4px);
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: flex; align-items: center; justify-content: center;
   padding: 40px;
 }
 .confirm-modal {
   width: 420px;
-  background: var(--glass-deep);
-  backdrop-filter: blur(18px);
+  background: var(--glass-strong);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--edge);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 24px;
-  box-shadow: 0 16px 48px rgba(0,0,0,.3);
+  box-shadow: var(--shadow-4), 0 0 30px rgba(14, 165, 233, 0.08);
 }
 .confirm-modal h3 {
   margin: 0;
   font-size: 16px;
-  color: #fff;
+  color: var(--ink);
+  font-family: var(--display);
+  letter-spacing: .03em;
 }
 .confirm-detail {
-  margin: 10px 0 0;
+  margin: 12px 0 0;
   font-size: 12px;
   color: var(--ink-2);
   line-height: 1.5;
@@ -361,14 +373,15 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 .confirm-explain {
   margin: 14px 0 0;
   padding: 12px;
-  border-radius: 4px;
-  background: var(--chip);
+  border-radius: var(--radius-md);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
   font-size: 12px;
-  color: var(--ink);
+  color: var(--ink-2);
   line-height: 1.7;
 }
 .confirm-explain em { color: var(--accent); font-style: normal; }
-.confirm-explain strong { color: #fff; }
+.confirm-explain strong { color: var(--ink); }
 .confirm-actions {
   display: flex;
   justify-content: flex-end;

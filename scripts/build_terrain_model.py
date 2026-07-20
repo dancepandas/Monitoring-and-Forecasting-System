@@ -19,7 +19,7 @@ OUT_DIR = ROOT / 'web' / 'public' / 'models'
 OUT_GLB = OUT_DIR / 'terrain.glb'
 OUT_META = OUT_DIR / 'terrain_meta.json'
 
-AOI = {'west': 112.88, 'east': 113.19, 'south': 25.60, 'north': 25.92}
+AOI = {'west': 112.93, 'east': 113.12, 'south': 25.60, 'north': 25.90}
 GRID_SIZE = 600
 EXAGGERATION = 10.0
 

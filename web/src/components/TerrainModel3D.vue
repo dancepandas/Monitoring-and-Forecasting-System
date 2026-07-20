@@ -25,14 +25,9 @@ let dracoLoader = null
 let meta = null
 const stationGroups = []
 const stationDataSprites = {}
-const stationPulseMeshes = {}
-const stationPillars = {}
 let dataTimer = null
-let resumeTimer = null
 let onPointerMoveHandler = null
 let onClickHandler = null
-let onControlsStart = null
-let onControlsEnd = null
 const activeFlashes = new Map()
 const MODEL_Z = 15500
 
@@ -51,69 +46,26 @@ function heightAt(lon, lat) {
   return heights_meters[i][j] * exaggeration
 }
 
-function fitCameraToModel(obj) {
-  if (!camera || !controls) return
-  const box = new THREE.Box3().setFromObject(obj)
-  const sphere = new THREE.Sphere()
-  box.getBoundingSphere(sphere)
-  const target = new THREE.Vector3(0, 0, MODEL_Z)
-  const dir = new THREE.Vector3(-25000, 35000, 45000).sub(target).normalize()
-  const fovRad = (camera.fov * Math.PI) / 180
-  const distance = (sphere.radius / Math.sin(fovRad / 2)) * 1.12
-  camera.position.copy(target).add(dir.multiplyScalar(distance))
-  controls.target.copy(target)
-  controls.update()
-}
-
 function flyToOverview() {
   if (!camera || !controls) return
-  camera.position.set(-25000, 35000, 45000)
+  camera.position.set(0, 0, 80000)
   controls.target.set(0, 0, MODEL_Z)
+  // 重置正交相机 zoom 到初始 frustum
+  const el = container.value
+  if (el) {
+    const w = el.clientWidth, h = el.clientHeight
+    const aspect = w / h
+    const frustumSize = 35000
+    camera.left = -frustumSize * aspect / 2
+    camera.right = frustumSize * aspect / 2
+    camera.top = frustumSize / 2
+    camera.bottom = -frustumSize / 2
+    camera.updateProjectionMatrix()
+  }
   controls.update()
 }
 
 defineExpose({ flyToOverview })
-
-function makeGradientPillarTexture() {
-  const c = document.createElement('canvas')
-  c.width = 64; c.height = 512
-  const ctx = c.getContext('2d')
-  const grad = ctx.createLinearGradient(0, c.height, 0, 0)
-  grad.addColorStop(0, 'rgba(34, 211, 238, 0.20)')
-  grad.addColorStop(1, 'rgba(103, 232, 249, 0.90)')
-  ctx.fillStyle = grad
-  ctx.fillRect(0, 0, c.width, c.height)
-  const tex = new THREE.CanvasTexture(c)
-  tex.minFilter = THREE.LinearFilter
-  return tex
-}
-
-const pillarTexture = makeGradientPillarTexture()
-
-function makePulseTextures(color = 'rgba(34, 211, 238, 0.8)') {
-  const frames = []
-  const size = 128
-  for (let f = 0; f < 8; f++) {
-    const c = document.createElement('canvas')
-    c.width = size; c.height = size
-    const ctx = c.getContext('2d')
-    const r = (f / 7) * (size / 2 - 6) + 6
-    ctx.clearRect(0, 0, size, size)
-    ctx.beginPath()
-    ctx.arc(size/2, size/2, r, 0, Math.PI * 2)
-    ctx.lineWidth = 4
-    ctx.strokeStyle = color
-    ctx.stroke()
-    const tex = new THREE.CanvasTexture(c)
-    tex.minFilter = THREE.LinearFilter
-    frames.push(tex)
-  }
-  return frames
-}
-
-const pulseTexturesCyan = makePulseTextures('rgba(34, 211, 238, 0.8)')
-const pulseTexturesOrange = makePulseTextures('rgba(249, 115, 22, 0.8)')
-const pulseTexturesRed = makePulseTextures('rgba(239, 68, 68, 0.8)')
 
 function makeNameTexture(name) {
   const c = document.createElement('canvas')
@@ -149,67 +101,57 @@ function buildStations() {
     const { x, y } = lonlatToModel(s.lon, s.lat)
     const z = heightAt(s.lon, s.lat) + MODEL_Z
     const g = new THREE.Group()
-    g.position.set(x, y, z)
+    g.position.set(x, y, z + 80)
     g.userData = { code: s.code, name: s.name }
 
-    // 脉冲底座环
-    const pulse = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: pulseTexturesCyan[0],
-      transparent: true,
-      opacity: 0.9,
-      depthTest: false,
-    }))
-    pulse.scale.set(2400, 2400, 1)
-    pulse.position.set(0, 0, -50)
-    g.add(pulse)
-    stationPulseMeshes[s.code] = { mesh: pulse, frames: pulseTexturesCyan, frame: 0, interval: 0.6, paused: false }
-
-    // 渐变光柱
-    const pillarH = 1800
-    const pillar = new THREE.Mesh(
-      new THREE.CylinderGeometry(60, 60, pillarH, 16, 1, true),
+    // 平面圆环标记
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(500, 900, 32),
       new THREE.MeshBasicMaterial({
-        map: pillarTexture,
-        transparent: true,
-        opacity: 0.75,
+        color: 0x22D3EE,
         side: THREE.DoubleSide,
-        depthWrite: false,
+        transparent: true,
+        opacity: 0.9,
+        depthTest: false,
       })
     )
-    pillar.rotation.x = Math.PI / 2
-    pillar.position.set(0, 0, pillarH / 2)
-    g.add(pillar)
-    stationPillars[s.code] = pillar
+    ring.rotation.x = 0
+    g.add(ring)
 
-    // 顶部光球
-    const top = new THREE.Mesh(
-      new THREE.SphereGeometry(160, 16, 16),
-      new THREE.MeshBasicMaterial({ color: 0x67E8F9 })
+    // 中心实心点
+    const dot = new THREE.Mesh(
+      new THREE.CircleGeometry(350, 32),
+      new THREE.MeshBasicMaterial({
+        color: 0x67E8F9,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.95,
+        depthTest: false,
+      })
     )
-    top.position.set(0, 0, pillarH)
-    g.add(top)
+    g.add(dot)
 
     // 站名标签
     const label = new THREE.Sprite(new THREE.SpriteMaterial({
       map: makeNameTexture(s.name.split('-').pop()),
       transparent: true,
+      depthTest: false,
     }))
-    label.position.set(0, 0, pillarH + 350)
-    label.scale.set(3000, 750, 1)
+    label.position.set(0, 1400, 0)
+    label.scale.set(3200, 800, 1)
     g.add(label)
 
-    // 数据飘带
-    const level = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeDataTexture('水位', '--', 'm'), transparent: true }))
-    level.position.set(0, 0, pillarH + 750)
-    level.scale.set(3000, 385, 1)
+    // 水位数据
+    const level = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeDataTexture('水位', '--', 'm'),
+      transparent: true,
+      depthTest: false,
+    }))
+    level.position.set(0, -1400, 0)
+    level.scale.set(3200, 420, 1)
     g.add(level)
 
-    const flow = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeDataTexture('流量', '--', 'm³/s'), transparent: true }))
-    flow.position.set(0, 0, pillarH + 1080)
-    flow.scale.set(3000, 385, 1)
-    g.add(flow)
-
-    stationDataSprites[s.code] = { level, flow }
+    stationDataSprites[s.code] = { level }
     scene.add(g)
     stationGroups.push(g)
   })
@@ -222,24 +164,7 @@ function getAlertLevel(level, warning, danger) {
 }
 
 function setStationAlert(code, level) {
-  const p = stationPulseMeshes[code]
-  const pillar = stationPillars[code]
-  if (!p) return
-  if (level === 2) {
-    p.frames = pulseTexturesRed
-    p.interval = 0.25
-    if (pillar) pillar.material.color.setHex(0xEF4444)
-  } else if (level === 1) {
-    p.frames = pulseTexturesOrange
-    p.interval = 0.40
-    if (pillar) pillar.material.color.setHex(0xF97316)
-  } else {
-    p.frames = pulseTexturesCyan
-    p.interval = 0.60
-    if (pillar) pillar.material.color.setHex(0xFFFFFF)
-  }
-  p.frame = Math.min(p.frame, p.frames.length - 1)
-  p.mesh.material.map = p.frames[p.frame]
+  // 平面版本暂不做预警颜色变化，后续可在此改标记颜色
 }
 
 function flashSprite(sprite) {
@@ -270,7 +195,6 @@ async function fetchAndUpdateData() {
       const sprites = stationDataSprites[item.station_code]
       if (!sprites) continue
       const wl = item.water_level ?? item.waterLevel
-      const flow = item.virtual_flow ?? item.virtualFlow ?? item.water_flow ?? item.waterFlow
       const warning = item.warning_level ?? item.warningLevel
       const danger = item.danger_level ?? item.dangerLevel
       const alert = getAlertLevel(wl ?? -Infinity, warning, danger)
@@ -279,11 +203,6 @@ async function fetchAndUpdateData() {
         sprites.level.material.map = makeDataTexture('水位', Number(wl).toFixed(2), 'm', alert)
         sprites.level.material.needsUpdate = true
         flashSprite(sprites.level)
-      }
-      if (flow != null) {
-        sprites.flow.material.map = makeDataTexture('流量', Number(flow).toFixed(0), 'm³/s', alert)
-        sprites.flow.material.needsUpdate = true
-        flashSprite(sprites.flow)
       }
       setStationAlert(item.station_code, alert)
     }
@@ -307,30 +226,32 @@ onMounted(() => {
   scene.background = new THREE.Color('#06141D')
   scene.fog = new THREE.Fog('#06141D', 25000, 90000)
 
-  camera = new THREE.PerspectiveCamera(45, w / h, 1, 200000)
-  camera.up.set(0, 0, 1)
-  camera.position.set(-25000, 35000, 45000)
+  // 正俯视 OrthographicCamera，把 3D 地形当成平面地图看
+  const aspect = w / h
+  const frustumSize = 35000
+  camera = new THREE.OrthographicCamera(
+    frustumSize * aspect / -2,
+    frustumSize * aspect / 2,
+    frustumSize / 2,
+    frustumSize / -2,
+    1,
+    200000
+  )
+  camera.position.set(0, 0, 80000)
+  camera.lookAt(0, 0, MODEL_Z)
+  camera.up.set(0, 1, 0)
 
-  scene.add(new THREE.AmbientLight(0x335566, 0.5))
-  const dir = new THREE.DirectionalLight(0xaaccdd, 0.9)
+  scene.add(new THREE.AmbientLight(0x335566, 0.6))
+  const dir = new THREE.DirectionalLight(0xaaccdd, 1.0)
   dir.position.set(30000, -40000, 50000)
   scene.add(dir)
-  const fill = new THREE.DirectionalLight(0x1e3a4c, 0.3)
-  fill.position.set(-30000, 30000, 20000)
-  scene.add(fill)
 
   controls = new OrbitControls(camera, renderer.domElement)
   controls.enableDamping = true
   controls.dampingFactor = 0.06
-  controls.enableRotate = true
+  controls.enableRotate = false
   controls.enableZoom = true
   controls.enablePan = true
-  controls.minPolarAngle = 0
-  controls.maxPolarAngle = Math.PI / 2.2
-  controls.minDistance = 8000
-  controls.maxDistance = 70000
-  controls.autoRotate = true
-  controls.autoRotateSpeed = 0.4
   controls.target.set(0, 0, MODEL_Z)
   controls.update()
 
@@ -339,12 +260,7 @@ onMounted(() => {
   let hoveredCode = null
 
   function setStationHover(code, hovered) {
-    const pillar = stationPillars[code]
-    if (pillar) pillar.material.opacity = hovered ? 0.95 : 0.75
-    const p = stationPulseMeshes[code]
-    if (!p) return
-    p.paused = hovered
-    p.mesh.material.opacity = hovered ? 1.0 : 0.9
+    // 平面版本暂只做光标变化，后续可加标记高亮
   }
 
   function onPointerMove(e) {
@@ -367,9 +283,6 @@ onMounted(() => {
   function onClick(e) {
     if (!hoveredCode) return
     rotation.pinStation(hoveredCode)
-    controls.autoRotate = false
-    clearTimeout(resumeTimer)
-    resumeTimer = setTimeout(() => { controls.autoRotate = true }, 8000)
   }
 
   onPointerMoveHandler = onPointerMove
@@ -377,16 +290,14 @@ onMounted(() => {
   renderer.domElement.addEventListener('pointermove', onPointerMoveHandler)
   renderer.domElement.addEventListener('click', onClickHandler)
 
-  onControlsStart = () => {
-    controls.autoRotate = false
-    clearTimeout(resumeTimer)
-  }
-  onControlsEnd = () => {
-    clearTimeout(resumeTimer)
-    resumeTimer = setTimeout(() => { controls.autoRotate = true }, 3000)
-  }
-  controls.addEventListener('start', onControlsStart)
-  controls.addEventListener('end', onControlsEnd)
+  controls = new OrbitControls(camera, renderer.domElement)
+  controls.enableDamping = true
+  controls.dampingFactor = 0.06
+  controls.enableRotate = false
+  controls.enableZoom = true
+  controls.enablePan = true
+  controls.target.set(0, 0, MODEL_Z)
+  controls.update()
 
   dracoLoader = new DRACOLoader()
   dracoLoader.setDecoderPath('/draco/')
@@ -430,17 +341,6 @@ onMounted(() => {
 
   const animate = () => {
     animateId = requestAnimationFrame(animate)
-    const dt = clock.getDelta()
-    Object.values(stationPulseMeshes).forEach((p) => {
-      if (p.paused) return
-      p.timer = (p.timer || 0) + dt
-      if (p.timer >= p.interval) {
-        p.timer = 0
-        p.frame = (p.frame + 1) % p.frames.length
-        p.mesh.material.map = p.frames[p.frame]
-        p.mesh.material.needsUpdate = true
-      }
-    })
     controls.update()
     renderer.render(scene, camera)
   }
@@ -453,8 +353,15 @@ function onResize() {
   if (!container.value || !renderer) return
   const w = container.value.clientWidth, h = container.value.clientHeight
   renderer.setSize(w, h)
-  camera.aspect = w / h
-  camera.updateProjectionMatrix()
+  if (camera.isOrthographicCamera) {
+    const aspect = w / h
+    const frustumSize = 35000
+    camera.left = -frustumSize * aspect / 2
+    camera.right = frustumSize * aspect / 2
+    camera.top = frustumSize / 2
+    camera.bottom = -frustumSize / 2
+    camera.updateProjectionMatrix()
+  }
 }
 
 onUnmounted(() => {
@@ -464,15 +371,10 @@ onUnmounted(() => {
     renderer.domElement.removeEventListener('click', onClickHandler)
   }
   if (dataTimer) clearInterval(dataTimer)
-  if (resumeTimer) clearTimeout(resumeTimer)
   activeFlashes.forEach((id) => { if (id) cancelAnimationFrame(id) })
   activeFlashes.clear()
   if (animateId) cancelAnimationFrame(animateId)
-  if (controls) {
-    controls.removeEventListener('start', onControlsStart)
-    controls.removeEventListener('end', onControlsEnd)
-    controls.dispose()
-  }
+  if (controls) { controls.dispose() }
   if (dracoLoader) dracoLoader.dispose()
   if (renderer) { renderer.dispose(); renderer.domElement.remove() }
 })

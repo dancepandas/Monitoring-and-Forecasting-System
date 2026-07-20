@@ -3,35 +3,52 @@
 </template>
 
 <script setup>
+/**
+ * CesiumMap.vue — 纯 3D 地形建模底图 (无地图影像)
+ * ================================================
+ * 这是驾驶舱风格的 3D 地形模型：
+ *   - 底图 = 本地 DEM 30m 高程起伏 (无卫星图/街道图)
+ *   - 站点 = 直接钉在地形表面 (CLAMP_TO_GROUND)
+ *   - 水系 = 叠加在地形上的青色河网
+ *   - 地形色 = 驾驶舱深色 + 光照阴影立体感
+ */
+
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import * as Cesium from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import { STATIONS } from '../stations'
 import { useRotationStore } from '../store/rotation'
+import { createLocalTerrainProvider } from '../utils/localTerrainProvider'
 
 const container = ref(null)
 let viewer = null
 let clickHandler = null
 const rotation = useRotationStore()
 
-// 相机初始定位：燕泉河 00234
+const props = defineProps({
+  useCustomTerrain: { type: Boolean, default: true },
+  terrainExaggeration: { type: Number, default: 1.8 },
+  showWaterSystem: { type: Boolean, default: true },
+  showContours: { type: Boolean, default: false },
+  terrainUrl: { type: String, default: '/terrain' },
+})
+
+const emit = defineEmits(['ready', 'terrainLoaded', 'waterLoaded'])
+
+// ─── 常量 ────────────────────────────────────────────
 const CENTER_LON = 113.02373
 const CENTER_LAT = 25.78843
-
-// 水利科技感配色
 const CYAN = '#22D3EE'
 const AQUA = '#67E8F9'
-const DEEP = '#082F49'
 const MONO = '"SF Mono", "JetBrains Mono", Consolas, monospace'
 
-// 水文传感器节点图标：表盘刻度 + 同心环 + 中央水波纹 + 指向尖端；active 带光晕与侧十字
+// ─── 传感器节点图标 ──────────────────────────────────
 function drawMarker(active) {
   const W = 64, H = 80, c = document.createElement('canvas')
   c.width = W; c.height = H
   const ctx = c.getContext('2d')
   const cx = W / 2, cy = 28, R = active ? 18 : 13
 
-  // 1. 光晕（active）
   if (active) {
     const g = ctx.createRadialGradient(cx, cy, R * 0.2, cx, cy, R * 2.8)
     g.addColorStop(0, 'rgba(34,211,238,0.55)')
@@ -41,7 +58,6 @@ function drawMarker(active) {
     ctx.beginPath(); ctx.arc(cx, cy, R * 2.8, 0, Math.PI * 2); ctx.fill()
   }
 
-  // 2. 指向地面的尖端（渐变）
   ctx.beginPath()
   ctx.moveTo(cx - R * 0.5, cy + R * 0.55)
   ctx.lineTo(cx + R * 0.5, cy + R * 0.55)
@@ -50,15 +66,11 @@ function drawMarker(active) {
   const pg = ctx.createLinearGradient(0, cy, 0, H)
   pg.addColorStop(0, active ? CYAN : 'rgba(34,211,238,0.45)')
   pg.addColorStop(1, 'rgba(34,211,238,0.04)')
-  ctx.fillStyle = pg
-  ctx.fill()
+  ctx.fillStyle = pg; ctx.fill()
 
-  // 3. 表盘刻度（16 档，基本方位更长）
-  ctx.strokeStyle = active ? AQUA : 'rgba(125,211,252,0.45)'
-  ctx.lineWidth = 1
+  ctx.strokeStyle = active ? AQUA : 'rgba(125,211,252,0.45)'; ctx.lineWidth = 1
   for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2
-    const cardinal = i % 4 === 0
+    const a = (i / 16) * Math.PI * 2, cardinal = i % 4 === 0
     const r1 = R + 2, r2 = R + (cardinal ? 7 : 4)
     ctx.beginPath()
     ctx.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1)
@@ -66,21 +78,14 @@ function drawMarker(active) {
     ctx.stroke()
   }
 
-  // 4. 外环 + 底盘
   ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2)
   ctx.fillStyle = active ? 'rgba(8,47,73,0.88)' : 'rgba(8,47,73,0.62)'
   ctx.fill()
-  ctx.lineWidth = active ? 2 : 1.2
-  ctx.strokeStyle = CYAN
-  ctx.stroke()
+  ctx.lineWidth = active ? 2 : 1.2; ctx.strokeStyle = CYAN; ctx.stroke()
 
-  // 5. 内环
   ctx.beginPath(); ctx.arc(cx, cy, R * 0.6, 0, Math.PI * 2)
-  ctx.strokeStyle = 'rgba(103,232,249,0.55)'
-  ctx.lineWidth = 1
-  ctx.stroke()
+  ctx.strokeStyle = 'rgba(103,232,249,0.55)'; ctx.lineWidth = 1; ctx.stroke()
 
-  // 6. 中央水波纹（两条正弦波）
   const drawWave = (yoff, amp, ph, color, lw) => {
     ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineCap = 'round'
     ctx.beginPath()
@@ -94,7 +99,6 @@ function drawMarker(active) {
   drawWave(-1, R * 0.15, 0, '#E0FBFC', active ? 2 : 1.5)
   drawWave(3, R * 0.11, Math.PI, 'rgba(103,232,249,0.75)', 1.2)
 
-  // 7. 侧十字标线（active）
   if (active) {
     ctx.strokeStyle = AQUA; ctx.lineWidth = 1
     ctx.beginPath()
@@ -105,7 +109,6 @@ function drawMarker(active) {
   return c.toDataURL()
 }
 
-// 静态圆环点列（地面声呐环，无动画 → 不会触发 ellipse 校验崩溃）
 function circleRing(lon, lat, rMeters) {
   const N = 64
   const dLat = rMeters / 111320
@@ -118,38 +121,139 @@ function circleRing(lon, lat, rMeters) {
   return pts
 }
 
+// ─── 水系 GeoJSON 加载 ────────────────────────────────
+let waterDataSources = []
+
+async function loadWaterSystem() {
+  if (!viewer) return
+  const waterFiles = ['/geo/water_system.geojson', '/geo/chenzhou_waterways.geojson']
+  for (const url of waterFiles) {
+    try {
+      const resp = await fetch(url)
+      if (!resp.ok) continue
+      const geojson = await resp.json()
+
+      const dataSource = await Cesium.GeoJsonDataSource.load(geojson, {
+        stroke: Cesium.Color.fromCssColorString('#4DF0FF'),
+        fill: Cesium.Color.fromCssColorString('#0C4A6E').withAlpha(0.35),
+        strokeWidth: 2,
+        clampToGround: true,
+      })
+
+      const entities = dataSource.entities.values
+      for (const entity of entities) {
+        if (!entity.polyline && !entity.polygon) continue
+        const p = entity.properties
+        if (!p) continue
+        const waterway = p.waterway?.getValue() || ''
+        const name = p.name?.getValue() || p['name:zh']?.getValue() || ''
+
+        if (entity.polyline) {
+          const isMain = waterway === 'river' || name.length > 0
+          entity.polyline.width = isMain ? 3 : 1.5
+          entity.polyline.material = new Cesium.PolylineGlowMaterialProperty({
+            glowPower: 0.2,
+            color: Cesium.Color.fromCssColorString(isMain ? '#4DF0FF' : '#2CB8C8').withAlpha(isMain ? 0.95 : 0.7),
+          })
+          entity.polyline.clampToGround = true
+        }
+        if (entity.polygon) {
+          entity.polygon.material = Cesium.Color.fromCssColorString('#0EA5E9').withAlpha(0.5)
+          entity.polygon.outline = true
+          entity.polygon.outlineColor = Cesium.Color.fromCssColorString('#38BDF8')
+        }
+      }
+
+      viewer.dataSources.add(dataSource)
+      waterDataSources.push(dataSource)
+      console.log(`[CesiumMap] 水系: ${url} (${entities.length} 要素)`)
+      emit('waterLoaded', waterDataSources.length)
+      return  // 第一个成功就够了
+    } catch (e) {
+      console.warn(`[CesiumMap] 水系加载失败 ${url}:`, e.message)
+    }
+  }
+}
+
+// ─── 监听 ────────────────────────────────────────────
+watch(() => props.terrainExaggeration, (val) => {
+  if (viewer) viewer.scene.verticalExaggeration = val
+})
+watch(() => props.showWaterSystem, (show) => {
+  for (const ds of waterDataSources) ds.show = show
+})
+
+// ─── 生命周期 ────────────────────────────────────────
 onMounted(() => {
   if (!container.value) return
   Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_ION_TOKEN || ''
-  if (!Cesium.Ion.defaultAccessToken) console.warn('[CesiumMap] VITE_CESIUM_ION_TOKEN not set')
 
   viewer = new Cesium.Viewer(container.value, {
+    // ★ 关键：不要任何地图影像底图 —— 纯 3D 地形建模
+    baseLayer: false,
     animation: false, timeline: false, baseLayerPicker: false, fullscreenButton: false,
     homeButton: false, geocoder: false, sceneModePicker: false, navigationHelpButton: false,
     infoBox: false, selectionIndicator: false, creditContainer: undefined,
   })
 
   const scene = viewer.scene
+
+  // ★ 地形：自定义 provider 加载本地 30m DEM
+  if (props.useCustomTerrain) {
+    try {
+      const provider = createLocalTerrainProvider(props.terrainUrl, {
+        minZoom: 10, maxZoom: 15,
+        bounds: [112.0, 25.0, 114.0, 27.0],
+      })
+      viewer.terrainProvider = provider
+      console.log('[CesiumMap] 本地 DEM 地形 provider 已挂载')
+      emit('terrainLoaded')
+    } catch (e) {
+      console.error('[CesiumMap] 地形 provider 失败:', e)
+    }
+  }
+
+  // 地形夸张 + 光照 (立体感)
+  scene.verticalExaggeration = props.terrainExaggeration
+  scene.verticalExaggerationRelativeHeight = 0.0
   scene.globe.enableLighting = true
+  scene.globe.showGroundAtmosphere = true
+  scene.globe.atmosphereLightIntensity = 8.0
+
+  // ★ 关键: 锁定郴州正午时间 (UTC 04:30)，否则 enableLighting 在夜半球会让地形全黑
+  viewer.clock.currentTime = Cesium.JulianDate.fromIso8601('2026-06-21T04:30:00Z')
+  viewer.clock.shouldAnimate = false
+
+  // 驾驶舱深色地形底色 (无影像时 globe 表面色)
+  scene.globe.baseColor = Cesium.Color.fromCssColorString('#14384A')
+
+  // 天空大气
   scene.skyAtmosphere.show = true
   scene.skyAtmosphere.hueShift = 0.0
   scene.skyAtmosphere.saturationShift = -0.3
   scene.skyAtmosphere.brightnessShift = -0.1
-  scene.globe.baseColor = Cesium.Color.fromCssColorString('#9bb7c4')
-  scene.backgroundColor = Cesium.Color.fromCssColorString('#0B2A3A')
+  scene.backgroundColor = Cesium.Color.fromCssColorString('#06141D')
 
-  // 相机站在燕泉河南侧约 18km 处，向北俯视，使站点落在画面中央
+  // 抗锯齿 + 提升地形边缘
+  if (scene.fxaa) scene.fxaa = true
+  scene.globe.maximumScreenSpaceError = 2.0  // 更细的地形细节
+
+  // ── 相机：郴州上空斜视，展示 3D 地形起伏 ──
   viewer.camera.flyTo({
-    destination: Cesium.Cartesian3.fromDegrees(CENTER_LON + 0.022, CENTER_LAT - 0.205, 18000),
-    orientation: { heading: 0, pitch: Cesium.Math.toRadians(-45), roll: 0 },
-    duration: 1.5,
+    destination: Cesium.Cartesian3.fromDegrees(CENTER_LON + 0.05, CENTER_LAT - 0.20, 18000),
+    orientation: {
+      heading: Cesium.Math.toRadians(20),
+      pitch: Cesium.Math.toRadians(-48),
+      roll: 0,
+    },
+    duration: 2.5,
   })
 
+  // ── 站点：直接钉在地形表面 ──
   const imgActive = drawMarker(true)
   const imgIdle = drawMarker(false)
+  const refs = new Map()
 
-  // 每站：节点标记 + 信号光柱 + 三圈声呐环（仅 active 显示）
-  const refs = new Map()   // code -> { marker, beam, rings }
   for (const s of STATIONS) {
     const marker = viewer.entities.add({
       id: s.code,
@@ -177,7 +281,7 @@ onMounted(() => {
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
     })
-    // 信号光柱
+
     const beam = viewer.entities.add({
       position: Cesium.Cartesian3.fromDegrees(s.lon, s.lat, 0),
       polyline: {
@@ -192,7 +296,7 @@ onMounted(() => {
       },
       show: false,
     })
-    // 三圈声呐地面环
+
     const ringSpecs = [
       { r: 420, w: 4, a: 0.5 },
       { r: 760, w: 3, a: 0.26 },
@@ -207,13 +311,13 @@ onMounted(() => {
           glowPower: 0.3,
           color: Cesium.Color.fromCssColorString(CYAN).withAlpha(spec.a),
         }),
+        clampToGround: true,
       },
       show: false,
     }))
     refs.set(s.code, { marker, beam, rings })
   }
 
-  // 高亮当前轮播/钉选站
   function updateHighlight(activeCode) {
     for (const [code, r] of refs) {
       const active = code === activeCode
@@ -224,16 +328,12 @@ onMounted(() => {
       r.marker.label.fillColor = active
         ? Cesium.Color.fromCssColorString('#E0FBFC')
         : Cesium.Color.WHITE
-      r.marker.label.outlineColor = active
-        ? Cesium.Color.fromCssColorString('#041F2E')
-        : Cesium.Color.fromCssColorString('#041F2E')
       r.beam.show = active
       r.rings.forEach(ring => { ring.show = active })
     }
   }
   watch(() => rotation.current.code, (code) => updateHighlight(code), { immediate: true })
 
-  // 点击站点 → 钉选
   clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas)
   clickHandler.setInputAction((click) => {
     const picked = viewer.scene.pick(click.position)
@@ -244,14 +344,53 @@ onMounted(() => {
       rotation.unpinStation()
     }
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
+
+  if (props.showWaterSystem) loadWaterSystem()
+
+  emit('ready', { viewer, scene })
 })
 
 onUnmounted(() => {
   if (clickHandler) { clickHandler.destroy(); clickHandler = null }
   if (viewer) { viewer.destroy(); viewer = null }
+  waterDataSources = []
+})
+
+defineExpose({
+  getViewer: () => viewer,
+  flyToStation: (code) => {
+    const s = STATIONS.find(st => st.code === code)
+    if (s && viewer) {
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(s.lon, s.lat, 3500),
+        orientation: { heading: 0, pitch: Cesium.Math.toRadians(-60), roll: 0 },
+        duration: 1.5,
+      })
+    }
+  },
+  flyToOverview: () => {
+    if (viewer) {
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(CENTER_LON + 0.05, CENTER_LAT - 0.20, 18000),
+        orientation: {
+          heading: Cesium.Math.toRadians(20),
+          pitch: Cesium.Math.toRadians(-48),
+          roll: 0,
+        },
+        duration: 2.0,
+      })
+    }
+  },
+  reloadWaterSystem: loadWaterSystem,
 })
 </script>
 
 <style scoped>
-.cesium-bg { position: fixed; inset: 0; z-index: 0; }
+.cesium-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+:deep(.cesium-viewer .cesium-widget-credits) { display: none !important; }
+:deep(.cesium-viewer-bottom) { display: none; }
 </style>

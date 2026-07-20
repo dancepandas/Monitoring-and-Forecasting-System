@@ -66,26 +66,27 @@ onUnmounted(() => {
 
 <style scoped>
 .sys-status {
-  display: flex; align-items: center; gap: 6px;
-  min-height: 32px; padding: 0 12px; border-radius: 999px;
+  display: flex; align-items: center; gap: 8px;
+  min-height: 34px; padding: 0 14px; border-radius: 999px;
   font-size: 12px; cursor: pointer;
-  user-select: none; transition: all .15s;
+  user-select: none; transition: all .18s ease;
   border: 1px solid var(--line);
-  background: rgba(255,255,255,.5);
-  color: var(--ink-2-dark);
+  background: var(--bg-2);
+  color: var(--muted);
+  font-family: var(--mono);
 }
-.sys-status:hover { border-color: var(--water); }
-.sys-status.ok { border-color: var(--ok-soft); color: var(--ok); }
-.sys-status.warn { border-color: var(--warn); color: var(--warn); }
-.sys-status.crit { border-color: var(--danger); color: var(--danger); }
+.sys-status:hover { border-color: var(--edge); box-shadow: 0 0 12px var(--glow-weak); }
+.sys-status.ok { border-color: rgba(52, 211, 153, .25); color: var(--ok); background: rgba(52, 211, 153, .08); }
+.sys-status.warn { border-color: rgba(250, 204, 21, .25); color: var(--warn); background: rgba(250, 204, 21, .08); }
+.sys-status.crit { border-color: rgba(248, 113, 113, .25); color: var(--danger); background: rgba(248, 113, 113, .08); }
 .ss-dot {
   width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
   background: currentColor;
 }
-.ok .ss-dot { background: var(--ok); animation: none; }
-.warn .ss-dot { background: var(--warn); animation: ssPulse 3s ease-in-out infinite; }
-.crit .ss-dot { background: var(--danger); animation: ssPulse 1.5s ease-in-out infinite; }
+.ok .ss-dot { background: var(--ok); animation: none; box-shadow: 0 0 8px var(--ok-glow); }
+.warn .ss-dot { background: var(--warn); animation: ssPulse 3s ease-in-out infinite; box-shadow: 0 0 8px rgba(250, 204, 21, .40); }
+.crit .ss-dot { background: var(--danger); animation: ssPulse 1.5s ease-in-out infinite; box-shadow: 0 0 8px var(--danger-glow); }
 @keyframes ssPulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 .ss-text { font-weight: 600; white-space: nowrap; }
-.ss-time { color: var(--muted-dark); font-size: 10px; white-space: nowrap; }
+.ss-time { color: var(--muted); font-size: 10px; white-space: nowrap; opacity: .8; }
 </style>

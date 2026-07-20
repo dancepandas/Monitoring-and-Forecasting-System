@@ -2,7 +2,6 @@
   <div class="banner-tabs">
     <router-link v-for="t in tabs" :key="t.to" :to="t.to" class="tab-item" :class="{ active: isActive(t) }">
       <span class="tab-label">{{ t.label }}</span>
-      <i class="tab-underline"></i>
     </router-link>
   </div>
 </template>
@@ -30,42 +29,44 @@ function isActive(t) {
 .banner-tabs {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   flex-shrink: 0;
+  padding: 0 4px;
 }
 
 .tab-item {
   position: relative;
   padding: 7px 16px;
-  border: 1px solid var(--edge);
-  border-radius: 4px;
-  clip-path: var(--clip);
-  background: linear-gradient(to top,
-    rgba(14, 42, 78, .00) 0%,
-    rgba(14, 42, 78, .15) 30%,
-    rgba(14, 42, 78, .45) 58%,
-    rgba(14, 42, 78, .75) 82%,
-    rgba(14, 42, 78, .90) 100%);
-  -webkit-backdrop-filter: blur(16px) saturate(1.1);
-  backdrop-filter: blur(16px) saturate(1.1);
-  color: var(--muted);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
   text-decoration: none;
+  font-family: var(--display);
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: .12em;
-  transition: all .18s;
+  letter-spacing: .04em;
+  transition: color .22s var(--ease-soft), background .22s var(--ease-soft), transform .25s var(--ease-spring);
   white-space: nowrap;
 }
-.tab-item:hover { color: #fff; border-color: var(--primary); }
-.tab-item.active {
-  color: #fff;
-  border-color: var(--primary);
-  background: rgba(30, 144, 255, .15);
-  text-shadow: 0 0 10px rgba(30, 144, 255, .5);
-  box-shadow: 0 0 12px rgba(30, 144, 255, .18);
+
+.tab-item:hover {
+  color: var(--primary);
+  background: rgba(14, 165, 233, .12);
+  transform: translateY(-1px);
 }
 
-.tab-underline {
-  display: none;
+.tab-item.active {
+  color: #FFFFFF;
+  background: linear-gradient(180deg, var(--primary) 0%, var(--primary-600) 100%);
+  box-shadow: 0 6px 16px rgba(30, 91, 141, .35), inset 0 1px 0 rgba(255, 255, 255, .35);
+  animation: tab-pop .45s var(--ease-spring);
 }
+@keyframes tab-pop {
+  0% { transform: scale(.86); }
+  60% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.tab-label { position: relative; z-index: 1; }
 </style>

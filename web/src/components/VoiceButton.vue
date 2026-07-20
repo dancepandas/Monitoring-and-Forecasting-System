@@ -43,7 +43,7 @@ const micTitle = computed(() => {
 
 <style scoped>
 .voice-btns { display: flex; align-items: flex-end; gap: 6px; flex-shrink: 0; }
-.vb { min-height: 38px; width: 38px; border: 1px solid rgba(15,23,42,.12); border-radius: 18px; background: rgba(255,255,255,.72); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: all .15s; }
+.vb { min-height: 38px; width: 38px; border: 1px solid rgba(15,23,42,.12); border-radius: 18px; background: var(--bg-2); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: all .15s; }
 .vb:hover { border-color: var(--primary); }
 .vb:disabled { opacity: .45; cursor: not-allowed; }
 .vb.mic.recording { border-color: var(--danger); background: rgba(220,38,38,.12); animation: vbPulse 1.2s ease-in-out infinite; }
