@@ -14,6 +14,7 @@
 import asyncio
 import json
 import logging
+import threading
 import time
 from collections import Counter
 from datetime import datetime, timedelta
@@ -29,7 +30,9 @@ CACHE_DIR = Path(__file__).parent.parent / "data"
 CACHE_DIR.mkdir(exist_ok=True)
 CACHE_FILE = CACHE_DIR / "hydro_cache.json"
 
-_lock = asyncio.Lock()
+# threading.Lock 而非 asyncio.Lock：模块级 asyncio.Lock 在 Python 3.12 下绑定导入时
+# 的 event loop，uvicorn 启动后创建新 loop 导致 "bound to a different event loop"。
+_lock = threading.Lock()
 
 _DEFAULT_MAX_RAW = settings.cache_max_raw
 _DEFAULT_MAX_ALIGNED = settings.cache_max_aligned
@@ -120,7 +123,7 @@ async def merge_raw(station_code: str, data_type: str, api_response: dict) -> di
     将 aiflow2 API 返回的数据合并到 raw 层。
     空数据不覆盖已有 records，只记录 gap。
     """
-    async with _lock:
+    with _lock:
         data = _load_full()
         entry = _ensure_raw(data, station_code, data_type)
         max_records = entry["config"].get("max_records", _DEFAULT_MAX_RAW)
@@ -287,7 +290,7 @@ async def rebuild_aligned(station_code: str) -> dict:
     3. 加锁：回写结果到 aligned 缓存
     """
     # ── Phase 1: 加锁读取，构建网格 ──
-    async with _lock:
+    with _lock:
         data = _load_full()
         raw_station = data.get("raw", {}).get(station_code, {})
         flow_raw = raw_station.get("flow_raw", {})
@@ -492,7 +495,7 @@ async def rebuild_aligned(station_code: str) -> dict:
             pass
 
     # ── Phase 3: 加锁回写 ──
-    async with _lock:
+    with _lock:
         data = _load_full()
         aligned_records.extend(future_records)
         max_records = _DEFAULT_MAX_ALIGNED
@@ -610,7 +613,7 @@ async def get_stats(station_code: str, field: str, max_age: int = 600) -> dict:
 
 async def _read_aligned_section(section: str, station: str, dtype: str = None,
                                  max_age: int = 600) -> Optional[dict]:
-    async with _lock:
+    with _lock:
         data = _load_full()
         if section == "raw":
             entry = data.get("raw", {}).get(station, {}).get(dtype)
@@ -654,7 +657,7 @@ async def set(key: str, value: Any, ttl: int = 600):
 
 
 async def all_keys() -> list:
-    async with _lock:
+    with _lock:
         data = _load_full()
         keys = []
         for station, types in data.get("raw", {}).items():
@@ -667,8 +670,7 @@ async def all_keys() -> list:
 # ── 视频快照缓存（独立轻量存储） ──
 
 _VIDEO_SNAPSHOTS_FILE = CACHE_DIR / "video_snapshots.json"
-_video_lock = asyncio.Lock()
-_MAX_VIDEO_SNAPSHOTS = 10
+_video_lock = threading.Lock()
 
 
 async def save_video_snapshot(station_code: str, snapshot: dict) -> list:
@@ -677,7 +679,7 @@ async def save_video_snapshot(station_code: str, snapshot: dict) -> list:
     萤石云 liveAddress 有 expire 窗口（约 2 小时），过期后 404。_MAX_VIDEO_SNAPSHOTS
     按有效窗口 / 采集间隔设定，确保保留的每条快照地址都还在有效期内。
     """
-    async with _video_lock:
+    with _video_lock:
         snaps = _load_video_snapshots()
         station_snaps = snaps.get(station_code, [])
         station_snaps.insert(0, snapshot)
@@ -698,14 +700,14 @@ def _filter_live(snaps: list) -> list:
 
 async def get_video_snapshots(station_code: str, limit: int = 10) -> list:
     """读取视频快照列表（已自动过滤 liveAddress 过期的）。"""
-    async with _video_lock:
+    with _video_lock:
         snaps = _load_video_snapshots()
         return _filter_live(snaps.get(station_code, []))[:limit]
 
 
 async def get_all_video_snapshots(limit: int = 10) -> dict:
     """读取所有站点的视频快照，按站点分组（已自动过滤过期的）。"""
-    async with _video_lock:
+    with _video_lock:
         all_snaps = _load_video_snapshots()
         result = {}
         for code, snaps in all_snaps.items():
