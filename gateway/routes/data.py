@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 from ..auth.middleware import get_current_user
 from ..config import settings
-from ..services import data_cache, warning_config, station_names, aiflow_client
+from ..services import data_cache, warning_config, station_names, aiflow_client, anomaly_judge
 from ..services.time_utils import default_times
 
 router = APIRouter(prefix="/api/data", tags=["data"])
@@ -49,12 +49,24 @@ async def get_flow_raw(station_code: str, device_code: str, begin_time: str = ""
         logger.warning(f"/api/data/flow-raw cache miss: station={station_code}")
         return _empty(station_code)
     logger.info(f"/api/data/flow-raw cache hit: station={station_code}")
-    return data
+    # 浅拷贝响应并把数据异常裁决挂到最新一条 record——不得原地改共享缓存对象
+    try:
+        verdict = await anomaly_judge.verdict_for(station_code)
+        out = dict(data)
+        rows = list(out.get("data") or [])
+        if rows:
+            rows[0] = {**rows[0], "anomaly": verdict}
+            out["data"] = rows
+        return out
+    except Exception as e:
+        logger.warning("/api/data/flow-raw anomaly attach failed: %s", e)
+        return data
 
 
 @router.get("/latest")
 async def get_latest(station_codes: str = settings.station_codes, user: dict = Depends(get_current_user)):
     codes = [c.strip() for c in station_codes.split(",")]
+    verdicts = await anomaly_judge.verdicts_for_all()
     results = {}
     for code in codes:
         data = await data_cache.get(f"aiflow:level:{code}", max_age=600)
@@ -63,7 +75,7 @@ async def get_latest(station_codes: str = settings.station_codes, user: dict = D
             items = data.get("data", []) or []
             if items:
                 item = items[0]
-        results[code] = {"level": item}
+        results[code] = {"level": item, "anomaly": verdicts.get(code, {"flagged": False, "source": "none", "reason": ""})}
     return {"stations": results, "updated": datetime.now().isoformat()}
 
 
@@ -73,6 +85,7 @@ async def get_warnings(station_codes: str = settings.station_codes, user: dict =
     admin = warning_config.get_admin_contact()
     warnings = []
     alerts = []
+    data_anomalies = []
 
     # 从 AlertTracker 获取活跃告警（已确认的过滤掉），使用引擎单例的 tracker
     from ..services.monitor_engine import MonitorEngine
@@ -145,6 +158,19 @@ async def get_warnings(station_codes: str = settings.station_codes, user: dict =
         if alert_id in tracker_ids:
             continue
         tracker_ids.add(alert_id)
+        # 数据异常单独走 data_anomalies（紫色「数据异常」类别），不进 alerts，避免重复计数
+        if ta.alert_type == "data_anomaly":
+            data_anomalies.append({
+                "id": alert_id,
+                "type": "数据异常",
+                "category": "数据质量",
+                "name": ta.title,
+                "level": "数据异常",
+                "station_code": ta.station_code,
+                "message": ta.message,
+                "time": datetime.fromtimestamp(ta.triggered_at).isoformat(),
+            })
+            continue
         alerts.append({
             "id": alert_id,
             "type": "告警",
@@ -161,7 +187,8 @@ async def get_warnings(station_codes: str = settings.station_codes, user: dict =
     return {
         "warnings": warnings, "warning_count": len(warnings),
         "alerts": alerts, "alert_count": len(alerts),
-        "total": len(warnings) + len(alerts),
+        "data_anomalies": data_anomalies, "data_anomaly_count": len(data_anomalies),
+        "total": len(warnings) + len(alerts) + len(data_anomalies),
         "updated": datetime.now().isoformat(),
     }
 

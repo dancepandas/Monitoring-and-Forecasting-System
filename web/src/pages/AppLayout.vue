@@ -1,6 +1,6 @@
 <template>
   <div class="app-layout">
-    <CesiumMap />
+    <TerrainModel3D />
     <header class="app-banner">
       <TabBar />
       <div class="banner-spacer"></div>
@@ -37,7 +37,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import CesiumMap from '../components/CesiumMap.vue'
+import TerrainModel3D from '../components/TerrainModel3D.vue'
 import TabBar from '../components/TabBar.vue'
 import ContextMenu from '../components/ContextMenu.vue'
 import VoiceAssistant from '../components/VoiceAssistant.vue'
@@ -97,5 +97,6 @@ onMounted(() => {
   fetchStatus()
   statusTimer = setInterval(fetchStatus, 60000)
 })
+
 onUnmounted(() => { if (statusTimer) clearInterval(statusTimer) })
 </script>

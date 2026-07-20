@@ -12,18 +12,19 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 const props = defineProps({
   history: { type: Array, default: () => [] },
   forecast: { type: Array, default: () => [] },
-  unit: { type: String, default: '水位(m)' }
+  unit: { type: String, default: '水位(m)' },
+  markLast: { type: Boolean, default: false }
 })
 
 const wrap = ref(null)
 const canvas = ref(null)
 const svg = ref(null)
 
-const historyColor = '#0EA5E9'
-const forecastColor = '#6366F1'
+const historyColor = '#06B6D4'
+const forecastColor = '#818CF8'
 const HOUR = 3600000
 
-const margin = { top: 12, right: 18, bottom: 26, left: 54 }
+const margin = { top: 14, right: 18, bottom: 26, left: 54 }
 
 function _getTime(d) {
   if (d == null) return null
@@ -57,7 +58,6 @@ const yDomain = computed(() => {
   const min = Math.min(...vals)
   const max = Math.max(...vals)
   const range = max - min
-  // Tighter padding so meaningful variation isn't visually flattened
   const pad = range > 0 ? range * 0.06 : Math.abs(max) * 0.05 || 1
   return [Math.max(0, min - pad), max + pad]
 })
@@ -134,21 +134,19 @@ function render() {
   }
   const nowX = nowPoint.value ? X(nowPoint.value._t) : null
 
-  // Y grid + labels
   let g = ''
   for (let i = 0; i <= 4; i++) {
     const v = vMin + (vMax - vMin) * (i / 4)
     const y = Y(v)
-    g += `<line x1="${margin.left}" y1="${y.toFixed(1)}" x2="${(margin.left + pw).toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(0,0,0,.12)" stroke-dasharray="4 7"/>`
-    g += `<text x="${margin.left - 8}" y="${(y + 3).toFixed(1)}" font-family="var(--mono)" font-size="10" fill="#000" text-anchor="end">${Math.round(v)}</text>`
+    g += `<line x1="${margin.left}" y1="${y.toFixed(1)}" x2="${(margin.left + pw).toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(148,163,184,.12)" stroke-dasharray="4 8"/>`
+    g += `<text x="${margin.left - 8}" y="${(y + 3).toFixed(1)}" font-family="var(--sans)" font-size="10" fill="rgba(148,163,184,.70)" text-anchor="end">${Math.round(v)}</text>`
   }
 
-  // X ticks
   const { fmt, ticks } = axisTicks(tMin, tMax, pw)
   for (const tt of ticks) {
     const x = X(tt)
-    g += `<line x1="${x.toFixed(1)}" y1="${margin.top}" x2="${x.toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(0,0,0,.08)"/>`
-    g += `<text x="${x.toFixed(1)}" y="${(margin.top + ph + 15).toFixed(1)}" font-family="var(--mono)" font-size="10" fill="#000" text-anchor="middle">${fmtLabel(tt, fmt)}</text>`
+    g += `<line x1="${x.toFixed(1)}" y1="${margin.top}" x2="${x.toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(148,163,184,.06)"/>`
+    g += `<text x="${x.toFixed(1)}" y="${(margin.top + ph + 15).toFixed(1)}" font-family="var(--sans)" font-size="10" fill="rgba(148,163,184,.60)" text-anchor="middle">${fmtLabel(tt, fmt)}</text>`
   }
 
   const hPts = historyPoints.value
@@ -161,47 +159,51 @@ function render() {
 
   const cy = margin.top + ph / 2
   const nowDot = nowPoint.value
-    ? `<circle cx="${nowX.toFixed(1)}" cy="${Y(nowPoint.value.y).toFixed(1)}" r="4" fill="${historyColor}" stroke="#fff" stroke-width="1.5"/>`
+    ? `<circle cx="${nowX.toFixed(1)}" cy="${Y(nowPoint.value.y).toFixed(1)}" r="4.5" fill="${historyColor}" stroke="#fff" stroke-width="1.5"/>`
+    : ''
+  // 数据存疑标记：在最新点外圈套紫色光环（与 --anomaly 同色）
+  const markRing = (props.markLast && nowPoint.value)
+    ? `<circle cx="${nowX.toFixed(1)}" cy="${Y(nowPoint.value.y).toFixed(1)}" r="8" fill="none" stroke="#7C3AED" stroke-width="2" opacity=".9"/>` +
+      `<circle cx="${nowX.toFixed(1)}" cy="${Y(nowPoint.value.y).toFixed(1)}" r="11" fill="none" stroke="#7C3AED" stroke-width="1" opacity=".4"/>`
     : ''
 
-  // 数据点圆点（始终显示）
   let dots = ''
   for (let i = 0; i < hPts.length; i++) {
     const p = hPts[i]
-    dots += `<circle cx="${X(p._t).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="2.5" fill="${historyColor}" stroke="#fff" stroke-width="1"/>`
+    dots += `<circle cx="${X(p._t).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="2" fill="${historyColor}" stroke="#fff" stroke-width="0.6"/>`
   }
 
   svg.value.innerHTML = `
     <defs>
       <linearGradient id="hA" x1="0" x2="0" y1="0" y2="1">
-        <stop offset="0" stop-color="${historyColor}" stop-opacity=".32"/>
+        <stop offset="0" stop-color="${historyColor}" stop-opacity=".25"/>
         <stop offset="1" stop-color="${historyColor}" stop-opacity="0"/>
       </linearGradient>
       <linearGradient id="fA" x1="0" x2="0" y1="0" y2="1">
-        <stop offset="0" stop-color="${forecastColor}" stop-opacity=".28"/>
+        <stop offset="0" stop-color="${forecastColor}" stop-opacity=".22"/>
         <stop offset="1" stop-color="${forecastColor}" stop-opacity="0"/>
       </linearGradient>
     </defs>
     ${g}
-    <text transform="translate(16 ${cy.toFixed(1)}) rotate(-90)" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#000">${escHtml(props.unit)}</text>
-    <line x1="${margin.left}" y1="${(margin.top + ph).toFixed(1)}" x2="${(margin.left + pw).toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(0,0,0,.25)"/>
-    <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(0,0,0,.25)"/>
-    ${nowX != null ? `<line x1="${nowX.toFixed(1)}" y1="${margin.top}" x2="${nowX.toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="${forecastColor}" stroke-width="1" stroke-dasharray="5 5" opacity=".55"/>` : ''}
+    <text transform="translate(16 ${cy.toFixed(1)}) rotate(-90)" text-anchor="middle" font-family="var(--sans)" font-size="10" fill="rgba(148,163,184,.65)" font-weight="500">${escHtml(props.unit)}</text>
+    <line x1="${margin.left}" y1="${(margin.top + ph).toFixed(1)}" x2="${(margin.left + pw).toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(148,163,184,.22)"/>
+    <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${(margin.top + ph).toFixed(1)}" stroke="rgba(148,163,184,.22)"/>
+    ${nowX != null ? `<line x1="${nowX.toFixed(1)}" y1="${margin.top}" x2="${nowX.toFixed(1)}" y2="${(margin.top + ph).toFixed(1)}" stroke="${forecastColor}" stroke-width="1" stroke-dasharray="5 5" opacity=".65"/>` : ''}
     ${hArea ? `<path d="${hArea}" fill="url(#hA)"/>` : ''}
     ${hPath ? `<path d="${hPath}" fill="none" stroke="${historyColor}" stroke-width="2.5"/>` : ''}
     ${fArea ? `<path d="${fArea}" fill="url(#fA)"/>` : ''}
     ${fPath ? `<path d="${fPath}" fill="none" stroke="${forecastColor}" stroke-width="3" stroke-dasharray="8 6"/>` : ''}
     ${dots}
+    ${markRing}
     ${nowDot}
     <rect id="hit-area" x="${margin.left}" y="${margin.top}" width="${pw}" height="${ph}" fill="transparent" pointer-events="all"/>
     <g id="tooltip" visibility="hidden">
-      <rect id="tip-bg" x="0" y="0" width="10" height="32" rx="4" fill="rgba(8,47,73,.94)" stroke="${historyColor}" stroke-width="1"/>
-      <text id="tip-val" x="0" y="0" font-family="var(--mono)" font-size="11" font-weight="700" fill="#fff" text-anchor="middle"/>
-      <text id="tip-time" x="0" y="0" font-family="var(--mono)" font-size="9" fill="#94A3B8" text-anchor="middle"/>
+      <rect id="tip-bg" x="0" y="0" width="10" height="34" rx="6" fill="rgba(255, 255, 255, 0.96)" stroke="${historyColor}" stroke-width="1"/>
+      <text id="tip-val" x="0" y="0" font-family="var(--sans)" font-size="11" font-weight="600" fill="#E2E8F0" text-anchor="middle"/>
+      <text id="tip-time" x="0" y="0" font-family="var(--sans)" font-size="9" fill="#94A3B8" text-anchor="middle"/>
     </g>
   `
 
-  // 鼠标悬停 tooltip
   const hitArea = svg.value.querySelector('#hit-area')
   const tooltip = svg.value.querySelector('#tooltip')
   const tipBg = svg.value.querySelector('#tip-bg')
@@ -229,7 +231,7 @@ function render() {
         const valW = valStr.length * 7
         const bw = Math.max(valW, timeW) + 16
         const tx = X(best._t)
-        const ty = Y(best.y) - 22
+        const ty = Y(best.y) - 24
         tipVal.textContent = valStr
         tipTime.textContent = timeStr
         tipBg.setAttribute('x', (tx - bw / 2).toFixed(1))

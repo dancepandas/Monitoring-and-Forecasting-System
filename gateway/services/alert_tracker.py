@@ -101,7 +101,7 @@ class AlertTracker:
         now = time.time()
 
         # 持续性异常类型：超过去重窗口只更新不新建（避免触发-恢复-触发循环）
-        PERSISTENT_TYPES = {"data_frozen", "cache_stale", "data_missing", "data_spike"}
+        PERSISTENT_TYPES = {"data_frozen", "cache_stale", "data_missing", "data_spike", "data_anomaly"}
 
         async with self._lock:
             existing = self._alerts.get(alert_id)

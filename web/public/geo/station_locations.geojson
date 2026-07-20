@@ -1,0 +1,61 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "station_code": "00125",
+        "station_name": "郴州"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          113.03915,
+          25.80385
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "station_code": "00230",
+        "station_name": "郴州-坳上"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          113.01888,
+          25.67971
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "station_code": "00231",
+        "station_name": "郴州-鸡嘴桥下游"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          113.01198,
+          25.81638
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "station_code": "00234",
+        "station_name": "郴州-燕泉河"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          113.02373,
+          25.78843
+        ]
+      }
+    }
+  ]
+}

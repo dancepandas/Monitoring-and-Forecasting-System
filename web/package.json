@@ -13,11 +13,13 @@
     "flv.js": "^1.6.2",
     "marked": "^18.0.5",
     "pinia": "^3.0.4",
+    "three": "^0.185.1",
     "vite-plugin-cesium": "^1.2.23",
     "vue": "^3.5.34",
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
+    "@gltf-transform/cli": "^4.4.1",
     "@vitejs/plugin-basic-ssl": "^2.3.0",
     "@vitejs/plugin-vue": "^6.0.6",
     "vite": "^8.0.12"
