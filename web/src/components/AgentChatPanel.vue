@@ -65,12 +65,6 @@
 
     <!-- Input -->
     <div class="input-row">
-      <VoiceButton
-        :status="voiceStatus" :muted="voiceMuted"
-        :can-record="voiceCanRecord" :error="voiceError"
-        @toggle-mic="voiceStatus === 'recording' ? voice.stop() : voice.start()"
-        @toggle-mute="voice.setMuted(!voiceMuted)"
-      />
       <textarea v-model="input" id="agentChatInput" name="message" class="chat-input" placeholder="输入任务指令..." aria-label="输入消息"
         :disabled="streaming" rows="1" @keydown="onKey" ref="inputRef"></textarea>
       <button v-if="streaming" class="btn danger send-btn" @click="doCancel">暂停</button>
@@ -83,7 +77,6 @@
 import { ref, reactive, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { agentApi } from '../api/agent.js'
 import { marked } from 'marked'
-import VoiceButton from './VoiceButton.vue'
 import { useVoice } from '../composables/useVoice.js'
 import { uid, fmtNum, truncate } from '../shared/utils.js'
 marked.setOptions({ breaks: true, gfm: true })
@@ -355,7 +348,7 @@ onUnmounted(() => { voice.stopSpeak() })
 
 /* Input */
 .input-row { display:flex; align-items:flex-end; gap:8px; flex-shrink:0; }
-.chat-input { flex:1; min-width:0; min-height:38px; max-height:140px; border:1px solid rgba(15,23,42,.12); border-radius:18px; background:rgba(255,255,255,.72); padding:8px 14px; outline:none; color:var(--ink-dark); font-size:13px; resize:none; line-height:1.45; font-family:inherit; }
+.chat-input { flex:1; min-width:0; min-height:38px; max-height:140px; border:1px solid rgba(15,23,42,.12); border-radius:18px; background:var(--bg-2); padding:8px 14px; outline:none; color:var(--ink-dark); font-size:13px; resize:none; line-height:1.45; font-family:inherit; }
 .chat-input:focus { border-color:var(--primary); }
 .chat-input::placeholder { color:var(--muted-dark); }
 .send-btn { flex-shrink:0; min-height:36px; padding:0 16px; font-size:13px; }

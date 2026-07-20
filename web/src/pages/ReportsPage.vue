@@ -54,13 +54,13 @@
           </div>
         </div>
         <div class="rm-body">
+          <div ref="previewContainer" class="docx-canvas" v-show="previewType !== 'text'"></div>
+          <div v-if="previewType === 'text'" class="preview-text">
+            <pre class="report-content">{{ previewContent }}</pre>
+          </div>
           <div v-if="previewLoading" class="preview-loading">
             <span class="spinner"></span> 加载文档中…
           </div>
-          <div v-else-if="previewType === 'text'" class="preview-text">
-            <pre class="report-content">{{ previewContent }}</pre>
-          </div>
-          <div v-else-if="!previewType && !previewContent" class="preview-empty">暂无内容</div>
         </div>
       </div>
     </div>
@@ -112,11 +112,11 @@
           </div>
         </div>
         <div class="rm-body">
-          <div v-if="archiveDetailLoading" class="preview-loading"><span class="spinner"></span> 加载文档中…</div>
-          <div v-else-if="archiveDetailType === 'text'" class="preview-text">
+          <div ref="archiveDetailContainer" class="docx-canvas" v-show="archiveDetailType !== 'text'"></div>
+          <div v-if="archiveDetailType === 'text'" class="preview-text">
             <pre class="report-content">{{ archiveDetailContent }}</pre>
           </div>
-          <div v-else-if="!archiveDetailType && !archiveDetailContent" class="preview-empty">暂无内容</div>
+          <div v-if="archiveDetailLoading" class="preview-loading"><span class="spinner"></span> 加载文档中…</div>
         </div>
       </div>
     </div>
@@ -124,13 +124,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
+import { renderAsync } from 'docx-preview'
 import Topbar from '../components/Topbar.vue'
 import { api } from '../api'
 
-// 预览直接走后端 /reports/preview（python-docx 抽取正文文本），
-// 稳定可见；格式化渲染（docx-preview）链路脆、易白屏，已弃用。
-// 需要原始排版时点「下载」取 docx。
+// 预览走 docx-preview（专业 docx→HTML 渲染，保留 Word 原排版：标题/表格/页眉脚）。
+// 关键避坑：常驻容器 + nextTick 等挂载 + loading 作 absolute 遮罩，不用 v-if 隐藏 ref。
+// 渲染失败回退到后端 /reports/preview 纯文本，保证一定可见。
 
 const reportTypes = ref([
   { key: 'daily', label: '流域运行日报', latestDate: '—', latestSummary: '加载中...', latestFile: '' },
@@ -150,6 +151,7 @@ const previewTitle = ref('')
 const previewContent = ref('')
 const previewLoading = ref(false)
 const previewType = ref('')
+const previewContainer = ref(null)
 const currentFile = ref('')
 const generating = ref({})
 
@@ -163,6 +165,7 @@ const archiveDetailTitle = ref('')
 const archiveDetailContent = ref('')
 const archiveDetailLoading = ref(false)
 const archiveDetailType = ref('')
+const archiveDetailContainer = ref(null)
 
 async function loadStats() {
   try {
@@ -212,22 +215,19 @@ async function openLatest(r) {
   previewType.value = ''
   previewContent.value = ''
   currentFile.value = r.latestFile
-  try {
-    const data = await api.previewReport(r.latestFile)
-    previewContent.value = (data && data.content) || '（文档无文本内容，请下载后查看）'
-    previewType.value = 'text'
-  } catch (e) {
-    previewContent.value = '加载失败：' + (e.message || e)
-    previewType.value = 'text'
-  } finally {
-    previewLoading.value = false
-  }
+  await nextTick()
+  await renderDocxOrFallback(r.latestFile, previewContainer.value, {
+    setText: v => { previewContent.value = v },
+    setType: v => { previewType.value = v },
+  })
+  previewLoading.value = false
 }
 
 function closePreview() {
   showPreview.value = false
   previewType.value = ''
   previewContent.value = ''
+  if (previewContainer.value) previewContainer.value.innerHTML = ''
 }
 
 async function openArchive(s) {
@@ -252,35 +252,67 @@ async function viewArchiveItem(item) {
   archiveDetailType.value = ''
   archiveDetailContent.value = ''
   currentFile.value = item.filename
-  try {
-    const data = await api.previewReport(item.filename)
-    archiveDetailContent.value = (data && data.content) || '（文档无文本内容，请下载后查看）'
-    archiveDetailType.value = 'text'
-  } catch (e) {
-    archiveDetailContent.value = '加载失败：' + (e.message || e)
-    archiveDetailType.value = 'text'
-  } finally {
-    archiveDetailLoading.value = false
-  }
+  await nextTick()
+  await renderDocxOrFallback(item.filename, archiveDetailContainer.value, {
+    setText: v => { archiveDetailContent.value = v },
+    setType: v => { archiveDetailType.value = v },
+  })
+  archiveDetailLoading.value = false
 }
 
 function closeArchiveDetail() {
   showArchiveDetail.value = false
   archiveDetailType.value = ''
   archiveDetailContent.value = ''
+  if (archiveDetailContainer.value) archiveDetailContainer.value.innerHTML = ''
 }
 
 async function downloadFile(filename) {
-  const token = localStorage.getItem('token')
-  const url = api.downloadReport(filename)
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-  if (!res.ok) throw new Error('下载失败')
-  const blob = await res.blob()
+  const blob = await fetchDocxBlob(filename)
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
   a.download = filename
   a.click()
   URL.revokeObjectURL(a.href)
+}
+
+// 拉 docx 二进制（带鉴权），复用于预览渲染与下载
+async function fetchDocxBlob(filename) {
+  const token = localStorage.getItem('token')
+  const url = api.downloadReport(filename)
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) throw new Error('下载失败')
+  return await res.blob()
+}
+
+// docx-preview 渲染到 container；失败回退后端纯文本预览，保证一定可见
+async function renderDocxOrFallback(filename, container, { setText, setType }) {
+  if (!container) { setText('容器未就绪'); setType('text'); return }
+  try {
+    const blob = await fetchDocxBlob(filename)
+    container.innerHTML = ''
+    await renderAsync(blob, container, null, {
+      inWrapper: true,
+      className: 'docx-page',
+      ignoreWidth: false,
+      ignoreHeight: false,
+      renderHeaders: true,
+      renderFooters: true,
+      breakPages: true,
+      experimental: true,
+    })
+    setType('docx')
+  } catch (e) {
+    console.warn('[report] docx 渲染失败，回退文本预览：', e)
+    container.innerHTML = ''
+    try {
+      const data = await api.previewReport(filename)
+      setText((data && data.content) || '（文档无文本内容，请下载后查看）')
+    } catch (e2) {
+      setText('加载失败：' + (e2.message || e2))
+    }
+    setType('text')
+  }
 }
 
 function downloadCurrent() {
@@ -425,15 +457,67 @@ onMounted(() => { loadStats() })
   font-weight: 700;
 }
 
-/* ── 正文滚动区 ── */
+/* ── 正文滚动区（Word 阅读器灰底 + 居中纸张） ── */
 .rm-body {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
+  position: relative;
+  background: #E8E8EB;
 }
 
-/* ── 加载/空状态 ── */
-.preview-loading,
+/* docx-preview 渲染画布：灰底衬纸效果 */
+.docx-canvas {
+  width: 100%;
+  min-height: 100%;
+  padding: 28px 16px 40px;
+  box-sizing: border-box;
+}
+/* docx-preview 输出的页面：白纸 + 柔影，居中 */
+.docx-canvas :deep(.docx-wrapper) {
+  background: transparent;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.docx-canvas :deep(.docx-wrapper > section),
+.docx-canvas :deep(.docx-page) {
+  background: #FFFFFF !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 8px 28px rgba(0, 0, 0, .10);
+  border-radius: 2px;
+  margin: 0 auto 20px !important;
+  color: #1D1D1F;
+}
+/* docx 内文字走系统衬线，贴近 Word 默认 Calibri/宋体观感 */
+.docx-canvas :deep(.docx-wrapper) p,
+.docx-canvas :deep(.docx-wrapper) span,
+.docx-canvas :deep(.docx-wrapper) td,
+.docx-canvas :deep(.docx-wrapper) li {
+  font-family: "Calibri", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+}
+.docx-canvas :deep(.docx-wrapper) h1,
+.docx-canvas :deep(.docx-wrapper) h2,
+.docx-canvas :deep(.docx-wrapper) h3 {
+  color: #111827;
+}
+
+/* ── 加载遮罩（absolute 覆盖正文，不卸载容器） ── */
+.preview-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--ink-2);
+  font-size: 14px;
+  background: rgba(232, 232, 235, .72);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
 .preview-empty {
   display: flex;
   align-items: center;
@@ -456,9 +540,12 @@ onMounted(() => { loadStats() })
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .preview-text {
-  padding: 28px 36px 40px;
   max-width: 880px;
-  margin: 0 auto;
+  margin: 28px auto 40px;
+  padding: 40px 48px;
+  background: #FFFFFF;
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 8px 28px rgba(0, 0, 0, .10);
 }
 
 .report-content {
