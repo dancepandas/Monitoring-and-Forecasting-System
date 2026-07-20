@@ -422,6 +422,7 @@ async function refreshData() {
 
     // 每站实时水位/流量 → 喂给地图悬浮卡与角标
     const sd = {}
+    let dataCount = 0
     for (const [code, v] of Object.entries(latestAll?.stations || {})) {
       const it = v && v.level
       sd[code] = it ? {
@@ -430,7 +431,9 @@ async function refreshData() {
         time: it.time,
         anomaly: v.anomaly,
       } : null
+      if (sd[code]) dataCount++
     }
+    if (!dataCount) console.warn('[overview] 所有站点 stationData 为空，工具卡将无数据。请检查 aiflow2 缓存是否就绪。')
     stationData.value = sd
 
     const std = stdData?.stations?.[st.code]?.level || stdData?.defaults?.level || {}
@@ -449,15 +452,18 @@ async function refreshData() {
     // 地图站点着色：按预警级别映射 station_code -> 'ok'|'warn'|'danger'
     // 注意：数据异常（level=数据异常）是数据质量问题，不是洪水险情，不参与红/橙着色，
     // 改由站点角标的紫色 ⚠ 单独表达（见 stationData[code].anomaly）。
-    const sevOf = tag => tag === 'danger' ? 3 : tag === 'warn' ? 1 : 0
+    //
+    // levelSeverity() 返回越小越严重（红=0, 橙=1, 黄=2, 蓝=3, 提示=4, 正常=5），
+    // sevOf() 反之：越大越严重（danger=3, warn=2, ok=0），用于取最严重标签。
+    const sevOf = tag => tag === 'danger' ? 3 : tag === 'warn' ? 2 : 0
     const lvlMap = {}
     for (const w of allWarnings) {
       if (w.level === '数据异常' || w.type === '数据异常') continue
       const code = w.station_code || w.code || ''
       if (!code) continue
       const sev = levelSeverity(w.level || w.level_name || '')
-      const tag = sev >= 3 ? 'danger' : sev >= 1 ? 'warn' : 'ok'
-      if (!lvlMap[code] || sevOf(lvlMap[code]) < sev) lvlMap[code] = tag
+      const tag = sev < 1 ? 'danger' : sev <= 2 ? 'warn' : 'ok'
+      if (!lvlMap[code] || sevOf(lvlMap[code]) < sevOf(tag)) lvlMap[code] = tag
     }
     // 默认全 ok
     for (const s of STATIONS) if (!lvlMap[s.code]) lvlMap[s.code] = 'ok'
