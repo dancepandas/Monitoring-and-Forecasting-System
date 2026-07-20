@@ -146,10 +146,11 @@ async def run_loop():
 
 
 if __name__ == "__main__":
-    log_path = Path(__file__).parent.parent / "data" / "collector.log"
+    # 仅使用 StreamHandler — 服务器 subprocess 已通过 pipe 将 stdout/stderr 重定向到
+    # collector.log；此处不能再 FileHandler 同一文件，否则 Windows 文件锁冲突导致 rc=1。
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[logging.FileHandler(log_path, encoding="utf-8"), logging.StreamHandler()],
+        handlers=[logging.StreamHandler()],
     )
     asyncio.run(run_loop())
