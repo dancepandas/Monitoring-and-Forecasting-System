@@ -29,7 +29,7 @@
           <b>{{ waterLevel }}</b>
           <span class="unit">m</span>
         </div>
-        <div :class="['hud-card-note', waterLevelNoteClass]">{{ waterLevelNote }}</div>
+        <div :class="['hud-card-note', levelAnomaly ? 'anomaly' : waterLevelNoteClass]" :title="levelAnomaly ? levelAnomaly.reason : ''">{{ levelAnomaly ? '⚠ 数据存疑' : waterLevelNote }}</div>
         <div class="hud-card-bar"><i :style="{ width: waterLevelPct + '%' }"></i></div>
       </article>
 
@@ -40,7 +40,7 @@
           <b>{{ waterFlow }}</b>
           <span class="unit">m³/s</span>
         </div>
-        <div class="hud-card-note">{{ flowChangeNote }}</div>
+        <div :class="['hud-card-note', flowAnomaly ? 'anomaly' : '']" :title="flowAnomaly ? flowAnomaly.reason : ''">{{ flowAnomaly ? '⚠ 数据存疑' : flowChangeNote }}</div>
         <div class="hud-card-bar flow-bar"><i :style="{ width: flowPct + '%' }"></i></div>
       </article>
 
@@ -80,7 +80,7 @@
             <p>{{ warningInsight }}</p>
           </div>
           <div class="hud-risk-list">
-            <div class="hud-risk-item" v-for="w in displayWarnings" :key="w.id" :class="'level-' + (w.level || 'ok')" @click="openDrawer(w)">
+            <div class="hud-risk-item" v-for="w in displayWarnings" :key="w.id" :class="['level-' + (w.level || 'ok'), w.level === '数据异常' ? 'is-anomaly' : '']" @click="openDrawer(w)">
               <div class="risk-row">
                 <b>{{ w.name }}</b>
                 <span :class="['badge', levelBadgeClass(w.level)]">{{ levelLabel(w.level) }}</span>
@@ -107,7 +107,7 @@
               <p>{{ forecastInsight }}</p>
             </div>
             <div class="combined-chart">
-              <TrendChart :history="trendHistory" :forecast="trendForecast" unit="流量 (m³/s)" />
+              <TrendChart :history="trendHistory" :forecast="trendForecast" :mark-last="!!(currentAnomaly && currentAnomaly.flagged)" unit="流量 (m³/s)" />
             </div>
             <div class="chart-legend">
               <span><i class="legend-hist"></i>实测</span>
@@ -218,8 +218,23 @@ const rotation = useRotationStore()
 
 // 站点预警级别（供地图着色）：code -> 'ok'|'warn'|'danger'
 const stationLevel = ref({})
-// 每站实时水位/流量（供地图悬浮卡 + 角标）：code -> {level, flow, time}
+// 每站实时水位/流量（供地图悬浮卡 + 角标）：code -> {level, flow, time, anomaly}
 const stationData = ref({})
+
+// 当前站数据异常裁决（来自 /data/latest 的 anomaly 字段）
+const currentAnomaly = computed(() => stationData.value[rotation.current.code]?.anomaly || null)
+// 水位是否被标存疑：水位突刺型 + 通用脏数据（冻结/负值/缺测）都影响水位
+const levelAnomaly = computed(() => {
+  const a = currentAnomaly.value
+  if (!a || !a.flagged) return null
+  return ['level_flow_inconsistency', 'frozen', 'invalid_value', 'gap_masking'].includes(a.type) ? a : null
+})
+// 流量是否被标存疑：流量突刺型 + 通用脏数据
+const flowAnomaly = computed(() => {
+  const a = currentAnomaly.value
+  if (!a || !a.flagged) return null
+  return ['flow_level_inconsistency', 'frozen', 'invalid_value', 'gap_masking'].includes(a.type) ? a : null
+})
 function onMapStationClick(s) {
   // 点击地图站点 → pin 到该站、关闭监测弹窗、打开详情抽屉并拉取实时数据
   if (!s?.code) return
@@ -248,6 +263,7 @@ function onMapBackgroundClick() {
 async function loadStationDetail(code, nameHint) {
   const st = STATIONS.find(s => s.code === code) || {}
   let level = '—', flow = '—', status = '正常', badgeClass = 'ok', detail = '该站当前运行正常，无活跃预警。'
+  let anomaly = null
   try {
     const data = await api.getFlowRaw(code, st.device)
     const items = data?.data || []
@@ -256,6 +272,8 @@ async function loadStationDetail(code, nameHint) {
     if (latestWL?.waterLevel != null) level = latestWL.waterLevel.toFixed(2)
     const fv = latestFlow?.virtualFlow ?? latestFlow?.waterFlow
     if (fv != null) flow = fv.toFixed(0)
+    // 最新一条 record 上挂的数据异常裁决（/flow-raw 注入）
+    anomaly = items[0]?.anomaly || null
   } catch (e) {
     detail = '实时数据获取失败：' + (e.message || e)
   }
@@ -274,7 +292,7 @@ async function loadStationDetail(code, nameHint) {
     ...drawerStation.value,
     name: nameHint || drawerStation.value?.name || st.name,
     code,
-    level, flow, status, badgeClass, detail,
+    level, flow, status, badgeClass, detail, anomaly,
   }
 }
 
@@ -410,6 +428,7 @@ async function refreshData() {
         level: it.waterLevel,
         flow: it.virtualFlow ?? it.waterFlow,
         time: it.time,
+        anomaly: v.anomaly,
       } : null
     }
     stationData.value = sd
@@ -418,7 +437,7 @@ async function refreshData() {
     warningLevel.value = std.red || std.orange || 0
 
     pendingWarnings.value = warnData.total || '0'
-    const allWarnings = [...(warnData.warnings || []), ...(warnData.alerts || [])]
+    const allWarnings = [...(warnData.warnings || []), ...(warnData.alerts || []), ...(warnData.data_anomalies || [])]
     if (allWarnings.length > 0) {
       warnings.value = allWarnings.map(w => ({ id: w.id, name: w.name, level: w.level || w.level_name || '', message: w.message }))
       warningNote.value = [...new Set(allWarnings.map(w => w.name))].join('、')
@@ -428,9 +447,12 @@ async function refreshData() {
     }
 
     // 地图站点着色：按预警级别映射 station_code -> 'ok'|'warn'|'danger'
+    // 注意：数据异常（level=数据异常）是数据质量问题，不是洪水险情，不参与红/橙着色，
+    // 改由站点角标的紫色 ⚠ 单独表达（见 stationData[code].anomaly）。
     const sevOf = tag => tag === 'danger' ? 3 : tag === 'warn' ? 1 : 0
     const lvlMap = {}
     for (const w of allWarnings) {
+      if (w.level === '数据异常' || w.type === '数据异常') continue
       const code = w.station_code || w.code || ''
       if (!code) continue
       const sev = levelSeverity(w.level || w.level_name || '')
@@ -831,6 +853,7 @@ function openStage(title, from) {
 }
 .hud-card-note.danger { color: var(--danger); }
 .hud-card-note.ok { color: var(--ok); }
+.hud-card-note.anomaly { color: var(--anomaly); font-weight: 600; }
 
 .hud-card-bar {
   grid-column: 1 / -1;
@@ -980,6 +1003,7 @@ function openStage(title, from) {
 .hud-risk-item.level-orange::before { background: var(--orange); }
 .hud-risk-item.level-warn::before { background: var(--warn); }
 .hud-risk-item.level-ok::before { background: var(--ok); }
+.hud-risk-item.is-anomaly::before { background: var(--anomaly); }
 .hud-risk-item .risk-row {
   display: flex;
   justify-content: space-between;

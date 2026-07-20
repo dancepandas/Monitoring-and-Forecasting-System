@@ -88,14 +88,15 @@ class MonitorEngine:
             await self._check_thresholds(station_code)
             await self._check_spike(station_code)
             await self._check_forecast_thresholds(station_code)
+            await self._check_data_anomaly(station_code)
         except Exception as e:
             logger.exception("[monitor] check station %s failed: %s", station_code, e)
 
     async def recheck_station(self, station_code: str):
         """公开入口：阈值修改后立即重新巡检指定站点的全部状态。
 
-        完整重跑 4 项检查（数据可用性 / 阈值 / 跳变 / 预报），
-        确保新阈值生效且各类历史告警（含 data_spike 等）能被正确重新评估与解除。
+        完整重跑 5 项检查（数据可用性 / 阈值 / 跳变 / 预报 / 数据异常裁决），
+        确保新阈值生效且各类历史告警（含 data_spike、data_anomaly 等）能被正确重新评估与解除。
         """
         logger.info("[monitor] manual recheck triggered for %s", station_code)
         try:
@@ -103,6 +104,7 @@ class MonitorEngine:
             await self._check_thresholds(station_code)
             await self._check_spike(station_code)
             await self._check_forecast_thresholds(station_code)
+            await self._check_data_anomaly(station_code)
         except Exception as e:
             logger.exception("[monitor] recheck station %s failed: %s", station_code, e)
 
@@ -423,6 +425,43 @@ class MonitorEngine:
             )
             if not has_vf:
                 await self._auto_resolve(station_code, f"forecast_flow_{lv}", "预报值未达该级别阈值")
+
+    # ------------------------------------------------------------------
+    # 5. 数据异常智能裁决（水位↔流量一致性 + 脏数据）
+    # ------------------------------------------------------------------
+    async def _check_data_anomaly(self, station_code: str):
+        """调 anomaly_judge 出结构化裁决；flagged 建数据异常告警，否则自动解除。
+
+        智能体判断为主（预筛仅作廉价门），覆盖单纯阈值无法识别的"水位正常但流量突变"。
+        """
+        from . import anomaly_judge
+        try:
+            verdict = await anomaly_judge.judge_station(station_code)
+        except Exception as e:
+            logger.exception("[monitor] anomaly judge %s failed: %s", station_code, e)
+            return
+
+        if not verdict.get("flagged"):
+            await self._auto_resolve(station_code, "data_anomaly", "数据一致性恢复正常")
+            return
+
+        atype = verdict.get("type", "data_anomaly")
+        event, is_new = await self._tracker.create_or_update(
+            station_code=station_code,
+            alert_type="data_anomaly",
+            level="数据异常",
+            title=f"测站 {station_name(station_code)} 数据存疑",
+            message=verdict.get("message") or verdict.get("reason", "数据异常"),
+            metric={
+                "anomaly_type": atype,
+                "severity": verdict.get("severity", "medium"),
+                "reason": verdict.get("reason", ""),
+                "source": verdict.get("source", "llm"),
+                "confidence": verdict.get("confidence", 0),
+            },
+        )
+        if is_new:
+            self._emit(event)
 
     # ------------------------------------------------------------------
     # 事件分发

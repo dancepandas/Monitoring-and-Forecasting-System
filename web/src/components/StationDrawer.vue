@@ -23,9 +23,17 @@
               <span>状态</span>
               <b :class="station.badgeClass">{{ station.status || '—' }}</b>
             </div>
+            <div v-if="station.anomaly && station.anomaly.flagged" class="drawer-stat">
+              <span>数据质量</span>
+              <b class="anomaly">⚠ 数据存疑</b>
+            </div>
             <div class="drawer-detail-panel">
               <span class="detail-label">详情</span>
               <p class="drawer-detail">{{ station.detail || '暂无详情' }}</p>
+            </div>
+            <div v-if="station.anomaly && station.anomaly.flagged" class="drawer-detail-panel anomaly-panel">
+              <span class="detail-label">异常说明</span>
+              <p class="drawer-detail">{{ station.anomaly.reason || station.anomaly.message || '该站近期数据存在异常，请核查设备与上游计算。' }}</p>
             </div>
           </div>
         </aside>
@@ -107,6 +115,10 @@ function close() { emit('close') }
 .drawer-stat b.danger { color: var(--danger); text-shadow: 0 0 10px var(--danger-glow); }
 .drawer-stat b.warn { color: var(--orange); }
 .drawer-stat b.ok { color: var(--ok); text-shadow: 0 0 10px var(--ok-glow); }
+.drawer-stat b.anomaly { color: var(--anomaly); text-shadow: 0 0 10px var(--anomaly-glow); }
+
+.drawer-detail-panel.anomaly-panel { border-left-color: var(--anomaly); background: var(--anomaly-soft); }
+.drawer-detail-panel.anomaly-panel .detail-label { color: var(--anomaly); }
 
 .drawer-detail-panel {
   margin-top: 2px;

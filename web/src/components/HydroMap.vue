@@ -70,6 +70,11 @@
                 <text class="pill-text" x="0" y="4">{{ Number(s.data.level).toFixed(2) }} m</text>
               </g>
             </g>
+            <!-- 数据异常角标（紫色 ⚠，挂在站点右上角） -->
+            <g v-if="s.data && s.data.anomaly && s.data.anomaly.flagged" class="st-anomaly-flag">
+              <circle cx="12" cy="-12" r="7.5" fill="#7C3AED" stroke="#fff" stroke-width="1.8" />
+              <text x="12" y="-8.5" text-anchor="middle" fill="#fff" font-size="10" font-weight="700" font-family="var(--sans)">!</text>
+            </g>
             <g class="st-label-g">
               <rect class="st-label-bg" :x="labelX(s)" y="-18" :width="labelWidth(s)" height="36" rx="18" />
               <text class="st-label" :x="labelTextX(s)" y="8">{{ s.name }}</text>
@@ -87,6 +92,7 @@
       <span><i class="lg lg-st ok"></i>正常</span>
       <span><i class="lg lg-st warn"></i>预警</span>
       <span><i class="lg lg-st danger"></i>告警</span>
+      <span><i class="lg lg-anomaly"></i>数据异常</span>
     </div>
 
     <!-- 站点悬浮信息卡 -->
@@ -99,6 +105,10 @@
         <div class="stt-stat"><span>水位</span><b>{{ hovered.level != null ? Number(hovered.level).toFixed(2) : '—' }}<small>m</small></b></div>
         <div class="stt-stat"><span>流量</span><b>{{ hovered.flow != null ? Number(hovered.flow).toFixed(0) : '—' }}<small>m³/s</small></b></div>
         <div class="stt-stat"><span>更新</span><b>{{ fmtTimeShort(hovered.time) }}</b></div>
+      </div>
+      <div v-if="hovered.anomaly && hovered.anomaly.flagged" class="stt-anomaly">
+        <span class="stt-anomaly-label">⚠ 数据存疑</span>
+        <p>{{ hovered.anomaly.reason }}</p>
       </div>
       <div class="stt-foot">点击查看详情 · 监测视频</div>
     </div>
@@ -371,6 +381,7 @@ function onStationEnter(e, s) {
   hovered.value = {
     code: s.code, name: s.name,
     level: s.data?.level, flow: s.data?.flow, time: s.data?.time,
+    anomaly: s.data?.anomaly,
     statusTag: s.level,
     px, py,
     below: py < 140,   // 靠近顶部 → 向下展开，避免溢出
@@ -524,4 +535,17 @@ function onStationLeave() { hovered.value = null }
 .stt-stat b { font-family: var(--display); font-size: 15px; font-weight: 600; color: var(--ink); }
 .stt-stat b small { font-size: 10px; color: var(--muted); font-weight: 500; margin-left: 2px; }
 .stt-foot { margin-top: 8px; font-size: 10.5px; color: var(--primary); font-weight: 500; }
+
+/* 数据异常：悬浮卡内的存疑说明 */
+.stt-anomaly {
+  margin-top: 8px; padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--anomaly-soft);
+  border-left: 3px solid var(--anomaly);
+}
+.stt-anomaly-label { font-size: 10.5px; font-weight: 700; color: var(--anomaly); }
+.stt-anomaly p { margin: 3px 0 0; font-size: 11px; line-height: 1.5; color: var(--ink-2); }
+
+/* 图例：数据异常紫点 */
+.lg-anomaly { width: 12px; height: 12px; border-radius: 50%; background: #7C3AED; display: inline-block; }
 </style>
