@@ -204,7 +204,7 @@ onUnmounted(() => {
   margin: 0 0 8px 4px;
   font-size: 14px;
   font-weight: 600;
-  color: #fff;
+  color: var(--ink);
 }
 
 /* 显式覆盖 components.css 全局样式 */
@@ -223,7 +223,7 @@ onUnmounted(() => {
   cursor: pointer;
   border-radius: 8px;
   overflow: hidden;
-  background: #111;
+  background: var(--bg-2);
   border: 1px solid var(--edge);
   transition: border-color .15s;
   position: relative;
@@ -249,7 +249,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #000;
+  background: var(--bg-2);
   position: static;
   border-radius: 0;
 }
@@ -285,8 +285,8 @@ onUnmounted(() => {
   font-size: 13px;
 }
 .empty-icon { font-size: 40px; margin-bottom: 12px; }
-.empty p { margin: 0; font-size: 16px; color: #94A3B8; }
-.empty small { display: block; margin-top: 6px; font-size: 12px; color: #64748B; }
+.empty p { margin: 0; font-size: 16px; color: var(--ink-2); }
+.empty small { display: block; margin-top: 6px; font-size: 12px; color: var(--muted); }
 
 /* stage modal */
 .stage-modal {
@@ -309,12 +309,12 @@ onUnmounted(() => {
   padding: 14px 20px;
   border-bottom: 1px solid var(--line);
 }
-.stage-head h2 { margin: 0; font-size: 15px; color: #fff; }
+.stage-head h2 { margin: 0; font-size: 15px; color: var(--ink); }
 .stage-close {
   min-height: 28px; padding: 0 14px;
   border: 1px solid var(--edge); border-radius: 4px;
   background: transparent; color: var(--muted);
   font-size: 12px; cursor: pointer; transition: all .15s;
 }
-.stage-close:hover { color: #fff; border-color: var(--ink-2); }
+.stage-close:hover { color: var(--ink); border-color: var(--ink-2); }
 </style>

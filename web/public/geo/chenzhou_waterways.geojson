@@ -1,0 +1,421 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "waterway": "river",
+        "name": "郴江",
+        "name:zh": "郴江",
+        "width": "30-60m"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            112.95,
+            25.58
+          ],
+          [
+            112.96,
+            25.6
+          ],
+          [
+            112.97,
+            25.62
+          ],
+          [
+            112.98,
+            25.64
+          ],
+          [
+            112.98,
+            25.66
+          ],
+          [
+            112.99,
+            25.68
+          ],
+          [
+            113.0,
+            25.7
+          ],
+          [
+            113.0,
+            25.72
+          ],
+          [
+            113.01,
+            25.74
+          ],
+          [
+            113.02,
+            25.76
+          ],
+          [
+            113.03,
+            25.78
+          ],
+          [
+            113.03,
+            25.79
+          ],
+          [
+            113.04,
+            25.8
+          ],
+          [
+            113.04,
+            25.81
+          ],
+          [
+            113.05,
+            25.82
+          ],
+          [
+            113.05,
+            25.84
+          ],
+          [
+            113.06,
+            25.86
+          ],
+          [
+            113.06,
+            25.88
+          ],
+          [
+            113.07,
+            25.9
+          ],
+          [
+            113.07,
+            25.92
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "waterway": "river",
+        "name": "燕泉河",
+        "name:zh": "燕泉河",
+        "width": "10-25m"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            112.93,
+            25.74
+          ],
+          [
+            112.95,
+            25.75
+          ],
+          [
+            112.97,
+            25.76
+          ],
+          [
+            112.99,
+            25.77
+          ],
+          [
+            113.01,
+            25.78
+          ],
+          [
+            113.02,
+            25.79
+          ],
+          [
+            113.03,
+            25.8
+          ],
+          [
+            113.04,
+            25.8
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "waterway": "river",
+        "name": "郴江上游",
+        "name:zh": "郴江上游",
+        "width": "15-30m"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            112.9,
+            25.52
+          ],
+          [
+            112.92,
+            25.54
+          ],
+          [
+            112.94,
+            25.56
+          ],
+          [
+            112.95,
+            25.58
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "waterway": "river",
+        "name": "郴江下游",
+        "name:zh": "郴江下游",
+        "width": "40-80m"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.07,
+            25.92
+          ],
+          [
+            113.08,
+            25.94
+          ],
+          [
+            113.09,
+            25.96
+          ],
+          [
+            113.1,
+            25.98
+          ],
+          [
+            113.11,
+            26.0
+          ],
+          [
+            113.12,
+            26.02
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "waterway": "stream",
+        "name": "苏仙溪",
+        "name:zh": "苏仙溪",
+        "width": "5-12m"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.1,
+            25.76
+          ],
+          [
+            113.08,
+            25.78
+          ],
+          [
+            113.07,
+            25.8
+          ],
+          [
+            113.06,
+            25.81
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "waterway": "stream",
+        "name": "坳上溪",
+        "name:zh": "坳上溪",
+        "width": "3-8m"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.0,
+            25.64
+          ],
+          [
+            113.01,
+            25.66
+          ],
+          [
+            113.02,
+            25.67
+          ],
+          [
+            113.02,
+            25.68
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "natural": "water",
+        "water": "lake",
+        "name": "北湖",
+        "name:zh": "北湖"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              113.03,
+              25.81
+            ],
+            [
+              113.04,
+              25.81
+            ],
+            [
+              113.04,
+              25.8
+            ],
+            [
+              113.03,
+              25.8
+            ],
+            [
+              113.03,
+              25.81
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "waterway": "stream",
+        "name": "许家洞溪",
+        "name:zh": "许家洞溪",
+        "width": "2-6m"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            112.97,
+            25.7
+          ],
+          [
+            112.98,
+            25.72
+          ],
+          [
+            112.99,
+            25.73
+          ],
+          [
+            113.0,
+            25.74
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "waterway": "stream",
+        "name": "安和溪",
+        "name:zh": "安和溪",
+        "width": "2-6m"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.06,
+            25.86
+          ],
+          [
+            113.05,
+            25.85
+          ],
+          [
+            113.04,
+            25.84
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "waterway": "stream",
+        "name": "五里牌溪",
+        "name:zh": "五里牌溪",
+        "width": "2-6m"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.08,
+            25.88
+          ],
+          [
+            113.07,
+            25.87
+          ],
+          [
+            113.06,
+            25.86
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "waterway": "stream",
+        "name": "石盖塘溪",
+        "name:zh": "石盖塘溪",
+        "width": "2-6m"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            112.96,
+            25.66
+          ],
+          [
+            112.97,
+            25.68
+          ],
+          [
+            112.98,
+            25.69
+          ],
+          [
+            112.99,
+            25.7
+          ]
+        ]
+      }
+    }
+  ]
+}

@@ -3,6 +3,8 @@ import { useAuthStore } from '../store/auth'
 
 const routes = [
   { path: '/login', name: 'Login', component: () => import('../pages/LoginPage.vue') },
+  // 独立 3D 地形预览页 (public, 无需登录) —— 纯 3D 地形模型展示
+  { path: '/terrain-preview', name: 'TerrainPreview', component: () => import('../pages/TerrainPreviewPage.vue') },
   {
     path: '/',
     component: () => import('../pages/AppLayout.vue'),
@@ -29,7 +31,9 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
-  if (to.name !== 'Login' && !token) return next('/login')
+  // TerrainPreview 是 public 路由, 放行 (无需登录)
+  const isPublic = to.name === 'Login' || to.name === 'TerrainPreview'
+  if (!isPublic && !token) return next('/login')
   if (to.name === 'Login' && token) return next('/')
   // Admin role check — only enforce when role is known (not empty/fresh reload)
   if (to.meta.role) {

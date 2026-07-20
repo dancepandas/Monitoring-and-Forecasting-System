@@ -1,0 +1,18 @@
+{
+  "tilejson": "2.1.0",
+  "name": "\u90f4\u5ddeDEM (Copernicus GLO-30 30m)",
+  "format": "heightmap-1.0",
+  "scheme": "tms",
+  "tiles": [
+    "{z}/{x}/{y}.png"
+  ],
+  "minzoom": 10,
+  "maxzoom": 15,
+  "bounds": [
+    112.0,
+    25.0,
+    114.0,
+    27.0
+  ],
+  "projection": "EPSG:4326"
+}

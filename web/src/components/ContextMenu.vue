@@ -30,27 +30,26 @@ const showAgent = ref(false)
 const ctxSessionId = 'ctx-menu-' + Date.now()
 
 function extractPanelContent(el) {
-  const heading = el.querySelector('.panel-head h2')
-  panelTitle.value = heading?.textContent?.trim() || el.querySelector('.tile-label')?.textContent?.trim() || '面板'
+  const heading = el.querySelector('.panel-head h2, .hud-panel-head h2')
+  const labelEl = el.querySelector('.tile-label, .hud-card-label')
+  panelTitle.value = heading?.textContent?.trim() || labelEl?.textContent?.trim() || '面板'
 
-  const body = el.querySelector('.panel-body') || el
+  const body = el.querySelector('.panel-body, .hud-panel-body') || el
   const lines = []
 
-  const riskItems = body.querySelectorAll('.risk-item')
+  // 兼容新旧类名
+  const riskItems = body.querySelectorAll('.risk-item, .hud-risk-item')
   if (riskItems.length) {
     for (const item of riskItems) {
       const title = item.querySelector('b')?.textContent?.trim()
       const badge = item.querySelector('.badge')?.textContent?.trim()
       const desc = item.querySelector('p')?.textContent?.trim()
-      const val = item.querySelector('.mini-stat b')?.textContent?.trim()
-      const label = item.querySelector('.mini-stat span')?.textContent?.trim()
       if (title && desc) lines.push(`- ${title}${badge ? ' [' + badge + ']' : ''}: ${desc}`)
-      else if (label && val) lines.push(`- ${label}: ${val}`)
-      else if (title) lines.push(`- ${title}`)
+      else if (title) lines.push(`- ${title}${badge ? ' [' + badge + ']' : ''}`)
     }
   }
 
-  const stats = body.querySelectorAll('.mini-stat')
+  const stats = body.querySelectorAll('.mini-stat, .hud-mini-stat, .mcp-stat')
   if (stats.length) {
     for (const s of stats) {
       const label = s.querySelector('span')?.textContent?.trim()
@@ -59,16 +58,20 @@ function extractPanelContent(el) {
     }
   }
 
-  const tiles = body.querySelectorAll('.tile')
+  const tiles = body.querySelectorAll('.tile, .hud-card')
   if (tiles.length) {
     for (const t of tiles) {
-      const label = t.querySelector('.tile-label')?.textContent?.trim()
-      const val = t.querySelector('.tile-value b')?.textContent?.trim()
-      const unit = t.querySelector('.tile-value span')?.textContent?.trim()
-      const note = t.querySelector('.tile-note')?.textContent?.trim()
-      if (label) lines.push(`- ${label}: ${val || '—'}${unit || ''} (${note || ''})`)
+      const label = t.querySelector('.tile-label, .hud-card-label')?.textContent?.trim()
+      const val = t.querySelector('.tile-value b, .hud-card-value b')?.textContent?.trim()
+      const unit = t.querySelector('.tile-value span, .hud-card-value .unit')?.textContent?.trim()
+      const note = t.querySelector('.tile-note, .hud-card-note')?.textContent?.trim()
+      if (label) lines.push(`- ${label}: ${val || '—'}${unit || ''}${note ? ' (' + note + ')' : ''}`)
     }
   }
+
+  // AI 解读（如有）
+  const insight = body.querySelector('.hud-insight p, .forecast-insight p')
+  if (insight?.textContent?.trim()) lines.push(`- 解读: ${insight.textContent.trim()}`)
 
   const videoCards = body.querySelectorAll('.video-card')
   if (videoCards.length) {
@@ -87,7 +90,7 @@ function extractPanelContent(el) {
 }
 
 function onContextMenu(e) {
-  const panel = e.target.closest('.panel, .tile')
+  const panel = e.target.closest('.panel, .tile, .hud-panel, .hud-card, .hud-risk-item, .risk-item, .video-card')
   if (!panel) return
   e.preventDefault()
   visible.value = true
@@ -112,18 +115,22 @@ onUnmounted(() => document.removeEventListener('contextmenu', onContextMenu))
 
 <style scoped>
 .ctx-menu-overlay { position: fixed; inset: 0; z-index: 200; }
-.ctx-menu { position: fixed; z-index: 201; background: var(--glass); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 32px rgba(0,0,0,.12); padding: 4px; min-width: 140px; }
-.ctx-item { display: block; width: 100%; padding: 8px 14px; border: 0; background: none; cursor: pointer; font-size: 13px; text-align: left; border-radius: 6px; font-family: inherit; color: var(--ink); }
-.ctx-item:hover { background: var(--chip); color: #fff; }
+.ctx-menu { position: fixed; z-index: 201; background: var(--glass-strong); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border: 1px solid var(--edge); border-radius: var(--radius-md); box-shadow: var(--shadow-3), 0 0 20px rgba(14, 165, 233, 0.1); padding: 4px; min-width: 150px; }
+.ctx-item { display: block; width: 100%; padding: 9px 16px; border: 0; background: none; cursor: pointer; font-size: 13px; text-align: left; border-radius: var(--radius-sm); font-family: inherit; color: var(--ink); transition: all .15s ease; }
+.ctx-item:hover { background: var(--chip-strong); color: var(--primary); }
 .agent-modal-card2 {
   width: min(720px, 100%);
   height: min(600px, calc(100vh - 80px));
   display: flex; flex-direction: column;
-  padding: 20px 22px 22px;
+  padding: 22px 24px 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--glass-strong);
+  box-shadow: var(--shadow-4), 0 0 30px rgba(14, 165, 233, 0.08);
 }
 .agent-modal-card2 h2 {
-  margin: 0; font-family: var(--serif);
-  font-size: 22px; font-weight: 500; letter-spacing: -.04em;
+  margin: 0; font-family: var(--display);
+  font-size: 22px; font-weight: 600; letter-spacing: .03em; color: var(--ink);
 }
 .agent-modal-card2 :deep(.chat-panel) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 </style>

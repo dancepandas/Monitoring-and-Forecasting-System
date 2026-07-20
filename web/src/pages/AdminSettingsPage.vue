@@ -30,7 +30,7 @@
           <div v-if="loading" class="risk-item"><p>加载中...</p></div>
           <div class="risk-list" v-else>
             <div class="risk-item" v-for="(s, code) in stationThresholds" :key="code">
-              <div class="risk-row"><b>{{ s.name }}</b><span class="risk-meta">{{ code }}</span></div>
+              <div class="risk-row"><b>{{ s.name }}</b></div>
               <div class="thresholds">
                 <span class="threshold-tag level" v-for="(v, lv) in s.level" :key="'wl-'+lv">
                   {{ levelLabel(lv) }} {{ v }}m
