@@ -26,8 +26,8 @@
       <!-- 行政区划底图（区县填充 + 境界，垫在水系之下） -->
       <g class="layer-admin">
         <path v-for="(d, i) in adminPaths" :key="'ad'+i" :d="d"
-              :fill="adminPalette[i % adminPalette.length]" fill-opacity="0.9"
-              stroke="#333333" stroke-width="1" stroke-linejoin="round" stroke-opacity="0.7" />
+              :fill="adminPalette[i % adminPalette.length]" fill-opacity="0.55"
+              stroke="rgba(15, 23, 42, .28)" stroke-width="0.8" stroke-linejoin="round" />
       </g>
 
       <!-- 水体块（多边形） -->
@@ -133,8 +133,9 @@ const wrap = ref(null)
 const hydro = ref({ rivers: [], water: [] })
 const stationsGeo = ref([]) // [{code,name,lon,lat}]
 const admin = ref([]) // [{rings, name, cx, cy}] 区县行政底图
-// 行政区划分区设色衬底（低饱和浅色，行政区划图惯例：各区县用差异衬色区分）
-const adminPalette = ['#EDE7DC', '#E2E8DF', '#E7E1E6', '#DDE6EA', '#EAE2D8', '#E0E5E0']
+// 行政区划分区设色衬底：冷调低饱和中性灰（与灰地形统一画布，避免暖米色"发脏"）。
+// 区县用差异衬色区分（行政区划图惯例 / GB 制图），但色相统一在冷灰，让蓝色水体当主角。
+const adminPalette = ['#EEF1F4', '#E7EBEF', '#F1F3F5', '#E3E7EC', '#EDF0F3', '#E5E9ED']
 
 // 以「四站实际范围」为框（不再被整张水系数据撑大），按容器宽高比补窄边留白，
 // 保证 slice 只裁左右、不裁站点。水系数据仍渲染，仅作衬底、超框自动裁掉。
@@ -414,7 +415,7 @@ function onStationLeave() { hovered.value = null }
 /* 站点 */
 .station-g { cursor: pointer; }
 .st-pulse { fill: none; stroke: currentColor; stroke-width: 3; opacity: 0; }
-.st-ring { fill: #fff; stroke-width: 4; }
+.st-ring { fill: #fff; stroke-width: 4; filter: drop-shadow(0 2px 4px rgba(15, 23, 42, .18)); }
 .st-core { stroke: #fff; stroke-width: 3; }
 
 .station-g.st-ok { color: #16A34A; }

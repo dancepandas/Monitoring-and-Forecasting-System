@@ -50,7 +50,7 @@
         <div class="hud-card-value">
           <b>{{ modelConfidence }}</b>
         </div>
-        <div class="hud-card-note ok">Chronos 时序预测</div>
+        <div class="hud-card-note">Chronos 时序预测</div>
         <div class="hud-card-bar conf-bar"><i :style="{ width: (Number(modelConfidence) * 100 || 0) + '%' }"></i></div>
       </article>
 
@@ -792,6 +792,7 @@ function openStage(title, from) {
   align-content: stretch;
   gap: 14px;
   min-height: 0;
+  min-width: 0;
 }
 
 /* 指标卡 —— 收紧内距/行距/字号，确保 4 张卡在左列高度内完整显示 */
@@ -817,7 +818,7 @@ function openStage(title, from) {
   background: var(--primary);
 }
 .hud-card-icon.flow { background: var(--water); }
-.hud-card-icon.model { background: var(--ok); }
+.hud-card-icon.model { background: var(--muted); }
 .hud-card-icon.alert { background: var(--orange); }
 
 .hud-card-label {
@@ -872,7 +873,7 @@ function openStage(title, from) {
   transition: width .6s var(--ease-soft);
 }
 .hud-card-bar.flow-bar i { background: var(--water); }
-.hud-card-bar.conf-bar i { background: var(--ok); }
+.hud-card-bar.conf-bar i { background: var(--faint); }
 .hud-card-bar.alert-bar i { background: var(--orange); }
 
 /* 右侧面板 */
@@ -880,6 +881,7 @@ function openStage(title, from) {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
+  min-width: 0;
 }
 .hud-panel.wide { grid-area: bottom; max-height: 30vh; }
 /* 底部面板不滚动：让 combined-chart 的 flex:1 收缩去给 AI 解读让位，
@@ -919,6 +921,8 @@ function openStage(title, from) {
 
 .hud-panel-body {
   min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 10px;
   background: transparent;
@@ -980,6 +984,7 @@ function openStage(title, from) {
 }
 .hud-risk-item {
   position: relative;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   padding: 9px 12px;
@@ -1025,7 +1030,8 @@ function openStage(title, from) {
   color: var(--muted);
   font-size: 11px;
   line-height: 1.55;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .badge {
   border-radius: var(--radius-sm);
@@ -1095,13 +1101,14 @@ function openStage(title, from) {
 
 .chart-stats {
   display: grid;
-  gap: 8px;
-  align-content: start;
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  min-height: 0;
 }
 .hud-mini-stat {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  padding: 8px 11px;
+  padding: 7px 10px;
   background: var(--bg-2);
   transition: background .15s var(--ease-soft), border-color .15s var(--ease-soft);
 }

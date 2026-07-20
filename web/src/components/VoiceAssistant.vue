@@ -43,11 +43,6 @@
           <circle class="r-chest" cx="50" cy="78" r="3" />
         </svg>
       </button>
-
-      <!-- 静音 -->
-      <button class="va-mute" :class="{ on: muted }" @click="toggleMute" :title="muted ? '已静音，点开语音' : '点静音'">
-        {{ muted ? '🔇' : '🔊' }}
-      </button>
     </div>
   </Teleport>
 </template>
@@ -253,7 +248,7 @@ onMounted(() => { agentApi.initSession(SID).catch(() => {}) })
 .va-root {
   position: fixed;
   right: 22px;
-  bottom: 22px;
+  bottom: 40px;
   z-index: 9000;
   display: flex;
   flex-direction: column;
