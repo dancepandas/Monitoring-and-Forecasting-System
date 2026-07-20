@@ -69,7 +69,8 @@ async def get_latest(station_codes: str = settings.station_codes, user: dict = D
     verdicts = await anomaly_judge.verdicts_for_all()
     results = {}
     for code in codes:
-        data = await data_cache.get(f"aiflow:level:{code}", max_age=600)
+        # 采集器只存 flow_raw，不存在独立的 level/flow key
+        data = await data_cache.get_raw(code, "flow_raw", max_age=600)
         item = None
         if data:
             items = data.get("data", []) or []
