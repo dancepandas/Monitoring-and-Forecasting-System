@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import sys
 import asyncio
 import logging
 from datetime import datetime
@@ -126,7 +127,7 @@ async def generate_report_api(body: dict, user: dict = Depends(get_current_user)
     date = body.get("date", "")
 
     cmd = [
-        "python", "-m", "gateway.scripts.generate_report",
+        sys.executable, "-m", "gateway.scripts.generate_report",
         "--type", report_type,
     ]
     if station_code:
