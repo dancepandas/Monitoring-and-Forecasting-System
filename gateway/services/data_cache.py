@@ -671,6 +671,7 @@ async def all_keys() -> list:
 
 _VIDEO_SNAPSHOTS_FILE = CACHE_DIR / "video_snapshots.json"
 _video_lock = threading.Lock()
+_MAX_VIDEO_SNAPSHOTS = 10
 
 
 async def save_video_snapshot(station_code: str, snapshot: dict) -> list:
