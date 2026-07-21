@@ -20,6 +20,7 @@ from .services import scheduler
 from .services.monitor_engine import get_engine as get_monitor_engine
 from .services.agent_alert_dispatcher import init_dispatcher
 from .services.system_events import init_db
+from .services import system_health
 
 _COLLECTOR_LOG = Path(__file__).parent / "data" / "collector.log"
 
@@ -64,6 +65,22 @@ async def lifespan(app: FastAPI):
     app.state.collector_proc = collector_proc
     app.state.collector_log = log_fh
     logger.info(f"[collector] subprocess started: pid={collector_proc.pid}")
+
+    # 系统健康快照：每 5 分钟自动记录，崩了直接查 data/health_snapshot.json
+    if sched is not None:
+        try:
+            from apscheduler.triggers.interval import IntervalTrigger
+            sched.add_job(
+                lambda: system_health.snapshot(collector_proc.pid),
+                IntervalTrigger(minutes=5),
+                id="health_snapshot",
+                name="系统健康快照",
+                replace_existing=True,
+            )
+            system_health.snapshot(collector_proc.pid)  # 启动时立即写一条
+            logger.info("Health snapshot registered (every 5 min)")
+        except Exception as e:
+            logger.warning(f"Health snapshot registration failed: {e}")
 
     # collector 健康监控：每 30 秒检查子进程存活 + 心跳文件时效
     # 心跳路径与 collector.py 保持一致（项目根/data/）
