@@ -17,6 +17,17 @@ HISTORY_FILE = DATA_DIR / "health_history.jsonl"
 _MAX_HISTORY = 288  # ~24h (每5分钟)
 
 _started_at = datetime.now().isoformat()
+_collector_pid = None
+
+
+def set_collector_pid(pid):
+    global _collector_pid
+    _collector_pid = pid
+
+
+def scheduled_snapshot():
+    """供 APScheduler 定期调用的命名函数（lambda 不可序列化）。"""
+    return snapshot(_collector_pid)
 
 
 def snapshot(collector_pid=None):

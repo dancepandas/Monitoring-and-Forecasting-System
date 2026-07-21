@@ -70,14 +70,15 @@ async def lifespan(app: FastAPI):
     if sched is not None:
         try:
             from apscheduler.triggers.interval import IntervalTrigger
+            system_health.set_collector_pid(collector_proc.pid)
             sched.add_job(
-                lambda: system_health.snapshot(collector_proc.pid),
+                system_health.scheduled_snapshot,
                 IntervalTrigger(minutes=5),
                 id="health_snapshot",
                 name="系统健康快照",
                 replace_existing=True,
             )
-            system_health.snapshot(collector_proc.pid)  # 启动时立即写一条
+            system_health.scheduled_snapshot()  # 启动时立即写一条
             logger.info("Health snapshot registered (every 5 min)")
         except Exception as e:
             logger.warning(f"Health snapshot registration failed: {e}")
