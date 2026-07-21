@@ -95,8 +95,9 @@
       <span><i class="lg lg-anomaly"></i>数据异常</span>
     </div>
 
-    <!-- 站点悬浮信息卡 -->
-    <div v-if="hovered" class="st-tooltip" :class="{ below: hovered.below }" :style="{ left: hovered.px + 'px', top: hovered.py + 'px' }">
+    <!-- 站点悬浮信息卡（Teleport 到 #app 外部的 #popups，彻底脱离所有 stacking context） -->
+    <Teleport to="#popups">
+      <div v-if="hovered" class="st-tooltip" :class="{ below: hovered.below }" :style="{ left: hovered.px + 'px', top: hovered.py + 'px' }">
       <div class="stt-head">
         <b>{{ hovered.name }}</b>
         <span class="stt-badge" :class="'lv-'+hovered.statusTag">{{ statusLabel(hovered.statusTag) }}</span>
@@ -112,6 +113,7 @@
       </div>
       <div class="stt-foot">点击查看详情 · 监测视频</div>
     </div>
+    </Teleport>
   </div>
 </template>
 
@@ -371,21 +373,19 @@ function fmtTimeShort(t) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 function onStationEnter(e, s) {
-  const wrapEl = wrap.value
   const core = e.currentTarget.querySelector && e.currentTarget.querySelector('.st-core')
   const anchor = core || e.currentTarget
-  if (!wrapEl || !anchor) return
+  if (!anchor) return
   const r = anchor.getBoundingClientRect()
-  const wr = wrapEl.getBoundingClientRect()
-  const px = r.left - wr.left + r.width / 2
-  const py = r.top - wr.top + r.height / 2
+  /* position:fixed 使用视口坐标，不受父级 overflow:hidden 裁剪 */
   hovered.value = {
     code: s.code, name: s.name,
     level: s.data?.level, flow: s.data?.flow, time: s.data?.time,
     anomaly: s.data?.anomaly,
     statusTag: s.level,
-    px, py,
-    below: py < 140,   // 靠近顶部 → 向下展开，避免溢出
+    px: r.left + r.width / 2,
+    py: r.top + r.height / 2,
+    below: (r.top - (wrap.value ? wrap.value.getBoundingClientRect().top : 0)) < 140,   // 靠近地图顶部 → 向下展开
   }
 }
 function onStationLeave() { hovered.value = null }
@@ -500,9 +500,9 @@ function onStationLeave() { hovered.value = null }
 .st-level-pill.lv-danger .pill-bg { fill: rgba(220, 38, 38, .16); }
 .st-level-pill.lv-danger .pill-text { fill: #B91C1C; }
 
-/* 站点悬浮信息卡 */
+/* 站点悬浮信息卡（position:fixed 脱离父级 overflow:hidden 裁剪） */
 .st-tooltip {
-  position: absolute; z-index: 30;
+  position: fixed; z-index: 99999;
   transform: translate(-50%, calc(-100% - 16px));
   min-width: 196px;
   padding: 10px 12px 9px;
@@ -550,3 +550,52 @@ function onStationLeave() { hovered.value = null }
 /* 图例：数据异常紫点 */
 .lg-anomaly { width: 12px; height: 12px; border-radius: 50%; background: #7C3AED; display: inline-block; }
 </style>
+
+<!-- Teleport 到 #popups 后 scoped 样式失效，以下为非 scoped 全局样式 -->
+<style>
+.st-tooltip {
+  position: fixed !important;
+  z-index: 2147483647 !important;
+  transform: translate(-50%, calc(-100% - 16px));
+  min-width: 196px;
+  padding: 10px 12px 9px;
+  background: var(--glass-strong);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-3);
+  pointer-events: none;
+  animation: tt-in-global .12s ease-out;
+}
+.st-tooltip.below { transform: translate(-50%, 18px); }
+.st-tooltip::after {
+  content: ""; position: absolute; left: 50%; bottom: -5px;
+  width: 10px; height: 10px; transform: translateX(-50%) rotate(45deg);
+  background: var(--glass-strong);
+  border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+}
+.st-tooltip.below::after {
+  bottom: auto; top: -5px;
+  border: 0; border-left: 1px solid var(--line); border-top: 1px solid var(--line);
+}
+@keyframes tt-in-global { from { opacity: 0; transform: translate(-50%, calc(-100% - 10px)); } to { opacity: 1; } }
+.stt-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.stt-head b { font-family: var(--sans); font-size: 13px; font-weight: 600; color: var(--ink); }
+.stt-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; color: #fff; }
+.stt-badge.lv-ok { background: #16A34A; }
+.stt-badge.lv-warn { background: #EA580C; }
+.stt-badge.lv-danger { background: #DC2626; }
+.stt-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.stt-stat span { display: block; font-size: 10px; color: var(--muted); margin-bottom: 2px; }
+.stt-stat b { font-family: var(--display); font-size: 15px; font-weight: 600; color: var(--ink); }
+.stt-stat b small { font-size: 10px; color: var(--muted); font-weight: 500; margin-left: 2px; }
+.stt-foot { margin-top: 8px; font-size: 10.5px; color: var(--primary); font-weight: 500; }
+.stt-anomaly {
+  margin-top: 8px; padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--anomaly-soft);
+  border-left: 3px solid var(--anomaly);
+}
+.stt-anomaly-label { font-size: 10.5px; font-weight: 700; color: var(--anomaly); }
+.stt-anomaly p { margin: 3px 0 0; font-size: 11px; line-height: 1.5; color: var(--ink-2); }
+</style>
+

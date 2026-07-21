@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # config 是底层模块，不能在初始化时反向 import services（会循环导入），故不做自动填充。
     station_codes: str = "00125,00230,00231,00234"
     default_device_code: str = "FD000848891909"   # 主站(郴州)设备码；其余站点设备码见 station_names.STATIONS
-    collector_interval: int = 300
+    collector_interval: int = 600  # 采集间隔 10 分钟
     cache_max_raw: int = 2000
     cache_max_aligned: int = 2000
     cache_ttl: int = 600

@@ -78,7 +78,7 @@ import { ref, reactive, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { agentApi } from '../api/agent.js'
 import { marked } from 'marked'
 import { useVoice } from '../composables/useVoice.js'
-import { uid, fmtNum, truncate } from '../shared/utils.js'
+import { uid, fmtNum, truncate, GLOBAL_SESSION_ID } from '../shared/utils.js'
 marked.setOptions({ breaks: true, gfm: true })
 
 const props = defineProps({ sessionId: { type: String, required: true } })
@@ -155,7 +155,7 @@ async function doSend() {
 async function streamChat(message, aMsg) {
   const ctrl = new AbortController(); abortCtrl.value = ctrl
   try {
-    const res = await agentApi.createChatRequest(props.sessionId, message, [], aMsg.id)
+    const res = await agentApi.createChatRequest(GLOBAL_SESSION_ID, message, [], aMsg.id)
     if (!res.ok) { addBlock(aMsg, 'error', '请求失败'); finishMsg(aMsg); return }
     await readStream(res.body.getReader(), aMsg); finishMsg(aMsg)
   } catch (e) {
@@ -187,7 +187,7 @@ function handleEvent(ev, aMsg) {
     case 'answer_delta': case 'token': appendAnswer(aMsg, ev.content || ev.delta || ''); break
     case 'action_start': case 'tool_status': addAction(aMsg, ev.tool_name || 'tool', ev.call_id || uid(), 'running', ev.content || '', ev.tool_input || ''); break
     case 'action_end': case 'tool_result': addAction(aMsg, ev.tool_name || 'tool', ev.call_id || uid(), ev.status === 'error' ? 'error' : 'done', ev.content || '', ev.tool_input || ''); break
-    case 'permission_ask': permissionAsk.value = { askId: ev.ask_id, askReason: ev.reason || '请求操作权限', sessionId: props.sessionId }; break
+    case 'permission_ask': permissionAsk.value = { askId: ev.ask_id, askReason: ev.reason || '请求操作权限', sessionId: GLOBAL_SESSION_ID }; break
     case 'permission_resolved': permissionAsk.value = null; break
     case 'token_usage': aMsg.tokenUsage = { prompt: ev.prompt_tokens||0, completion: ev.completion_tokens||0, total: ev.total_tokens||0 }; break
     case 'final': case 'final_text': if (ev.content) aMsg.content = ev.content; archiveBlocks(aMsg); break

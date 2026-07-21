@@ -172,6 +172,28 @@ class InMemoryStore:
     def set_status_callback(self, callback) -> None:
         pass
 
+    def get_chat_history_for_system_prompt(self, total_context_chars: int = 0, context_window: int = 0, event_bus=None) -> str:
+        """新版 floodmind SDK 用此方法获取对话历史（替代旧版 get_openai_messages）。
+        返回格式化的对话历史文本，注入为 system message 的 memory_messages。
+        """
+        msgs = list(self._store.messages)
+        if not msgs:
+            return ""
+        # 排除最后一条 user 消息（当前轮次，executor 会单独添加）
+        if msgs and msgs[-1].role == "human":
+            msgs.pop()
+        if not msgs:
+            return ""
+        lines = ["[对话历史]"]
+        for m in msgs:
+            role_label = "用户" if m.role == "human" else "助手"
+            content = str(m.content)
+            # 截断过长的单条消息
+            if len(content) > 2000:
+                content = content[:2000] + "...[已截断]"
+            lines.append(f"{role_label}: {content}")
+        return "\n".join(lines)
+
     def _estimate_tokens(self, text: str) -> int:
         return max(1, len(text) // 2)  # 粗略估算: 2字符≈1token
 
@@ -282,6 +304,26 @@ class AgentService:
             llm=self.model_client,
             max_tokens=settings.agent_max_tokens,
         )
+
+        # 从持久化存储加载历史消息到内存，确保重启后上下文不丢失
+        if session_id:
+            try:
+                persisted = session_store.get_messages(session_id)
+                for msg in persisted:
+                    role = msg.get("role", "")
+                    parts = msg.get("parts", [])
+                    texts = [p["text"] for p in parts if p.get("type") == "text"]
+                    content = "\n".join(texts)
+                    if not content:
+                        continue
+                    if role == "user":
+                        self.memory.add_user_message(content)
+                    elif role == "assistant":
+                        self.memory.add_ai_message(content)
+                if persisted:
+                    logger.info(f"Loaded {len(persisted)} messages from session_store for {session_id}")
+            except Exception as e:
+                logger.warning(f"Failed to load history for {session_id}: {e}")
 
         # ── MCP 连接状态追踪 ──
         self._mcp_connected = False

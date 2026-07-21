@@ -45,7 +45,9 @@ async def _get_cached_records(station_code: str, max_age: int = 600) -> list[dic
         mapped.append({
             "measureTime": it.get("time") or it.get("measureTime"),
             "waterLevel": it.get("waterLevel"),
+            "waterLevel_source": it.get("waterLevel_source", "unknown"),
             "virtualFlow": it.get("virtualFlow") or it.get("waterFlow"),
+            "virtualFlow_source": it.get("virtualFlow_source", "unknown"),
             "waterVelocity": it.get("waterVelocity"),
             "videoUrl": it.get("videoUrl"),
             "deviceCode": it.get("deviceCode", _DEVICE_CODE),

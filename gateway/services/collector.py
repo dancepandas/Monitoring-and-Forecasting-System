@@ -127,9 +127,10 @@ async def run_loop():
     heartbeat_file = Path(__file__).parent.parent / "data" / "collector_heartbeat.txt"
 
     async def _collect_with_heartbeat():
-        await collect_all()
+        # 先写心跳再采集——防止 collect_all() 耗时长导致看门狗误判杀死进程
         heartbeat_file.parent.mkdir(parents=True, exist_ok=True)
         heartbeat_file.write_text(str(time.time()))
+        await collect_all()
 
     logger.info("[collector] starting background loop")
     try:

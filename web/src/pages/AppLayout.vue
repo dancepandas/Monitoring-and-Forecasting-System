@@ -59,7 +59,6 @@ const nav = [
   { to: '/warnings', name: 'Warnings', label: '预警处置' },
   { to: '/devices', name: 'Devices', label: '视频巡检' },
   { to: '/reports', name: 'Reports', label: '日报归档' },
-  { to: '/agent', name: 'Agent', label: '智能助手' },
 ]
 
 function isActive(n) {

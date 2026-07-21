@@ -20,6 +20,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import AgentChatPanel from './AgentChatPanel.vue'
+import { GLOBAL_SESSION_ID } from '../shared/utils.js'
 
 const visible = ref(false)
 const x = ref(0)
@@ -27,65 +28,90 @@ const y = ref(0)
 const panelTitle = ref('')
 const panelContent = ref('')
 const showAgent = ref(false)
-const ctxSessionId = 'ctx-menu-' + Date.now()
+const ctxSessionId = GLOBAL_SESSION_ID
 
 function extractPanelContent(el) {
-  const heading = el.querySelector('.panel-head h2, .hud-panel-head h2')
+  // 标题
+  const heading = el.querySelector('.panel-head h2, .hud-panel-head h2, h2, h3')
   const labelEl = el.querySelector('.tile-label, .hud-card-label')
   panelTitle.value = heading?.textContent?.trim() || labelEl?.textContent?.trim() || '面板'
 
   const body = el.querySelector('.panel-body, .hud-panel-body') || el
   const lines = []
+  const seen = new Set()
 
-  // 兼容新旧类名
-  const riskItems = body.querySelectorAll('.risk-item, .hud-risk-item')
-  if (riskItems.length) {
-    for (const item of riskItems) {
-      const title = item.querySelector('b')?.textContent?.trim()
-      const badge = item.querySelector('.badge')?.textContent?.trim()
-      const desc = item.querySelector('p')?.textContent?.trim()
-      if (title && desc) lines.push(`- ${title}${badge ? ' [' + badge + ']' : ''}: ${desc}`)
-      else if (title) lines.push(`- ${title}${badge ? ' [' + badge + ']' : ''}`)
-    }
+  function add(line) {
+    const key = line.trim()
+    if (key && !seen.has(key)) { seen.add(key); lines.push(key) }
   }
 
-  const stats = body.querySelectorAll('.mini-stat, .hud-mini-stat, .mcp-stat')
-  if (stats.length) {
-    for (const s of stats) {
-      const label = s.querySelector('span')?.textContent?.trim()
-      const val = s.querySelector('b')?.textContent?.trim()
-      if (label && val) lines.push(`- ${label}: ${val}`)
-    }
-  }
-
+  // 1. 数据卡片 (.tile / .hud-card)
   const tiles = body.querySelectorAll('.tile, .hud-card')
-  if (tiles.length) {
-    for (const t of tiles) {
-      const label = t.querySelector('.tile-label, .hud-card-label')?.textContent?.trim()
-      const val = t.querySelector('.tile-value b, .hud-card-value b')?.textContent?.trim()
-      const unit = t.querySelector('.tile-value span, .hud-card-value .unit')?.textContent?.trim()
-      const note = t.querySelector('.tile-note, .hud-card-note')?.textContent?.trim()
-      if (label) lines.push(`- ${label}: ${val || '—'}${unit || ''}${note ? ' (' + note + ')' : ''}`)
-    }
+  for (const t of tiles) {
+    const label = t.querySelector('.tile-label, .hud-card-label')?.textContent?.trim()
+    const val = t.querySelector('.tile-value b, .hud-card-value b, .tile-value, .hud-card-value')?.textContent?.trim()
+    const unit = t.querySelector('.tile-value span, .hud-card-value .unit')?.textContent?.trim()
+    const note = t.querySelector('.tile-note, .hud-card-note')?.textContent?.trim()
+    if (label) add(`- ${label}: ${val || '—'}${unit || ''}${note ? ' (' + note + ')' : ''}`)
   }
 
-  // AI 解读（如有）
-  const insight = body.querySelector('.hud-insight p, .forecast-insight p')
-  if (insight?.textContent?.trim()) lines.push(`- 解读: ${insight.textContent.trim()}`)
+  // 2. 预警/风险条目 (.risk-item / .hud-risk-item)
+  const riskItems = body.querySelectorAll('.risk-item, .hud-risk-item')
+  for (const item of riskItems) {
+    const title = item.querySelector('b')?.textContent?.trim()
+    const badge = item.querySelector('.badge')?.textContent?.trim()
+    const desc = item.querySelector('p')?.textContent?.trim()
+    if (title && desc) add(`- ${title}${badge ? ' [' + badge + ']' : ''}: ${desc}`)
+    else if (title) add(`- ${title}${badge ? ' [' + badge + ']' : ''}`)
+  }
 
+  // 3. 统计数字 (.mini-stat / .hud-mini-stat / .mcp-stat)
+  const stats = body.querySelectorAll('.mini-stat, .hud-mini-stat, .mcp-stat')
+  for (const s of stats) {
+    const label = s.querySelector('span')?.textContent?.trim()
+    const val = s.querySelector('b')?.textContent?.trim()
+    if (label && val) add(`- ${label}: ${val}`)
+  }
+
+  // 4. 视频卡片
   const videoCards = body.querySelectorAll('.video-card')
-  if (videoCards.length) {
-    for (const v of videoCards) {
-      const cam = v.querySelector('b')?.textContent?.trim()
-      const label = v.querySelector('span')?.textContent?.trim()
-      if (cam) lines.push(`- 视频: ${cam}${label ? ' - ' + label : ''}`)
+  for (const v of videoCards) {
+    const cam = v.querySelector('b')?.textContent?.trim()
+    const status = v.querySelector('span')?.textContent?.trim()
+    if (cam) add(`- 视频: ${cam}${status ? ' - ' + status : ''}`)
+  }
+
+  // 5. AI 解读
+  const insight = body.querySelector('.hud-insight p, .forecast-insight p, .ai-insight')
+  if (insight?.textContent?.trim()) add(`- 解读: ${insight.textContent.trim()}`)
+
+  // 6. 表格数据
+  const tables = body.querySelectorAll('table')
+  for (const tbl of tables) {
+    const headers = [...tbl.querySelectorAll('th')].map(h => h.textContent.trim())
+    const rows = [...tbl.querySelectorAll('tbody tr')].slice(0, 10)
+    if (headers.length && rows.length) {
+      add(`--- 表格 (${headers.join(' | ')}) ---`)
+      for (const row of rows) {
+        const cells = [...row.querySelectorAll('td')].map(c => c.textContent.trim())
+        if (cells.some(Boolean)) add(`  ${cells.join(' | ')}`)
+      }
     }
   }
 
+  // 7. 通用列表项
+  const listItems = body.querySelectorAll('li')
+  for (const li of listItems) {
+    const text = li.textContent?.trim()
+    if (text && text.length < 200) add(`- ${text}`)
+  }
+
+  // 8. 兜底：如果上述都没提取到，取 body 纯文本
   if (!lines.length) {
     const text = body.textContent?.trim()
     if (text) lines.push(text.slice(0, 3000))
   }
+
   return lines.join('\n')
 }
 

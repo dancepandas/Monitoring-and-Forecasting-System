@@ -2,7 +2,7 @@
 # 安装：uv pip install -r requirements.txt
 
 # ── floodmind（Agent 运行时，按 commit 钉死）──
-floodmind @ git+https://github.com/dancepandas/FloodMind.git@32ecd018db4b539803a2d5892e3373e63c1c55f5
+floodmind @ git+https://github.com/dancepandas/FloodMind.git@f46e324125b0e0c34c8998aff1ec58a7f89c2353
 
 # ── Web 框架 ──
 fastapi==0.128.0
@@ -21,6 +21,7 @@ PyJWT==2.13.0
 
 # ── 报告 docx / 数据处理 ──
 python-docx==1.2.0
+markdown==3.10.2
 numpy==2.4.1
 pandas==3.0.1
 

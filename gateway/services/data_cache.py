@@ -16,7 +16,6 @@ import json
 import logging
 import threading
 import time
-from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
@@ -203,23 +202,8 @@ def _parse_dt(t: str) -> Optional[datetime]:
 
 
 def _detect_interval(records: list) -> int:
-    """检测主导时间间隔（分钟），默认 5 分钟。"""
-    if len(records) < 2:
-        return 5
-    times = []
-    for r in records:
-        dt = _parse_dt(r.get("time", ""))
-        if dt:
-            times.append(dt)
-    times.sort()
-    diffs = []
-    for i in range(1, len(times)):
-        d = (times[i] - times[i - 1]).total_seconds() / 60
-        if 1 <= d <= 120:
-            diffs.append(round(d))
-    if not diffs:
-        return 5
-    return Counter(diffs).most_common(1)[0][0]
+    """固定 10 分钟间隔（不再从数据反推）。"""
+    return 10
 
 
 def _compute_stats(records: list) -> dict:

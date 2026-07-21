@@ -51,7 +51,13 @@ def query_latest(**kwargs) -> dict:
     for code in codes:
         try:
             records = _safe_sync(_get_cached_records(code))
-            results[code] = {"level": records[0] if records else None}
+            if not records:
+                results[code] = {"level": None}
+                continue
+            # 与前端 OverviewPage 行为一致：取第一条 virtualFlow 非空的记录
+            # （水位用同一条记录的，确保水位和流量是同一时刻）
+            latest = next((r for r in records if r.get("virtualFlow") is not None), records[0])
+            results[code] = {"level": latest}
         except Exception as ex:
             logger.warning(f"query_latest failed for {code}: {ex}")
             results[code] = {"level": None}

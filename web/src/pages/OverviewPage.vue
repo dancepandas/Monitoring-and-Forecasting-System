@@ -39,6 +39,7 @@
         <div class="hud-card-value">
           <b>{{ waterFlow }}</b>
           <span class="unit">m³/s</span>
+          <span v-if="flowEstimated" class="badge-estimated" title="Chronos-2 模型推算，非实测">推算</span>
         </div>
         <div :class="['hud-card-note', flowAnomaly ? 'anomaly' : '']" :title="flowAnomaly ? flowAnomaly.reason : ''">{{ flowAnomaly ? '⚠ 数据存疑' : flowChangeNote }}</div>
         <div class="hud-card-bar flow-bar"><i :style="{ width: flowPct + '%' }"></i></div>
@@ -298,6 +299,7 @@ async function loadStationDetail(code, nameHint) {
 
 const waterLevel = ref('—')
 const waterFlow = ref('—')
+const flowEstimated = ref(false)  // Chronos 推算标志
 const modelConfidence = ref('—')
 const pendingWarnings = ref('—')
 const warningNote = ref('加载中...')
@@ -505,6 +507,9 @@ async function refreshData() {
         const flowVals = trendHistory.value.map(d => d.y).filter(v => typeof v === 'number')
         historyMaxFlow.value = flowVals.length ? Math.max(...flowVals).toFixed(0) : '—'
         historyAvgFlow.value = flowVals.length ? Math.round(flowVals.reduce((a, b) => a + b, 0) / flowVals.length).toLocaleString() : '—'
+        // 最新一条历史点若是 Chronos 推算，打标记
+        const latest = trendHistory.value[trendHistory.value.length - 1]
+        flowEstimated.value = latest && latest.source === 'forecast'
       }
 
       trendForecast.value = chartData.forecast || []
@@ -546,6 +551,7 @@ function saveCache() {
       waterLevelNote: waterLevelNote.value,
       waterLevelNoteClass: waterLevelNoteClass.value,
       flowChangeNote: flowChangeNote.value,
+      flowEstimated: flowEstimated.value,
       forecastPeak: forecastPeak.value,
       forecastPeakTime: forecastPeakTime.value,
       historyMaxFlow: historyMaxFlow.value,
@@ -572,6 +578,7 @@ function loadCache() {
     waterLevelNote.value = data.waterLevelNote ?? waterLevelNote.value
     waterLevelNoteClass.value = data.waterLevelNoteClass ?? waterLevelNoteClass.value
     flowChangeNote.value = data.flowChangeNote ?? flowChangeNote.value
+    flowEstimated.value = data.flowEstimated ?? false
     forecastPeak.value = data.forecastPeak ?? forecastPeak.value
     forecastPeakTime.value = data.forecastPeakTime ?? forecastPeakTime.value
     historyMaxFlow.value = data.historyMaxFlow ?? historyMaxFlow.value
@@ -824,6 +831,12 @@ function openStage(title, from) {
   background: var(--primary);
 }
 .hud-card-icon.flow { background: var(--water); }
+.badge-estimated {
+  display: inline-block; padding: 1px 6px; margin-left: 6px;
+  border-radius: 4px; font-size: 10px; font-weight: 600;
+  background: rgba(245, 158, 11, 0.15); color: var(--warn, #f59e0b);
+  vertical-align: middle; line-height: 1.5;
+}
 .hud-card-icon.model { background: var(--muted); }
 .hud-card-icon.alert { background: var(--orange); }
 

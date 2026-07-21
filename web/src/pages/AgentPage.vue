@@ -166,7 +166,7 @@
       <div class="side-card">
         <div class="side-hd">历史对话 <button class="side-new" @click="newSession">+ 新建</button></div>
         <div class="side-body sess-list">
-          <div v-for="s in sessions" :key="s.session_id" class="sess-row" :class="{active:s.session_id===sid}" @click="switchSess(s.session_id)">
+          <div v-for="s in sessions" :key="s.session_id" class="sess-row" :class="{active: s.session_id === GLOBAL_SESSION_ID}" @click="switchSess(s.session_id)">
             <span class="sess-name">{{ s.title||'新对话' }}</span>
             <span class="sess-time">{{ fmtTs(s.updated_at||s.created_at) }}</span>
             <button class="sess-del" @click.stop="delSession(s.session_id)">x</button>
@@ -215,7 +215,7 @@ import { reactive, ref, onMounted, onUnmounted, nextTick } from 'vue'
 import Topbar from '../components/Topbar.vue'
 import { agentApi } from '../api/agent.js'
 import { marked } from 'marked'
-import { uid, withTime, fmtNum, truncate } from '../shared/utils.js'
+import { uid, withTime, fmtNum, truncate, GLOBAL_SESSION_ID } from '../shared/utils.js'
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -229,8 +229,7 @@ function stripInternalPrefix(text) {
   return t.trim()
 }
 
-const sid = ref(localStorage.getItem('floodmind_sid') || uid())
-localStorage.setItem('floodmind_sid', sid.value)
+const sid = ref(GLOBAL_SESSION_ID)
 
 const msgs = reactive([])
 const input = ref('')
@@ -631,13 +630,12 @@ async function loadSessions() {
   try { const r = await agentApi.fetchSessions(); sessions.value = r.sessions || r || [] } catch { sessions.value = [] }
 }
 
-async function switchSess(newSid) {
-  if (newSid === sid.value) return
-  sid.value = newSid; localStorage.setItem('floodmind_sid', newSid)
+async function switchSess(viewSid) {
+  // 全局会话模式：仅浏览历史，不切换 session
   msgs.length = 0; todos.length = 0; workflow.value = null
   sessionTokens.prompt = sessionTokens.completion = sessionTokens.total = 0; files.value = []
   try {
-    const data = await agentApi.fetchSessionMessages(newSid)
+    const data = await agentApi.fetchSessionMessages(viewSid)
     if (data?.messages) {
       data.messages.forEach(m => {
         if (m.role === 'user') {
@@ -653,23 +651,19 @@ async function switchSess(newSid) {
       })
       scroll()
     }
-  } catch { agentApi.initSession(newSid).catch(()=>{}) }
-  await loadSessions()
+  } catch { /* no history */ }
 }
 
 async function newSession() {
-  const newSid = uid()
-  sid.value = newSid; localStorage.setItem('floodmind_sid', newSid)
+  // 全局会话模式下不再新建 session，仅清空当前视图
   msgs.length = 0; todos.length = 0; workflow.value = null; files.value = []
   sessionTokens.prompt = sessionTokens.completion = sessionTokens.total = 0
-  await agentApi.initSession(newSid).catch(()=>{})
-  await loadSessions()
+  scroll()
 }
 
 async function delSession(delSid) {
   await agentApi.deleteSession(delSid).catch(()=>{})
-  if (delSid === sid.value) await newSession()
-  else await loadSessions()
+  await loadSessions()
 }
 
 function onVisibility() {

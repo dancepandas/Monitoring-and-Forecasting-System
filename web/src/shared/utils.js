@@ -1,5 +1,8 @@
 // ── 共享工具函数（AgentPage / AgentChatPanel / VoiceAssistant 统一引用）──
 
+/** 全局唯一会话 ID：整个系统共享一个上下文 */
+export const GLOBAL_SESSION_ID = '__global__'
+
 /**
  * 生成唯一 ID（优先使用 crypto.randomUUID，回退到时间戳+随机数）。
  */

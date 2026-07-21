@@ -2,6 +2,13 @@
   <div ref="wrap" class="trend-chart-wrap">
     <div ref="canvas" class="chart-canvas">
       <svg ref="svg" aria-hidden="true"></svg>
+      <!-- 悬浮卡 Teleport 到 #popups，脱离面板 overflow:hidden 裁剪 -->
+      <Teleport to="#popups">
+        <div ref="tipEl" class="chart-tooltip" :style="tipStyle" v-show="tipVisible">
+          <span class="ct-val">{{ tipVal }}</span>
+          <span class="ct-time">{{ tipTime }}</span>
+        </div>
+      </Teleport>
     </div>
   </div>
 </template>
@@ -19,9 +26,17 @@ const props = defineProps({
 const wrap = ref(null)
 const canvas = ref(null)
 const svg = ref(null)
+const tipEl = ref(null)
+
+// HTML 悬浮卡状态
+const tipVisible = ref(false)
+const tipVal = ref('')
+const tipTime = ref('')
+const tipStyle = ref({})
 
 const historyColor = '#06B6D4'
 const forecastColor = '#818CF8'
+const estimatedColor = '#F59E0B'  // Chronos 推算点颜色
 const HOUR = 3600000
 
 const margin = { top: 14, right: 18, bottom: 26, left: 54 }
@@ -170,7 +185,13 @@ function render() {
   let dots = ''
   for (let i = 0; i < hPts.length; i++) {
     const p = hPts[i]
-    dots += `<circle cx="${X(p._t).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="2" fill="${historyColor}" stroke="#fff" stroke-width="0.6"/>`
+    const isEstimated = p.source === 'forecast'
+    if (isEstimated) {
+      // 推算点：橙色空心圆
+      dots += `<circle cx="${X(p._t).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="4" fill="none" stroke="${estimatedColor}" stroke-width="1.5" stroke-dasharray="2 2"/>`
+    } else {
+      dots += `<circle cx="${X(p._t).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="2" fill="${historyColor}" stroke="#fff" stroke-width="0.6"/>`
+    }
   }
 
   svg.value.innerHTML = `
@@ -197,19 +218,11 @@ function render() {
     ${markRing}
     ${nowDot}
     <rect id="hit-area" x="${margin.left}" y="${margin.top}" width="${pw}" height="${ph}" fill="transparent" pointer-events="all"/>
-    <g id="tooltip" visibility="hidden">
-      <rect id="tip-bg" x="0" y="0" width="10" height="34" rx="6" fill="rgba(255, 255, 255, 0.96)" stroke="${historyColor}" stroke-width="1"/>
-      <text id="tip-val" x="0" y="0" font-family="var(--sans)" font-size="11" font-weight="600" fill="#E2E8F0" text-anchor="middle"/>
-      <text id="tip-time" x="0" y="0" font-family="var(--sans)" font-size="9" fill="#94A3B8" text-anchor="middle"/>
-    </g>
   `
 
+  // ── HTML 悬浮卡事件绑定（取代旧 SVG tooltip，不受 viewport 裁剪）──
   const hitArea = svg.value.querySelector('#hit-area')
-  const tooltip = svg.value.querySelector('#tooltip')
-  const tipBg = svg.value.querySelector('#tip-bg')
-  const tipVal = svg.value.querySelector('#tip-val')
-  const tipTime = svg.value.querySelector('#tip-time')
-  if (hitArea && tooltip && hPts.length) {
+  if (hitArea && hPts.length) {
     const svgEl = svg.value
     hitArea.onmousemove = (e) => {
       const pt = svgEl.createSVGPoint()
@@ -225,28 +238,22 @@ function render() {
       const threshold = pw / Math.max(1, hPts.length) * 3
       if (best && bestDist < threshold) {
         const val = typeof best.y === 'number' ? (Number.isInteger(best.y) ? best.y : best.y.toFixed(1)) : best.y
-        const timeStr = fmtLabel(best._t, 'dhm')
-        const valStr = String(val)
-        const timeW = timeStr.length * 5.5
-        const valW = valStr.length * 7
-        const bw = Math.max(valW, timeW) + 16
-        const tx = X(best._t)
-        const ty = Y(best.y) - 24
-        tipVal.textContent = valStr
-        tipTime.textContent = timeStr
-        tipBg.setAttribute('x', (tx - bw / 2).toFixed(1))
-        tipBg.setAttribute('y', (ty - 10).toFixed(1))
-        tipBg.setAttribute('width', bw.toFixed(1))
-        tipVal.setAttribute('x', tx.toFixed(1))
-        tipVal.setAttribute('y', (ty + 2).toFixed(1))
-        tipTime.setAttribute('x', tx.toFixed(1))
-        tipTime.setAttribute('y', (ty + 15).toFixed(1))
-        tooltip.setAttribute('visibility', 'visible')
+        tipVal.value = String(val) + (best.source === 'forecast' ? ' (推算)' : '')
+        tipTime.value = fmtLabel(best._t, 'dhm') + (best.source === 'forecast' ? ' · 推算' : '')
+        // position:fixed 需要视口坐标：SVG 坐标 + SVG 元素视口偏移
+        const svgRect = svgEl.getBoundingClientRect()
+        tipStyle.value = {
+          left: (svgRect.left + X(best._t)) + 'px',
+          top: (svgRect.top + Y(best.y) - 28) + 'px',
+          position: 'fixed',
+          zIndex: 2147483647
+        }
+        tipVisible.value = true
       } else {
-        tooltip.setAttribute('visibility', 'hidden')
+        tipVisible.value = false
       }
     }
-    hitArea.onmouseleave = () => { tooltip.setAttribute('visibility', 'hidden') }
+    hitArea.onmouseleave = () => { tipVisible.value = false }
   }
 }
 
@@ -281,6 +288,72 @@ watch(() => [props.history, props.forecast, props.unit], schedule, { deep: true 
   position: relative;
   flex: 1;
   min-height: 0;
+  overflow: visible; /* 允许悬浮卡超出 SVG 边界 */
 }
 .chart-canvas svg { display: block; }
+
+/* ── HTML 悬浮卡（最高层级，不被任何父容器裁剪）── */
+.chart-tooltip {
+  position: absolute;
+  z-index: 99999;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  padding: 5px 10px 4px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--primary, #06B6D4);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  white-space: nowrap;
+  animation: ct-in .12s ease-out;
+}
+@keyframes ct-in { from { opacity: 0; transform: translate(-50%, calc(-100% + 6px)); } }
+
+.ct-val {
+  display: block;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: #1D1D1F;
+  text-align: center;
+}
+.ct-time {
+  display: block;
+  font-family: var(--sans);
+  font-size: 9px;
+  color: #94A3B8;
+  text-align: center;
+}
+</style>
+
+<!-- Teleport 到 #popups 后 scoped 样式失效，全局样式兜底 -->
+<style>
+.chart-tooltip {
+  position: fixed !important;
+  z-index: 2147483647 !important;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  padding: 5px 10px 4px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--primary, #06B6D4);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  white-space: nowrap;
+  animation: ct-in-global .12s ease-out;
+}
+@keyframes ct-in-global { from { opacity: 0; transform: translate(-50%, calc(-100% + 6px)); } }
+.ct-val {
+  display: block;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: #1D1D1F;
+  text-align: center;
+}
+.ct-time {
+  display: block;
+  font-family: var(--sans);
+  font-size: 9px;
+  color: #94A3B8;
+  text-align: center;
+}
 </style>
